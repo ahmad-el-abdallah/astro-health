@@ -1,0 +1,26 @@
+{
+  "_comment": "PLACEHOLDER points and badge rules, invented for the demo.",
+  "points": {
+    "vitals_check": 5,
+    "assess_complete": 5,
+    "exercise_session": 10,
+    "full_exercise_day": 10,
+    "sleep_logged": 5,
+    "good_sleep_night": 10,
+    "meal_logged": 2,
+    "mood_logged": 3,
+    "symptom_report": 2,
+    "reaction_test": 5,
+    "breathing_session": 5
+  },
+  "badges": {
+    "bone_guardian": { "label": "Bone Guardian", "description": "7 days of full exercise", "rule": "exercise_days_streak >= 7" },
+    "sleep_pro": { "label": "Sleep Pro", "description": "5 nights of 7+ hours", "rule": "good_sleep_nights >= 5" },
+    "calm_mind": { "label": "Calm Mind", "description": "5 breathing sessions", "rule": "breathing_sessions >= 5" },
+    "data_hero": { "label": "Data Hero", "description": "14 days of complete checks", "rule": "complete_check_days >= 14" }
+  },
+  "team_goal": {
+    "label": "Crew exercise minutes this week",
+    "target": 1800
+  }
+}

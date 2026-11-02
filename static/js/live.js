@@ -1,0 +1,128 @@
+// Live tab: "Tap your card" until a card is scanned, then that astronaut's
+// vitals form + today's status (docs/build-prompt.md section 9.1).
+const LiveTab = (() => {
+  let currentId = null;
+  let contentCache = null;
+
+  function formatIndicatorValue(indicator, value) {
+    if (indicator === "blood_pressure") return `${value.systolic}/${value.diastolic}`;
+    if (indicator === "reaction_time") return `${value.avg_ms} ms`;
+    if (typeof value === "object") return JSON.stringify(value);
+    return value;
+  }
+
+  function init() {
+    document.getElementById("tab-live").innerHTML = `
+      <div id="live-empty" class="card"><h2>${STRINGS.tapYourCard}</h2>
+        <p class="dim">Or use the Simulator panel (bottom right) to tap a card without the hardware.</p></div>
+      <div id="live-active" class="card" style="display:none">
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
+          <div class="avatar" id="live-avatar">?</div>
+          <div>
+            <h2 id="live-name" style="margin:0">&ndash;</h2>
+            <div class="dim" id="live-role">&ndash;</div>
+          </div>
+          <div style="margin-left:auto; text-align:right;">
+            <div id="live-overall"></div>
+            <div class="dim" id="live-points"></div>
+          </div>
+        </div>
+        <div class="card-grid" id="live-indicator-grid"></div>
+        <h3>Enter today's vitals</h3>
+        <div class="card-grid">
+          <div class="vital-field"><label>Heart rate (bpm)</label>
+            <span class="guide-link" data-guide="heart_rate">${STRINGS.howToMeasure}</span>
+            <input type="number" id="in-hr" placeholder="e.g. 72"></div>
+          <div class="vital-field"><label>Blood pressure (mmHg)</label>
+            <span class="guide-link" data-guide="blood_pressure">${STRINGS.howToMeasure}</span>
+            <div style="display:flex; gap:8px;">
+              <input type="number" id="in-sys" placeholder="systolic">
+              <input type="number" id="in-dia" placeholder="diastolic">
+            </div></div>
+          <div class="vital-field"><label>Blood sugar, fasting (mg/dL)</label>
+            <span class="guide-link" data-guide="blood_sugar">${STRINGS.howToMeasure}</span>
+            <input type="number" id="in-sugar" placeholder="e.g. 90"></div>
+          <div class="vital-field"><label>Temperature (&deg;C)</label>
+            <span class="guide-link" data-guide="temperature">${STRINGS.howToMeasure}</span>
+            <input type="number" step="0.1" id="in-temp" placeholder="e.g. 36.8"></div>
+        </div>
+        <div id="guide-box" class="dim" style="display:none; margin-bottom:10px;"></div>
+        <button class="btn" id="assess-btn">${STRINGS.assessButton}</button>
+        <div id="assess-result" style="margin-top:10px;"></div>
+      </div>`;
+
+    document.getElementById("assess-btn").addEventListener("click", submitAssess);
+    document.getElementById("tab-live").addEventListener("click", (e) => {
+      const g = e.target.closest(".guide-link");
+      if (g) showGuide(g.dataset.guide);
+    });
+  }
+
+  function onShow() { if (currentId) loadSummary(currentId); }
+
+  async function showGuide(indicator) {
+    if (!contentCache) contentCache = await api("/content");
+    const guide = contentCache.measure_guides[indicator];
+    const box = document.getElementById("guide-box");
+    if (!guide) { box.style.display = "none"; return; }
+    box.innerHTML = `<strong>${guide.title}</strong><ol>${guide.steps.map((s) => `<li>${s}</li>`).join("")}</ol>`;
+    box.style.display = "block";
+  }
+
+  function showEmpty() {
+    currentId = null;
+    document.getElementById("live-empty").style.display = "block";
+    document.getElementById("live-active").style.display = "none";
+  }
+
+  async function loadSummary(id) {
+    currentId = id;
+    const summary = await api(`/astronauts/${id}/summary`);
+    document.getElementById("live-empty").style.display = "none";
+    document.getElementById("live-active").style.display = "block";
+    const a = summary.astronaut;
+    const avatar = document.getElementById("live-avatar");
+    avatar.style.background = a.color;
+    avatar.textContent = a.name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+    document.getElementById("live-name").textContent = a.name;
+    document.getElementById("live-role").textContent = a.role;
+    document.getElementById("live-overall").innerHTML = levelBadge(summary.overall_level, "Overall");
+    document.getElementById("live-points").textContent = `${summary.points} pts · last check ${fmtTime(summary.last_check)}`;
+
+    const grid = document.getElementById("live-indicator-grid");
+    const entries = Object.entries(summary.today);
+    grid.innerHTML = entries.length
+      ? entries.map(([ind, v]) => `<div class="card" style="margin-bottom:0">
+            <div class="dim">${ind.replace("_", " ")}</div>
+            <div class="big-number">${formatIndicatorValue(ind, v.value)}</div>
+            ${levelBadge(v.level)}
+          </div>`).join("")
+      : `<p class="dim">No readings yet today &mdash; sleep, mood, symptoms and reaction time fill in from the CYD.</p>`;
+  }
+
+  async function submitAssess() {
+    if (!currentId) return;
+    const body = {};
+    const hr = document.getElementById("in-hr").value;
+    const sys = document.getElementById("in-sys").value;
+    const dia = document.getElementById("in-dia").value;
+    const sugar = document.getElementById("in-sugar").value;
+    const temp = document.getElementById("in-temp").value;
+    if (hr) body.heart_rate = Number(hr);
+    if (sys && dia) body.blood_pressure = { systolic: Number(sys), diastolic: Number(dia) };
+    if (sugar) body.blood_sugar = Number(sugar);
+    if (temp) body.temperature = Number(temp);
+    const result = await api(`/astronauts/${currentId}/assess`, { method: "POST", body: JSON.stringify(body) });
+    document.getElementById("assess-result").innerHTML =
+      `${levelBadge(result.overall_level, "Result")} <span class="dim">${result.note}</span>`;
+    loadSummary(currentId);
+  }
+
+  Bus.on("session_started", (d) => loadSummary(d.astronaut_id));
+  Bus.on("session_ended", (d) => { if (d.astronaut_id === currentId) showEmpty(); });
+  Bus.on("scan", (d) => { if (d.type === "astronaut") { /* session_started follows right after */ } });
+  Bus.on("cyd_event", () => { if (currentId) loadSummary(currentId); });
+
+  return { init, onShow, viewAstronaut: loadSummary };
+})();
+registerTab("live", LiveTab);

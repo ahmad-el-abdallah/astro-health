@@ -1,0 +1,39 @@
+<svg viewBox="0 0 240 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Clickable human body figure">
+  <defs>
+    <filter id="glow-blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" />
+    </filter>
+  </defs>
+
+  <!-- immune system: whole-body glow, behind everything -->
+  <ellipse id="region-immune" class="body-region" data-region="immune"
+           cx="120" cy="210" rx="95" ry="190" fill="#5b6b7a" opacity="0.35" filter="url(#glow-blur)" />
+
+  <!-- skeleton: the body frame -->
+  <g id="region-skeleton" class="body-region" data-region="skeleton" fill="#5b6b7a">
+    <rect x="86" y="120" width="68" height="130" rx="24" />           <!-- torso -->
+    <rect x="60" y="130" width="22" height="95" rx="10" />            <!-- left arm -->
+    <rect x="158" y="130" width="22" height="95" rx="10" />           <!-- right arm -->
+    <rect x="92" y="246" width="26" height="110" rx="12" />           <!-- left leg -->
+    <rect x="122" y="246" width="26" height="110" rx="12" />          <!-- right leg -->
+  </g>
+
+  <!-- muscles: overlaid on arms and legs -->
+  <g id="region-muscles" class="body-region" data-region="muscles" fill="#6b8c7a" opacity="0.9">
+    <rect x="63" y="134" width="16" height="85" rx="8" />
+    <rect x="161" y="134" width="16" height="85" rx="8" />
+    <rect x="95" y="250" width="20" height="100" rx="10" />
+    <rect x="125" y="250" width="20" height="100" rx="10" />
+  </g>
+
+  <!-- head: brain + eyes -->
+  <circle id="region-brain" class="body-region" data-region="brain" cx="120" cy="70" r="40" fill="#8a7bd8" />
+  <circle id="region-eyes-l" class="body-region" data-region="eyes" cx="106" cy="68" r="6" fill="#e8eef4" />
+  <circle id="region-eyes-r" class="body-region" data-region="eyes" cx="134" cy="68" r="6" fill="#e8eef4" />
+
+  <!-- torso organs -->
+  <circle id="region-heart" class="body-region" data-region="heart" cx="120" cy="152" r="18" fill="#d9636b" />
+  <ellipse id="region-stomach" class="body-region" data-region="stomach" cx="120" cy="205" rx="22" ry="26" fill="#d9a85a" />
+
+  <text x="120" y="410" text-anchor="middle" fill="#93a4b5" font-size="11">Tap a region for details</text>
+</svg>

@@ -1,0 +1,103 @@
+{
+  "_comment": "PLACEHOLDER thresholds: general adult reference ranges, NOT mission or NASA rules. Swap these for real data when the challenge resources are published.",
+  "indicators": {
+    "heart_rate": {
+      "label": "Heart rate",
+      "unit": "bpm",
+      "body_part": "heart",
+      "hazards": ["gravity_fields"],
+      "green": [60, 100],
+      "yellow": [[50, 59], [101, 120]],
+      "note_high": "Heart rate is high",
+      "note_low": "Heart rate is low"
+    },
+    "blood_pressure": {
+      "label": "Blood pressure",
+      "unit": "mmHg",
+      "body_part": "heart",
+      "hazards": ["gravity_fields"],
+      "systolic_green": [90, 129],
+      "systolic_yellow": [[130, 139], [85, 89]],
+      "diastolic_green": [60, 79],
+      "diastolic_yellow": [80, 89],
+      "systolic_red_high": 140,
+      "systolic_red_low": 85,
+      "diastolic_red_high": 90,
+      "note_high": "Blood pressure is high",
+      "note_low": "Blood pressure is low"
+    },
+    "blood_sugar": {
+      "label": "Blood sugar (fasting)",
+      "unit": "mg/dL",
+      "body_part": "stomach",
+      "hazards": ["isolation_confinement"],
+      "green": [70, 99],
+      "yellow": [[100, 179]],
+      "note_high": "Blood sugar is high",
+      "note_low": "Blood sugar is low"
+    },
+    "temperature": {
+      "label": "Body temperature",
+      "unit": "°C",
+      "body_part": "immune",
+      "hazards": ["hostile_environment"],
+      "green": [36.1, 37.5],
+      "yellow": [[35.5, 36.0], [37.6, 38.0]],
+      "note_high": "Temperature is high",
+      "note_low": "Temperature is low"
+    },
+    "sleep": {
+      "label": "Sleep",
+      "unit": "hours/night",
+      "body_part": "brain",
+      "hazards": ["isolation_confinement", "hostile_environment"],
+      "green_min": 7,
+      "yellow_min": 6,
+      "note_low": "Sleep is short"
+    },
+    "mood": {
+      "label": "Mood",
+      "unit": "1-5 scale",
+      "body_part": "brain",
+      "hazards": ["isolation_confinement"],
+      "green": [4, 5],
+      "yellow": [[3, 3]],
+      "note_low": "Mood is low"
+    },
+    "reaction_time": {
+      "label": "Reaction time",
+      "unit": "ms (vs. personal baseline)",
+      "body_part": "brain",
+      "hazards": ["isolation_confinement"],
+      "green_pct": 10,
+      "yellow_pct": 25,
+      "lapse_threshold_ms": 500,
+      "red_lapses": 3,
+      "note_slow": "Reaction time is slower than usual"
+    },
+    "exercise": {
+      "label": "Exercise",
+      "unit": "minutes/day",
+      "body_part": "muscles",
+      "hazards": ["gravity_fields"],
+      "green_min": 90,
+      "yellow_min": 45,
+      "note_low": "Exercise time is short"
+    },
+    "water": {
+      "label": "Water",
+      "unit": "ml/day",
+      "body_part": "stomach",
+      "hazards": ["hostile_environment"],
+      "green_min": 2000,
+      "yellow_min": 1500,
+      "note_low": "Water intake is low"
+    }
+  },
+  "trend_days": 3,
+  "symptom_levels": {
+    "default": "YELLOW",
+    "red_symptoms": ["blurry_vision", "chest_pain", "shortness_of_breath"]
+  },
+  "footer_disclaimer": "Demo with placeholder data. Not medical advice."
+}

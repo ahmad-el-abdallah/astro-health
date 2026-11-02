@@ -1,0 +1,130 @@
+{
+  "_comment": "PLACEHOLDER plain-language text for the demo. Simple sentences, written for crew who are not doctors. Replace with real NASA HRP content when published.",
+  "hazards": {
+    "space_radiation": {
+      "label": "Space radiation",
+      "summary": "Outside Earth's protective magnetic field, radiation levels are higher. Over time this raises health risks.",
+      "affects": ["immune", "symptoms", "long_term_risk"]
+    },
+    "isolation_confinement": {
+      "label": "Isolation and confinement",
+      "summary": "Being in a small crew, far from family and friends, for a long time affects mood, sleep and focus.",
+      "affects": ["mood", "sleep", "reaction_time"]
+    },
+    "distance_from_earth": {
+      "label": "Distance from Earth",
+      "summary": "The farther from Earth, the longer a message takes to arrive. The crew must be ready to act alone until Earth replies.",
+      "affects": ["escalation", "comms_delay"]
+    },
+    "gravity_fields": {
+      "label": "Gravity fields (including microgravity)",
+      "summary": "Little or no gravity lets bones and muscles weaken, and changes where blood pressure sits in the body.",
+      "affects": ["bones", "muscles", "blood_pressure", "eyes"]
+    },
+    "hostile_environment": {
+      "label": "Hostile closed environment",
+      "summary": "A sealed habitat changes air, noise, temperature and light compared to Earth, and can affect sleep and immunity.",
+      "affects": ["sleep", "temperature", "immune"]
+    }
+  },
+  "body_parts": {
+    "brain": {
+      "label": "Brain",
+      "what_it_does": "Controls thinking, mood, sleep and reaction speed.",
+      "space_effects": "Isolation, confinement and disrupted schedules can affect mood, sleep quality and how fast you react.",
+      "what_to_do": "Keep a steady sleep schedule, do the daily mood check, and try a breathing exercise if you feel stressed.",
+      "indicators": ["sleep", "mood", "reaction_time"],
+      "hazards": ["isolation_confinement"]
+    },
+    "eyes": {
+      "label": "Eyes",
+      "what_it_does": "Vision, including pressure-sensitive structures at the back of the eye.",
+      "space_effects": "Fluid shifts in microgravity can raise pressure around the eyes and blur vision over time.",
+      "what_to_do": "Report any blurry vision right away; it is treated as a red-flag symptom.",
+      "indicators": [],
+      "hazards": ["gravity_fields"]
+    },
+    "heart": {
+      "label": "Heart",
+      "what_it_does": "Pumps blood around the body; its workload and blood pressure change in microgravity.",
+      "space_effects": "Without gravity pulling blood down, more fluid sits near the chest and head, changing heart rate and blood pressure patterns.",
+      "what_to_do": "Keep up cardio exercise and log your heart rate and blood pressure each check.",
+      "indicators": ["heart_rate", "blood_pressure"],
+      "hazards": ["gravity_fields"]
+    },
+    "stomach": {
+      "label": "Stomach and nutrition",
+      "what_it_does": "Digestion, blood sugar and hydration.",
+      "space_effects": "Appetite and taste can change in space, and it is easy to under-eat or under-drink without noticing.",
+      "what_to_do": "Log every meal and your water intake; aim for the daily water target.",
+      "indicators": ["blood_sugar", "water"],
+      "hazards": ["isolation_confinement", "hostile_environment"]
+    },
+    "skeleton": {
+      "label": "Skeleton",
+      "what_it_does": "Bone strength and structure.",
+      "space_effects": "Bones lose density in microgravity because they are not carrying weight like they do on Earth.",
+      "what_to_do": "Resistance exercise and enough calcium in meals help slow bone loss.",
+      "indicators": ["exercise"],
+      "hazards": ["gravity_fields"]
+    },
+    "muscles": {
+      "label": "Muscles",
+      "what_it_does": "Strength and movement.",
+      "space_effects": "Muscles weaken quickly without gravity to work against, especially in the legs and back.",
+      "what_to_do": "Daily resistance and cardio exercise is the main defense.",
+      "indicators": ["exercise"],
+      "hazards": ["gravity_fields"]
+    },
+    "immune": {
+      "label": "Immune system",
+      "what_it_does": "Fights infection and manages inflammation; shown here as a whole-body glow.",
+      "space_effects": "Radiation and a sealed, recycled-air habitat can both affect immune function and body temperature regulation.",
+      "what_to_do": "Report fever or feeling unwell early; keep the habitat clean and follow hygiene routines.",
+      "indicators": ["temperature"],
+      "hazards": ["space_radiation", "hostile_environment"]
+    }
+  },
+  "measure_guides": {
+    "heart_rate": {
+      "title": "How to measure heart rate",
+      "steps": [
+        "Sit still for 2 minutes before measuring.",
+        "Use the cuff or sensor as shown in the kit.",
+        "Enter the number on the Live tab."
+      ]
+    },
+    "blood_pressure": {
+      "title": "How to measure blood pressure",
+      "steps": [
+        "Sit with your arm resting at heart height.",
+        "Wrap the cuff snugly above the elbow.",
+        "Stay still and quiet while it measures.",
+        "Enter both numbers: systolic (top) and diastolic (bottom)."
+      ]
+    },
+    "blood_sugar": {
+      "title": "How to measure blood sugar",
+      "steps": [
+        "Measure fasting, before your first meal if possible.",
+        "Follow the test kit's steps.",
+        "Enter the reading in mg/dL."
+      ]
+    },
+    "temperature": {
+      "title": "How to measure temperature",
+      "steps": [
+        "Use the thermometer as shown in the kit.",
+        "Wait for the reading to settle.",
+        "Enter the number in °C."
+      ]
+    }
+  },
+  "learn_cards": [
+    { "title": "The five hazards of spaceflight", "body": "Space radiation, isolation and confinement, distance from Earth, gravity fields, and a hostile closed environment all affect crew health in different ways." },
+    { "title": "Why we check every day", "body": "Small changes build up slowly in space. Daily checks catch problems early, before they become emergencies." },
+    { "title": "GREEN, YELLOW, RED", "body": "GREEN means normal. YELLOW means pay attention and take the suggested action. RED means act now and the flight surgeon is alerted." },
+    { "title": "When to call the flight surgeon", "body": "Call for any RED result, or any YELLOW that does not improve after you follow the advice." }
+  ],
+  "footer_disclaimer": "Demo with placeholder data. Not medical advice."
+}

@@ -1,0 +1,50 @@
+{
+  "_comment": "PLACEHOLDER mission numbers, invented for the demo. Not real NASA figures.",
+  "active_profile": "mars_transit",
+  "profiles": {
+    "station": {
+      "label": "Space station (low Earth orbit)",
+      "gravity_g": 0.0,
+      "comms_delay_s": 1,
+      "main_concerns": ["gravity_fields", "isolation_confinement"],
+      "daily_radiation_dose_uGy_PLACEHOLDER": 400
+    },
+    "lunar_base": {
+      "label": "Lunar base",
+      "gravity_g": 0.17,
+      "comms_delay_s": 1.3,
+      "main_concerns": ["space_radiation", "hostile_environment", "isolation_confinement"],
+      "daily_radiation_dose_uGy_PLACEHOLDER": 600
+    },
+    "mars_transit": {
+      "label": "Mars transit",
+      "gravity_g": 0.0,
+      "comms_delay_s": 1200,
+      "comms_delay_range_s_PLACEHOLDER": [180, 1320],
+      "main_concerns": ["space_radiation", "isolation_confinement", "distance_from_earth"],
+      "daily_radiation_dose_uGy_PLACEHOLDER": 1200
+    },
+    "mars_base": {
+      "label": "Mars surface base",
+      "gravity_g": 0.38,
+      "comms_delay_s": 1200,
+      "comms_delay_range_s_PLACEHOLDER": [180, 1320],
+      "main_concerns": ["distance_from_earth", "space_radiation", "gravity_fields"],
+      "daily_radiation_dose_uGy_PLACEHOLDER": 900
+    },
+    "rover": {
+      "label": "Rover excursion",
+      "gravity_g": "same_as_base",
+      "comms_delay_s": "same_as_base",
+      "main_concerns": ["hostile_environment", "gravity_fields"],
+      "daily_radiation_dose_uGy_PLACEHOLDER": 950
+    }
+  },
+  "hazards": {
+    "space_radiation": "Space radiation",
+    "isolation_confinement": "Isolation and confinement",
+    "distance_from_earth": "Distance from Earth",
+    "gravity_fields": "Gravity fields (including microgravity)",
+    "hostile_environment": "Hostile closed environment"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "_comment": "PLACEHOLDER daily schedule for reminders. Times are mission-elapsed clock times, HH:MM, 24h. Scaled for the demo by TIME_SCALE.",
+  "schedule": [
+    { "time": "07:00", "text": "Morning vitals check", "kind": "vitals" },
+    { "time": "08:00", "text": "Exercise block: resistance training", "kind": "exercise" },
+    { "time": "13:00", "text": "Midday exercise: cardio", "kind": "exercise" },
+    { "time": "19:00", "text": "Evening mood check", "kind": "mood" },
+    { "time": "22:30", "text": "Bedtime: start sleep tracking", "kind": "sleep" }
+  ]
+}
