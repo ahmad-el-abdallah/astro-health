@@ -87,10 +87,11 @@ this board, so:
   full stop.
 
 Real NFC cards get formatted as colon-separated hex (e.g. `04:A1:B2:C3`, same convention as
-Lifeline). The fake UIDs in `backend/seed.py` (`A1000001`, `T2000001`, ...) are plain demo
-strings for the Simulator panel only -- a real card's hex UID is a different string, and you
-assign it to an astronaut or object the first time it's scanned, via the Admin tab's "New tag
-scanned" popup.
+Lifeline). `backend/seed.py` no longer seeds any fake object-tag UIDs by default (removed
+2026-11-04, at the user's request, once real crew cards were in use) -- a real card's hex UID
+shows up as "Unknown card" the first time it's scanned, and you assign it to an astronaut or
+object from the superuser admin page (`/admin`, see the repo root README's "Superuser admin
+page").
 
 ## The ESP32-S3 reader sketch (`firmware/esp32s3_nfc_reader/`, 2026-11-04)
 

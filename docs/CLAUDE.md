@@ -401,6 +401,15 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
   card immediately working for `nfc_login`, a Flight-Surgeon-only session getting 401 on tag
   writes, and the main page's HTML having zero references to the old Admin tab. All test data
   from that verification was deleted afterward, including the throwaway superuser account.
+- **`backend/seed.py` no longer seeds `OBJECT_TAGS` as real rows** (removed from `seed_all()`,
+  2026-11-04, at the user's request once real crew cards were in use) -- the placeholder
+  exercise/sleep/meal/medicine/bp_guide/emergency catalog was demo clutter in the tag registry
+  for a deployment with real crew. `OBJECT_TAGS` itself is still defined (only `_seed_history()`,
+  dormant since no `ASTRONAUTS` entry has a `"story"`, still references it) -- just not inserted
+  into `tags` anymore. The live `data/astro.db` was cleaned up to match (every tag row except
+  `type IN ('astronaut', 'surgeon')` deleted) rather than only deleting the specific fake UIDs,
+  which also correctly preserved a 4th real crew member ("Aziz") the user had already assigned
+  via `/admin` since the last doc pass. Assign real object tags via `/admin` going forward.
 
 ## Testing
 

@@ -1,12 +1,18 @@
-"""Creates the crew, object tags, mission settings, and (for any astronaut
-with a "story") a 30-day fake history. Uses a fixed random seed, so any
-fake history is identical every run. Re-run any time: "Reset demo data" in
-Admin calls seed_all() again (it wipes and rebuilds the schema first).
+"""Creates the crew, mission settings, and (for any astronaut with a
+"story") a 30-day fake history. Uses a fixed random seed, so any fake
+history is identical every run. Re-run any time: the Flight Surgeon tab's
+"Reset demo data" button calls seed_all() again (it wipes and rebuilds the
+schema first).
 
 The crew itself is now real (Ahmad and Sameer, with their actual NFC card
 UIDs -- see ASTRONAUTS below), not the original fake demo crew from
-docs/build-prompt.md section 7; everything else here (object tags, the
-mission profile, points/thresholds) is still that spec's placeholder data.
+docs/build-prompt.md section 7. As of 2026-11-04, seed_all() no longer
+seeds OBJECT_TAGS as real rows in the tags table either -- that placeholder
+exercise/sleep/meal/medicine/bp_guide/emergency catalog is unused demo
+clutter for a real deployment with only real crew cards, at the user's
+request. OBJECT_TAGS is kept here only because _seed_history() (dormant --
+no ASTRONAUTS entry has a "story" today) still references it; assign real
+object tags via the superuser admin page (/admin) instead.
 """
 import json
 import random
@@ -270,8 +276,9 @@ def seed_all():
         surgeon_id = _insert_astronaut(conn, SURGEON["name"], SURGEON["role"], SURGEON["color"], 0)
         _insert_tag(conn, SURGEON["uid"], "surgeon", SURGEON["name"], surgeon_id, {})
 
-        for uid, type_, label, extra in OBJECT_TAGS:
-            _insert_tag(conn, uid, type_, label, None, extra)
+        # OBJECT_TAGS (exercise/sleep/meal/medicine/bp_guide/emergency demo
+        # placeholders) are deliberately NOT seeded as real tags anymore --
+        # see the module docstring. Assign real object tags via /admin.
 
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('mission_profile', ?)",
                      (missions_cfg["active_profile"],))
