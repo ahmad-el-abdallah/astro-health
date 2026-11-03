@@ -330,14 +330,17 @@ void drawEmergencyScreen(bool flashOn) {
 }
 
 // ---- screen: Unknown tag ----
+// Deliberately generic -- doesn't hint that assignment is even possible,
+// let alone how (see docs/CLAUDE.md's "Superuser admin page"). Only a
+// superuser logged into /admin can see/act on an unrecognized tap now, so
+// the CYD has nothing useful to tell whoever's standing at the kiosk.
 void onUnknownTagMsg(const String& uid) {
   clearScreen();
   tft.setTextDatum(MC_DATUM);
   tft.setTextColor(C_TEXT, C_BG);
-  tft.drawString("New tag", CX, 80, 4);
+  tft.drawString("Unknown card", CX, 95, 4);
   tft.setTextColor(C_DIM, C_BG);
-  tft.drawString("Assign it on the laptop", CX, 115, 2);
-  tft.drawString(uid, CX, 140, 2);
+  tft.drawString(uid, CX, 130, 2);
   screen = SCR_UNKNOWN_TAG;
   toastUntilMs = millis() + 3000;
   screenBeforeToast = curUid.length() ? SCR_SESSION : SCR_IDLE;

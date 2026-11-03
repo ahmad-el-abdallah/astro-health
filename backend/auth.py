@@ -9,10 +9,11 @@ role allowed to view every other astronaut's data -- that's the point of
 the role (docs/CLAUDE.md's "Flight Surgeon sees everyone" decision).
 
 Like backend/sessions.py's active_sessions, this is a live-demo concept,
-not an account system: restarting app.py regenerates SECRET_KEY (see
-app.py), which invalidates every existing session cookie, so everyone's
-logged out on restart. That's fine here and avoids needing a persisted
-secret.
+not a real account system -- but unlike that in-memory table, the signing
+key behind this cookie is persisted to disk (data/secret_key, see app.py's
+_load_or_create_secret_key) specifically so a session survives both a
+plain page refresh and an app.py restart. Delete that file to force
+everyone to log in again.
 """
 from flask import session
 

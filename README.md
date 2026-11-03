@@ -33,11 +33,33 @@ trends), since that's the point of the role.
 The only working sign-in method right now is tapping your NFC card on the CYD (username/password
 and Face ID are shown on the login screen as "Coming soon" placeholders for later). No CYD
 plugged in? The **Simulator** panel works from the login screen too -- tap your card button
-there instead, it goes through the exact same path a real tap does. Signing out (the header's
-"Log out" button) is separate from your CYD session ending/timing out -- one doesn't affect the
-other. On a shared laptop, tapping a *different* card while you're still signed in doesn't
-switch who's logged in (a stray tap from someone else's routine check-in shouldn't silently
-boot you out of your own dashboard) -- log out first, then tap the next card.
+there instead, it goes through the exact same path a real tap does. On a shared laptop, tapping
+a *different* card while you're still signed in doesn't switch who's logged in (a stray tap from
+someone else's routine check-in shouldn't silently boot you out of your own dashboard) -- log
+out first, then tap the next card.
+
+Signing out and ending your CYD session now track each other for *explicit* sign-off: clicking
+the header's "Log out" button also ends your CYD session if one's open, and pressing "Done" on
+the CYD logs the browser out too. Passive endings -- re-tapping your card to toggle the CYD
+session off, or its 120s idle timeout -- don't log the browser out; only those two explicit
+actions are wired together.
+
+### Superuser admin page
+
+Assigning a tag to an astronaut, or setting/creating an astronaut's role, now happens at a
+separate page -- **http://localhost:5000/admin** -- with its own login, entirely independent of
+the NFC/astronaut login above (log into both at once in the same browser if you want). Create
+the first superuser account:
+
+```bash
+.venv/bin/python -m backend.create_superuser
+```
+
+It prompts for a username and password (hidden) and creates one row in the `superusers` table.
+Run it again any time you need another admin account. Tapping an unrecognized card shows
+"Unknown card" on the CYD (nothing about assignment -- that's deliberate) and lands in the
+admin page's "Unknown tags" list, where it stays until you assign or dismiss it, even if nobody
+was watching when it was tapped.
 
 If `pip` isn't available on your system Python (no `ensurepip`/`python3-pip`), bootstrap it
 inside the venv instead of installing anything system-wide:
@@ -67,7 +89,8 @@ isn't available, so a USB cable is always used if plugged in even if the CYD's W
 happens to be reachable.
 
 First run seeds the database (`data/astro.db`, git-ignored) with the real crew (their NFC
-card UIDs, assigned via the Admin tab) plus a flight surgeon. The **Simulator** panel
+card UIDs baked into `backend/seed.py`) plus a flight surgeon. New cards get assigned via the
+superuser admin page (`/admin`, see above). The **Simulator** panel
 (bottom-right, every tab) has a button per known card/tag and every fake CYD event (mood,
 symptoms, a normal or slow reaction test, breathing done, SOS) -- this is the fallback if the
 hardware fails during a demo, and it drives the exact same code path as a real card tap.
@@ -88,7 +111,7 @@ exact same JSON protocol USB serial uses, so nothing else about the app changes.
 - The ESP-NOW link to the separate ESP32-S3 NFC reader is unaffected by any of this --
   it keeps working exactly as before, no changes needed on that board.
 
-**Tests**: `.venv/bin/python -m pytest` (48 tests: the rules engine, the serial protocol, tag-tap
+**Tests**: `.venv/bin/python -m pytest` (62 tests: the rules engine, the serial protocol, tag-tap
 session logic, symptom reporting, login/access control, and the REST API).
 
 **Firmware**: see `firmware/README.md` for libraries, pin map, touch calibration and upload
@@ -130,10 +153,11 @@ Works identically with the real CYD or in `--simulate` mode.
 - Mission profiles and comms delays: `config/missions.json`.
 - Daily reminder schedule: `config/routine.json`.
 - Points and badge rules: `config/gamification.json`.
-- Real crew: Admin tab -- tap a new NFC card, it shows up as "New tag", assign it to an
-  astronaut (rename them there too) or an object type. No code changes needed either way.
+- Real crew: tap a new NFC card, then assign it and set its astronaut's role from the
+  **superuser admin page** (`/admin` -- see "Superuser admin page" below). No code changes
+  needed either way. Renaming an existing astronaut stays on the Flight Surgeon tab.
 - To regenerate the fake 30-day history (e.g. after changing `backend/seed.py`'s stories),
-  use Admin tab's "Reset demo data", or `.venv/bin/python -m backend.seed`.
+  use the Flight Surgeon tab's "Reset demo data", or `.venv/bin/python -m backend.seed`.
 
 ## Troubleshooting
 
@@ -161,20 +185,25 @@ every tab clicked through, zero runtime errors): the full backend (sessions, rul
 gamification, comms delay, scheduler, serial bridge + simulation mode, login/access control),
 symptom reporting, auto-simulated vitals, and the full 10-tab web app.
 
-**Firmware**: compiled cleanly as of the initial build (`arduino-cli compile`). It's since
-changed (`screens.ino`'s status-note word-wrap, see `docs/CLAUDE.md`), but `arduino-cli` isn't
-installed in this dev environment to recheck that -- reviewed by hand only. Compile-check it
-yourself before trusting it or flashing.
+**Firmware**: both `astro_cyd/` and the ESP32-S3 reader (`firmware/esp32s3_nfc_reader/`, new
+2026-11-04 -- a port of the user's own separate, already-working PN532 reader project, not
+written from scratch) compile cleanly (`arduino-cli compile`, confirmed 2026-11-04 now that
+`arduino-cli` is installed on this machine).
 
-**Not verified on real hardware** (no CYD/S3 boards attached during this build):
+**Not verified on real hardware yet:**
 
-- The CYD's screen rotation and touch calibration -- see `firmware/README.md`.
+- `astro_cyd`'s screen rotation and touch calibration -- see `firmware/README.md`. Never flashed
+  to a real CYD.
 - The microSD CS pin (`SD_CS_PIN` in `protocol.ino`) -- SD logging is optional either way.
 - A live card tap arriving over the real serial port within 1s (this was validated end-to-end
   through `--simulate`'s identical code path, and the serial protocol itself is unit-tested,
-  but not against the physical boards). Also: a cable/signal-integrity issue that showed up
-  over a real USB link (garbled bytes even after a reconnect-storm bug was fixed) -- see
-  Troubleshooting above.
+  but not against the physical `astro_cyd` board). Also: a cable/signal-integrity issue that
+  showed up over a real USB link (garbled bytes even after a reconnect-storm bug was fixed) --
+  see Troubleshooting above.
 - The LED/speaker's physical behavior.
+- The ESP32-S3 reader's actual read range/speed on the real board, after switching from
+  placeholder pins/tuning to the ported, measured-good ones -- flashed once with the wrong
+  (placeholder) pins and confirmed via serial log that it just couldn't reach the PN532, as
+  expected; not yet re-flashed with the corrected version.
 
 Please check those on the actual boards.

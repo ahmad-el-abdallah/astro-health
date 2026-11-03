@@ -1,8 +1,11 @@
-// ESP-NOW link between the ESP32-S3 NFC reader and the Lifeline terminal (the CYD).
+// ESP-NOW link between the ESP32-S3 NFC reader and this CYD terminal.
 //
-// This file is shared. The master is ~/Desktop/nasa/lifeline-firmware/nfc_link.h and a copy sits in
-// ~/Desktop/ESP32S3-NFC-Reader/src/. Edit the master, then copy it over; ~/Desktop/nasa/build.sh
-// refuses to build while the two differ.
+// This file is shared and must stay byte-for-byte identical to
+// firmware/esp32s3_nfc_reader/nfc_link.h in this same repo (the two live
+// boards that actually talk to each other) -- edit one, copy it over the
+// other. It's also the same protocol Lifeline's lock sketch uses
+// (firmware/existing/, reference-only, not wired to anything here), which
+// is where this file originally came from.
 //
 // Traffic (one LinkMsg per ESP-NOW frame, unicast, encrypted with LINK_PMK/LINK_LMK):
 //   reader -> lock  LINK_HEARTBEAT  every second: "I'm here", plus whether the PN532 answers

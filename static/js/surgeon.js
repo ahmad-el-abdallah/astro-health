@@ -23,8 +23,16 @@ const SurgeonTab = (() => {
         <textarea id="surgeon-reply-body" rows="3" placeholder="Your reply..."></textarea>
         <button class="btn" id="surgeon-reply-btn">Send (arrives after the comms delay)</button>
         <div id="surgeon-reply-status" class="dim"></div>
+      </div>
+      <h3>Crew names</h3>
+      <div class="card" id="surgeon-crew-names"></div>
+      <h3>Data</h3>
+      <div class="card">
+        <button class="btn danger" id="surgeon-reset-demo-btn">Reset demo data</button>
+        <div id="surgeon-export-links" style="margin-top:10px"></div>
       </div>`;
     document.getElementById("surgeon-reply-btn").addEventListener("click", sendReply);
+    document.getElementById("surgeon-reset-demo-btn").addEventListener("click", resetDemo);
     if (!countdownTimer) countdownTimer = setInterval(refresh, 1000);
   }
 
@@ -36,6 +44,41 @@ const SurgeonTab = (() => {
       select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
     }
     refresh();
+    refreshCrewNames();
+    refreshExportLinks();
+  }
+
+  // ---- crew names + data (moved here from the old Admin tab, which is now
+  // the superuser-only /admin page -- see docs/CLAUDE.md's "Superuser admin
+  // page". Renaming/reset-demo/exports stay Flight-Surgeon tools, unlike
+  // tag assignment and role-setting, which moved to the new page.) ----
+  async function refreshCrewNames() {
+    if (!isSurgeon()) return;
+    const crew = await api("/crew");
+    document.getElementById("surgeon-crew-names").innerHTML = crew.map((a) => `
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <input value="${a.name}" data-rename="${a.id}">
+        <button class="btn secondary" data-save-name="${a.id}">Save</button>
+      </div>`).join("");
+    document.querySelectorAll("[data-save-name]").forEach((btn) => btn.addEventListener("click", async () => {
+      const id = btn.dataset.saveName;
+      const name = document.querySelector(`[data-rename="${id}"]`).value;
+      await api(`/astronauts/${id}`, { method: "PUT", body: JSON.stringify({ name }) });
+      CrewTab.onShow && CrewTab.onShow();
+    }));
+  }
+
+  async function refreshExportLinks() {
+    if (!isSurgeon()) return;
+    const crew = await api("/crew");
+    document.getElementById("surgeon-export-links").innerHTML = crew.map((a) =>
+      `<a class="btn secondary" style="display:inline-block;margin:4px" href="/api/export/${a.id}.csv">Send to Earth: ${a.name}.csv</a>`).join("");
+  }
+
+  async function resetDemo() {
+    if (!confirm(STRINGS.resetDemoConfirm)) return;
+    await api("/reset-demo", { method: "POST" });
+    onShow();
   }
 
   async function refresh() {
@@ -79,6 +122,7 @@ const SurgeonTab = (() => {
 
   Bus.on("alert", refresh);
   Bus.on("message_delivered", refresh);
+  Bus.on("data_reset", onShow);
 
   return { init, onShow };
 })();

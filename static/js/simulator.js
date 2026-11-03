@@ -60,6 +60,7 @@ const SimulatorPanel = (() => {
       reaction_slow: { type: "reaction", uid, trials_ms: [470, 490, 460, 510, 480, 500, 470, 520, 490, 505], avg_ms: 490, lapses: 1, false_starts: 0 },
       breathing_done: { type: "breathing_done", uid, seconds: 60 },
       emergency: { type: "emergency", uid },
+      done: { type: "end_session", uid },
     };
     const msg = byKind[kind];
     if (msg) api("/simulate/event", { method: "POST", body: JSON.stringify(msg) });

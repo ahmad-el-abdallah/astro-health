@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request, Response
 
-from backend import db, sessions, health_rules, comms, seed, protocol, symptoms, auth
+from backend import db, sessions, health_rules, comms, seed, protocol, symptoms, auth, admin_auth
 from backend.config import (
     content as load_content, missions as load_missions,
     gamification as load_gamification, routine as load_routine,
@@ -59,7 +59,15 @@ def create_routes(app, socketio, bridge):
 
     @bp.post("/auth/logout")
     def auth_logout():
+        astro_id = auth.current_astronaut_id()
         auth.logout()
+        # Logging out from the browser now ends that astronaut's CYD session
+        # too, if they have one open -- the mirror image of the CYD's "Done"
+        # button logging the browser out (see "logout_requested" above).
+        # Only touches a session that's actually theirs; doesn't disturb
+        # some other astronaut's session if this one already ended/timed out.
+        if astro_id is not None and astro_id in sessions.active_sessions:
+            sessions.end_session_for(astro_id, send_fn, emit_fn)
         return jsonify({"ok": True})
 
     @bp.get("/auth/me")
@@ -101,6 +109,44 @@ def create_routes(app, socketio, bridge):
             if "name" in body:
                 conn.execute("UPDATE astronauts SET name = ? WHERE id = ?", (body["name"], astro_id))
             r = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
+        return jsonify(row(r))
+
+    # Creating a new astronaut record, and changing an existing one's role,
+    # are superuser-only (/admin) -- see docs/CLAUDE.md's "Superuser admin
+    # page". Separate from update_astronaut above (name-only rename), which
+    # stays Flight-Surgeon-only and untouched.
+    @bp.post("/astronauts")
+    def create_astronaut():
+        body = request.get_json(force=True) or {}
+        name = (body.get("name") or "").strip()
+        role = body.get("role")
+        if not name or role not in ("Crew member", auth.SURGEON_ROLE):
+            return jsonify({"error": "name and a valid role ('Crew member' or 'Flight surgeon') are required"}), 400
+        with db.write_conn() as conn:
+            _, err = admin_auth.authorize_superuser(conn)
+            if err:
+                return jsonify(err[0]), err[1]
+            cur = conn.execute(
+                "INSERT INTO astronauts (name, role, color, baseline_reaction_ms, created_at) VALUES (?, ?, ?, 350, ?)",
+                (name, role, body.get("color") or "#4fd1c5", datetime.now(timezone.utc).isoformat()),
+            )
+            r = conn.execute("SELECT * FROM astronauts WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return jsonify(row(r)), 201
+
+    @bp.put("/astronauts/<int:astro_id>/role")
+    def update_astronaut_role(astro_id):
+        body = request.get_json(force=True) or {}
+        role = body.get("role")
+        if role not in ("Crew member", auth.SURGEON_ROLE):
+            return jsonify({"error": "role must be 'Crew member' or 'Flight surgeon'"}), 400
+        with db.write_conn() as conn:
+            _, err = admin_auth.authorize_superuser(conn)
+            if err:
+                return jsonify(err[0]), err[1]
+            conn.execute("UPDATE astronauts SET role = ? WHERE id = ?", (role, astro_id))
+            r = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
+        if not r:
+            return jsonify({"error": "not found"}), 404
         return jsonify(row(r))
 
     @bp.get("/astronauts/<int:astro_id>/summary")
@@ -301,7 +347,8 @@ def create_routes(app, socketio, bridge):
     # ---- tags (read is open: the Simulator panel needs the tag list to
     # fake a card tap for *anyone*, including the not-yet-logged-in login
     # screen -- that's how the Simulator logs you in with no hardware.
-    # Writes (assigning/removing a tag) stay Flight-Surgeon-only.) ----
+    # Writes (assigning/removing a tag) are superuser-only (/admin) --
+    # see docs/CLAUDE.md's "Superuser admin page".) ----
     @bp.get("/tags")
     def list_tags():
         with db.write_conn() as conn:
@@ -312,7 +359,7 @@ def create_routes(app, socketio, bridge):
     def upsert_tag():
         body = request.get_json(force=True) or {}
         with db.write_conn() as conn:
-            _, err = auth.authorize_surgeon(conn)
+            _, err = admin_auth.authorize_superuser(conn)
             if err:
                 return jsonify(err[0]), err[1]
             conn.execute(
@@ -320,12 +367,13 @@ def create_routes(app, socketio, bridge):
                 (body["uid"], body["type"], body.get("label", body["uid"]), body.get("astronaut_id"),
                  json.dumps(body.get("data", {}))),
             )
+        sessions.clear_unknown_tag(body["uid"])
         return jsonify({"ok": True})
 
     @bp.delete("/tags/<uid>")
     def delete_tag(uid):
         with db.write_conn() as conn:
-            _, err = auth.authorize_surgeon(conn)
+            _, err = admin_auth.authorize_superuser(conn)
             if err:
                 return jsonify(err[0]), err[1]
             conn.execute("DELETE FROM tags WHERE uid = ?", (uid,))
@@ -502,6 +550,14 @@ def create_routes(app, socketio, bridge):
             astro_id = _uid_to_astro(msg.get("uid"))
             if astro_id is not None:
                 sessions.end_session_for(astro_id, send_fn, emit_fn)
+                # Pressing "Done" on the CYD is an explicit sign-off, unlike
+                # a re-tap toggle or the idle timeout (both of which also end
+                # the session but must NOT log the browser out -- see
+                # docs/CLAUDE.md's "Login / access control"). The browser
+                # that's actually logged in as this astronaut (if any) reacts
+                # to this broadcast itself; the server has no reverse lookup
+                # from astro_id to a specific session cookie.
+                emit_fn("logout_requested", {"astronaut_id": astro_id})
         elif mtype == "hello":
             emit_fn("serial_status", {"status": bridge.status, "fw": msg.get("fw")})
         elif mtype == "log":

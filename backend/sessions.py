@@ -25,6 +25,16 @@ open_toggles = {}
 surgeon_unlocked_until = 0.0
 emergency = {"active": False, "text": ""}
 
+# uid -> {"uid":, "first_seen":, "last_seen":, "count":}: unknown-tag taps
+# the superuser admin page (/admin) needs to see even if nobody's browser
+# was open at the exact moment of the tap. In-memory only, same live-demo-
+# not-history philosophy as active_sessions/open_toggles above -- capped so
+# someone repeatedly tapping junk cards can't grow this forever. A dict
+# (Python 3.7+ preserves insertion order) re-inserts on every repeat tap so
+# iteration order stays oldest-first without a separate timestamp sort.
+UNKNOWN_BACKLOG_MAX = 50
+unknown_tag_backlog = {}
+
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -212,12 +222,35 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
         emit_fn("cyd_event", {"type": "open_guide", "astronaut_id": astronaut_id, "indicator": "blood_pressure"})
 
 
+def _remember_unknown_tag(uid):
+    now = _now_iso()
+    if uid in unknown_tag_backlog:
+        entry = unknown_tag_backlog.pop(uid)
+        entry["last_seen"] = now
+        entry["count"] += 1
+    else:
+        entry = {"uid": uid, "first_seen": now, "last_seen": now, "count": 1}
+        if len(unknown_tag_backlog) >= UNKNOWN_BACKLOG_MAX:
+            unknown_tag_backlog.pop(next(iter(unknown_tag_backlog)))  # drop oldest
+    unknown_tag_backlog[uid] = entry
+
+
+def unknown_tags():
+    """Most-recently-tapped first, for the admin page's backlog list."""
+    return list(reversed(list(unknown_tag_backlog.values())))
+
+
+def clear_unknown_tag(uid):
+    unknown_tag_backlog.pop(uid, None)
+
+
 def handle_scan(uid, send_fn, emit_fn):
     """The single entry point for a 'scan' message, whether it came from a
     real CYD over serial or the Simulator panel."""
     with db.write_conn() as conn:
         tag = _get_tag(conn, uid)
         if tag is None:
+            _remember_unknown_tag(uid)
             send_fn(protocol.unknown_tag(uid))
             emit_fn("unknown_tag", {"uid": uid})
             return

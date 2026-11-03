@@ -191,7 +191,17 @@ const LiveTab = (() => {
   }
 
   Bus.on("session_started", (d) => { loadSummary(d.astronaut_id); simulateVitals(d.astronaut_id); });
-  Bus.on("session_ended", (d) => { if (d.astronaut_id === currentId) showEmpty(); });
+  Bus.on("session_ended", (d) => {
+    if (d.astronaut_id !== currentId) return;
+    // A CYD session ending (idle timeout, or re-tapping to toggle it off)
+    // must not blank the Live tab for someone who's still signed in as
+    // themselves in this browser -- the web login and the CYD's physical
+    // session are deliberately separate (docs/CLAUDE.md). Only blank it
+    // when nobody's own view this is, e.g. the surgeon was watching
+    // someone else's session and it just ended.
+    if (Auth.astronautId === currentId) return;
+    showEmpty();
+  });
   Bus.on("scan", (d) => { if (d.type === "astronaut") { /* session_started follows right after */ } });
   Bus.on("cyd_event", () => { if (currentId) loadSummary(currentId); });
 

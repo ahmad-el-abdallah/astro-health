@@ -112,6 +112,13 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS superusers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -146,13 +153,16 @@ def write_conn():
 
 
 def wipe_db():
-    """Drops every table so seed.py can rebuild from scratch (Reset demo data)."""
+    """Drops every table so seed.py can rebuild from scratch (Reset demo data)
+    -- except `superusers`: that's an account system, not demo data, and
+    wiping it would lock the superuser out of /admin until they re-ran the
+    create_superuser CLI."""
     with WRITE_LOCK:
         conn = get_conn()
         try:
             conn.execute("PRAGMA foreign_keys = OFF")
             tables = [r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'superusers'"
             )]
             for t in tables:
                 conn.execute(f"DROP TABLE IF EXISTS {t}")

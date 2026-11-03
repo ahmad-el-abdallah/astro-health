@@ -13,6 +13,7 @@ def reset_sessions_state():
     sessions.surgeon_unlocked_until = 0.0
     sessions.emergency["active"] = False
     sessions.emergency["text"] = ""
+    sessions.unknown_tag_backlog.clear()
     yield
 
 

@@ -17,7 +17,8 @@ import time
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 
-from backend import db, seed, sessions, comms, routes, scheduler
+from backend import db, seed, sessions, comms, routes, scheduler, admin_routes
+from backend.config import DATA_DIR
 from backend.serial_bridge import SerialBridge, find_port
 from backend.wifi_bridge import (
     WifiBridge, is_reachable as wifi_is_reachable,
@@ -25,6 +26,24 @@ from backend.wifi_bridge import (
 )
 
 BACKGROUND_TICK_S = 2
+SECRET_KEY_PATH = os.path.join(DATA_DIR, "secret_key")
+
+
+def _load_or_create_secret_key():
+    """Persisted on disk (data/secret_key, git-ignored) instead of a fresh
+    os.urandom() every run, so restarting app.py during dev/testing doesn't
+    invalidate every signed-in session cookie -- otherwise a page refresh
+    that happens to land after a restart would force everyone to re-tap
+    their NFC card. Still nothing to leak: it's demo-local, not a real
+    account system, and deleting the file just logs everyone out."""
+    if os.path.exists(SECRET_KEY_PATH):
+        with open(SECRET_KEY_PATH, "rb") as f:
+            return f.read()
+    os.makedirs(DATA_DIR, exist_ok=True)
+    key = os.urandom(24)
+    with open(SECRET_KEY_PATH, "wb") as f:
+        f.write(key)
+    return key
 
 
 def parse_args():
@@ -67,11 +86,9 @@ def choose_bridge(args, on_message, on_status, on_send):
 
 def create_app(args):
     app = Flask(__name__)
-    # Regenerated fresh every run -- every login session cookie it signs
-    # becomes invalid on the next restart, so (like backend/sessions.py's
-    # in-memory active_sessions) everyone's logged out when the demo app
-    # restarts. No secret to persist or leak.
-    app.secret_key = os.urandom(24)
+    # Persisted across restarts (see _load_or_create_secret_key) so signed-in
+    # sessions survive both an ordinary page refresh and a dev-server restart.
+    app.secret_key = _load_or_create_secret_key()
     socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
     db.init_db()
@@ -95,6 +112,7 @@ def create_app(args):
 
     bridge = choose_bridge(args, on_message, on_status, on_send)
     handle_cyd_message = routes.create_routes(app, socketio, bridge)
+    admin_routes.create_admin_routes(app)
     bridge.start()
 
     @app.get("/")

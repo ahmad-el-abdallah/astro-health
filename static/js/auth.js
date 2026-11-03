@@ -42,7 +42,15 @@ function applyLogin(me) {
   Auth.astronautId = me.astronaut_id;
   Auth.name = me.name;
   Auth.role = me.role;
-  if (!isSurgeon()) window.selectedAstronautId = me.astronaut_id;
+  if (!isSurgeon()) {
+    window.selectedAstronautId = me.astronaut_id;
+    // Show their own Live data right away -- don't wait for a second,
+    // separate "session_started" tap/event. Being logged in as yourself
+    // is already enough to see your own data (backend/auth.py enforces
+    // that anyway), so there's no reason the Live tab should need its
+    // own card tap on top of the one that just logged you in.
+    LiveTab.viewAstronaut(me.astronaut_id);
+  }
   showApp();
   applyRoleVisibility();
 }
@@ -71,6 +79,11 @@ async function logout() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("logout-btn").addEventListener("click", logout);
+  // Pressing "Done" on the CYD (backend/routes.py's "end_session" handling)
+  // signs this browser out too, if it's the one logged in as that
+  // astronaut -- unlike a re-tap or idle timeout, which only end the CYD
+  // session and deliberately leave the web login alone.
+  Bus.on("logout_requested", (d) => { if (d.astronaut_id === Auth.astronautId) logout(); });
   const loggedIn = await checkAlreadyLoggedIn();
   if (!loggedIn) {
     document.getElementById("login-nfc-status").textContent = "Waiting for a card tap…";

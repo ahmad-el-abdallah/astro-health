@@ -21,6 +21,6 @@ const FORWARDED_EVENTS = [
   "serial_status", "serial_log", "scan", "session_started", "session_ended",
   "cyd_event", "assessment", "alert", "emergency", "message_delivered",
   "reminder", "points", "badge", "unknown_tag", "data_reset",
-  "surgeon_unlocked", "mission_changed",
+  "surgeon_unlocked", "mission_changed", "logout_requested",
 ];
 FORWARDED_EVENTS.forEach((ev) => socket.on(ev, (data) => Bus.emit(ev, data)));

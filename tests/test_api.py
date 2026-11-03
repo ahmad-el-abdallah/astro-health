@@ -2,7 +2,8 @@ import argparse
 
 import pytest
 
-from backend import db
+from backend import db, sessions
+from backend.create_superuser import create_superuser
 
 
 @pytest.fixture(scope="module")
@@ -63,6 +64,21 @@ def test_logout_clears_the_session(client):
     assert client.get("/api/astronauts/1/summary").status_code == 401
 
 
+def test_logout_also_ends_an_open_cyd_session(client):
+    login_as(client, AHMAD_UID)
+    client.post("/api/simulate/scan", json={"uid": AHMAD_UID})  # opens a CYD session for Ahmad (id 1)
+    assert 1 in sessions.active_sessions
+    client.post("/api/auth/logout")
+    assert 1 not in sessions.active_sessions
+
+
+def test_logout_with_no_open_cyd_session_is_a_no_op(client):
+    login_as(client, AHMAD_UID)
+    assert 1 not in sessions.active_sessions
+    res = client.post("/api/auth/logout")
+    assert res.status_code == 200
+
+
 def test_astronauts_list_has_seeded_crew(client):
     login_as(client, SURGEON_UID)
     res = client.get("/api/astronauts")
@@ -121,7 +137,11 @@ def test_unknown_tag_is_reported(client):
 
 
 def test_tag_registry_crud(client):
-    login_as(client, SURGEON_UID)
+    # Tag writes are superuser-only (docs/CLAUDE.md's "Superuser admin
+    # page") -- a plain Flight-Surgeon session is no longer enough.
+    create_superuser("tagtest-admin", "tagtest-password")
+    res = client.post("/api/admin/login", json={"username": "tagtest-admin", "password": "tagtest-password"})
+    assert res.status_code == 200
     res = client.post("/api/tags", json={"uid": "TESTTAG1", "type": "exercise", "label": "Test Rower"})
     assert res.status_code == 200
     tags = client.get("/api/tags").get_json()
@@ -130,6 +150,7 @@ def test_tag_registry_crud(client):
     assert res.status_code == 200
     tags = client.get("/api/tags").get_json()
     assert all(t["uid"] != "TESTTAG1" for t in tags)
+    client.post("/api/admin/logout")
 
 
 def test_emergency_start_and_cancel(client):
