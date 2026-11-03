@@ -11,6 +11,7 @@ const MissionTab = (() => {
   let contentCache = null;
   let rulesCache = null;
   let currentAstroId = null;
+  let planet = null;
 
   function init() {
     document.getElementById("tab-mission").innerHTML = `
@@ -18,7 +19,10 @@ const MissionTab = (() => {
       <p class="dim">Every environment stresses the body differently. Pick where the crew is to see
         which body systems are most at risk, how each astronaut is doing right now, and what to check.</p>
       <div class="mh-env-picker" id="mh-env-picker"></div>
-      <div class="card mh-headline" id="mh-headline"></div>
+      <div class="card mh-hero">
+        <canvas id="mh-planet" class="mh-planet" aria-hidden="true"></canvas>
+        <div class="mh-headline" id="mh-headline"></div>
+      </div>
       <div class="mh-section-head">
         <h3>What this mission does to your body</h3>
         <label class="mh-astro">Astronaut <select id="mh-astro-select"></select></label>
@@ -34,6 +38,7 @@ const MissionTab = (() => {
       </div>
       <div class="card" id="mh-plan"></div>`;
 
+    planet = Planet3D.mount(document.getElementById("mh-planet"));
     document.getElementById("mh-env-picker").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-profile]");
       if (btn && !btn.classList.contains("active")) setProfile(btn.dataset.profile);
@@ -54,12 +59,14 @@ const MissionTab = (() => {
   async function onShow() {
     if (!contentCache) contentCache = await api("/content");
     if (!rulesCache) rulesCache = await api("/health-rules");
-    const [mission, crew] = await Promise.all([api("/mission"), api("/crew")]);
+    const mission = await api("/mission");
+    if (planet) planet.setProfile(mission.profile_id);
 
+    // Shared helper from auth.js: the flight surgeon can pick anyone, an
+    // astronaut is locked to themselves.
     const select = document.getElementById("mh-astro-select");
-    if (!select.options.length && crew.length) {
-      select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
-    }
+    const crew = await populateAstroSelect(select);
+    if (!isSurgeon()) currentAstroId = Auth.astronautId;
     currentAstroId = currentAstroId || window.selectedAstronautId || (crew[0] && crew[0].id);
     if (currentAstroId) select.value = currentAstroId;
 

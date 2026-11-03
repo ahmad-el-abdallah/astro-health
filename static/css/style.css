@@ -343,3 +343,15 @@ footer.app-footer {
   .mh-part, .mh-env-picker button { transition: none; }
   .mh-part:hover { transform: none; }
 }
+.mh-hero {
+  display: grid; grid-template-columns: minmax(260px, 1.1fr) 1.4fr; gap: 20px; align-items: center;
+  padding: 0; overflow: hidden;
+  background: radial-gradient(ellipse at 20% 50%, #13233a 0%, var(--panel) 70%);
+}
+.mh-planet { display: block; width: 100%; height: 300px; }
+.mh-hero .mh-headline { padding: 20px 20px 20px 0; }
+@media (max-width: 720px) {
+  .mh-hero { grid-template-columns: 1fr; gap: 0; }
+  .mh-planet { height: 230px; }
+  .mh-hero .mh-headline { padding: 0 16px 16px; }
+}
