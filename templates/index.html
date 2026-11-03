@@ -7,12 +7,27 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-<div id="app">
+<div id="login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:420px; width:100%; margin:20px;">
+    <h2 style="margin-top:0;">Sign in</h2>
+    <p class="dim">Tap your crew card on the CYD to sign in.</p>
+    <div id="login-nfc-status" class="dim" style="margin:16px 0; min-height:1.2em;"></div>
+    <div style="opacity:0.55; border-top:1px solid var(--border); padding-top:14px; margin-top:4px;">
+      <p class="dim" style="margin:0 0 10px;">Coming soon</p>
+      <button class="btn secondary" disabled style="width:100%; margin-bottom:8px;">Username &amp; password</button>
+      <button class="btn secondary" disabled style="width:100%;">Face ID</button>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
   <header class="app-header">
     <h1>&#128752; Astro Health Station</h1>
     <div style="display:flex; gap:10px; align-items:center;">
       <span id="mission-pill" class="pill">Mission: &ndash;</span>
       <span id="serial-status-pill" class="pill"><span class="pill-dot"></span><span id="serial-status-text">&ndash;</span></span>
+      <span id="user-pill" class="pill">&ndash;</span>
+      <button class="btn secondary" id="logout-btn" style="padding:4px 10px; font-size:0.85rem;">Log out</button>
     </div>
   </header>
 
@@ -20,13 +35,13 @@
     <button data-tab="live" class="active">Live</button>
     <button data-tab="body">Body</button>
     <button data-tab="trends">Trends</button>
-    <button data-tab="crew">Crew</button>
-    <button data-tab="surgeon">Flight Surgeon</button>
+    <button data-tab="crew" data-surgeon-only>Crew</button>
+    <button data-tab="surgeon" data-surgeon-only>Flight Surgeon</button>
     <button data-tab="mission">Mission</button>
     <button data-tab="learn">Learn</button>
     <button data-tab="rewards">Rewards</button>
     <button data-tab="schedule">Schedule</button>
-    <button data-tab="admin">Admin</button>
+    <button data-tab="admin" data-surgeon-only>Admin</button>
   </nav>
 
   <main>
@@ -44,39 +59,6 @@
 
   <footer class="app-footer">Demo with placeholder data. Not medical advice.</footer>
 
-  <div id="simulator-panel" class="collapsed">
-    <div class="sim-header" id="sim-toggle">
-      <strong>Simulator</strong>
-      <span id="sim-collapse-arrow">&#9650;</span>
-    </div>
-    <div class="sim-body">
-      <div class="sim-group">
-        <h4>Crew &amp; surgeon cards</h4>
-        <div class="sim-buttons" id="sim-crew-cards"></div>
-      </div>
-      <div class="sim-group">
-        <h4>Object tags</h4>
-        <div class="sim-buttons" id="sim-object-tags"></div>
-      </div>
-      <div class="sim-group">
-        <h4>CYD events (uses the astronaut below)</h4>
-        <select id="sim-event-astro"></select>
-        <div class="sim-buttons">
-          <button data-sim-event="mood">Mood 4</button>
-          <button data-sim-event="symptoms">Symptoms: headache</button>
-          <button data-sim-event="reaction_normal">Reaction: normal</button>
-          <button data-sim-event="reaction_slow">Reaction: slow</button>
-          <button data-sim-event="breathing_done">Breathing done</button>
-          <button data-sim-event="emergency">SOS (CYD button)</button>
-        </div>
-      </div>
-      <div class="sim-group">
-        <h4>Message log</h4>
-        <div id="sim-log"></div>
-      </div>
-    </div>
-  </div>
-
   <div id="emergency-overlay">
     <h1>&#9888; EMERGENCY</h1>
     <p id="emergency-text">Help is on the way.</p>
@@ -89,10 +71,48 @@
   </div>
 </div>
 
+<!-- Outside #app (not behind the login gate): this is how you sign in and
+     use the CYD events without real hardware, including from the login
+     screen itself -- tapping a card here goes through the exact same
+     "scan" broadcast a real NFC tap does (static/js/auth.js listens for it). -->
+<div id="simulator-panel" class="collapsed">
+  <div class="sim-header" id="sim-toggle">
+    <strong>Simulator</strong>
+    <span id="sim-collapse-arrow">&#9650;</span>
+  </div>
+  <div class="sim-body">
+    <div class="sim-group">
+      <h4>Crew &amp; surgeon cards</h4>
+      <div class="sim-buttons" id="sim-crew-cards"></div>
+    </div>
+    <div class="sim-group">
+      <h4>Object tags</h4>
+      <div class="sim-buttons" id="sim-object-tags"></div>
+    </div>
+    <div class="sim-group">
+      <h4>CYD events (uses the astronaut below)</h4>
+      <select id="sim-event-astro"></select>
+      <div class="sim-buttons">
+        <button data-sim-event="mood">Mood 4</button>
+        <button data-sim-event="symptoms">Symptoms: headache</button>
+        <button data-sim-event="reaction_normal">Reaction: normal</button>
+        <button data-sim-event="reaction_slow">Reaction: slow</button>
+        <button data-sim-event="breathing_done">Breathing done</button>
+        <button data-sim-event="emergency">SOS (CYD button)</button>
+      </div>
+    </div>
+    <div class="sim-group">
+      <h4>Message log</h4>
+      <div id="sim-log"></div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/strings.js') }}"></script>
 <script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 <script src="{{ url_for('static', filename='js/live.js') }}"></script>
 <script src="{{ url_for('static', filename='js/body.js') }}"></script>

@@ -11,7 +11,10 @@ const CrewTab = (() => {
     });
   }
 
-  async function onShow() { render(await api("/crew")); }
+  async function onShow() {
+    if (!isSurgeon()) return;  // this tab is hidden from everyone else; Bus events still fire regardless of active tab
+    render(await api("/crew"));
+  }
 
   function render(crew) {
     document.getElementById("crew-grid").innerHTML = crew.map((a) => `

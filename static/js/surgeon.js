@@ -1,57 +1,45 @@
-// Flight Surgeon tab: unlocked by the surgeon card or PIN 1234. Alert
-// inbox, crew reports and a delayed reply box (docs/build-prompt.md
-// section 9.5). Built to also work well on a phone.
+// Flight Surgeon tab: alert inbox, crew reports and a delayed reply box
+// (docs/build-prompt.md section 9.5). Built to also work well on a phone.
+// No separate unlock step anymore -- signing in as the Flight Surgeon
+// (backend/auth.py) is the unlock; this tab is simply hidden from anyone
+// else's nav (templates/index.html's [data-surgeon-only]), and every
+// fetch here is guarded by isSurgeon() too in case a Bus event fires
+// while some other tab is showing.
 const SurgeonTab = (() => {
-  let unlocked = false;
   let countdownTimer = null;
 
   function init() {
     document.getElementById("tab-surgeon").innerHTML = `
-      <div id="surgeon-lock" class="card">
-        <h2>Flight Surgeon</h2>
-        <p class="dim">Tap the surgeon card on the CYD, or enter the demo PIN.</p>
-        <input type="password" id="surgeon-pin" placeholder="PIN" style="max-width:160px">
-        <button class="btn" id="surgeon-unlock-btn">Unlock</button>
-      </div>
-      <div id="surgeon-view" style="display:none">
-        <h2>Flight Surgeon</h2>
-        <h3>Alerts</h3>
-        <div class="card" id="surgeon-alerts"></div>
-        <h3>Crew reports</h3>
-        <div class="card" id="surgeon-messages"></div>
-        <h3>Reply to crew</h3>
-        <div class="card">
-          <label>Astronaut</label>
-          <select id="surgeon-reply-astro"></select>
-          <label>Message</label>
-          <textarea id="surgeon-reply-body" rows="3" placeholder="Your reply..."></textarea>
-          <button class="btn" id="surgeon-reply-btn">Send (arrives after the comms delay)</button>
-          <div id="surgeon-reply-status" class="dim"></div>
-        </div>
+      <h2>Flight Surgeon</h2>
+      <h3>Alerts</h3>
+      <div class="card" id="surgeon-alerts"></div>
+      <h3>Crew reports</h3>
+      <div class="card" id="surgeon-messages"></div>
+      <h3>Reply to crew</h3>
+      <div class="card">
+        <label>Astronaut</label>
+        <select id="surgeon-reply-astro"></select>
+        <label>Message</label>
+        <textarea id="surgeon-reply-body" rows="3" placeholder="Your reply..."></textarea>
+        <button class="btn" id="surgeon-reply-btn">Send (arrives after the comms delay)</button>
+        <div id="surgeon-reply-status" class="dim"></div>
       </div>`;
-    document.getElementById("surgeon-unlock-btn").addEventListener("click", tryPin);
-    document.getElementById("surgeon-pin").addEventListener("keydown", (e) => { if (e.key === "Enter") tryPin(); });
     document.getElementById("surgeon-reply-btn").addEventListener("click", sendReply);
-  }
-
-  function tryPin() {
-    if (document.getElementById("surgeon-pin").value === "1234") unlock();
-    else document.getElementById("surgeon-pin").value = "";
-  }
-
-  async function unlock() {
-    unlocked = true;
-    document.getElementById("surgeon-lock").style.display = "none";
-    document.getElementById("surgeon-view").style.display = "block";
-    const crew = await api("/crew");
-    document.getElementById("surgeon-reply-astro").innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
-    refresh();
     if (!countdownTimer) countdownTimer = setInterval(refresh, 1000);
   }
 
-  function onShow() { if (unlocked) refresh(); }
+  async function onShow() {
+    if (!isSurgeon()) return;
+    const select = document.getElementById("surgeon-reply-astro");
+    if (!select.options.length) {
+      const crew = await api("/crew");
+      select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
+    }
+    refresh();
+  }
 
   async function refresh() {
+    if (!isSurgeon()) return;
     const [alerts, messages] = await Promise.all([api("/alerts"), api("/messages")]);
     document.getElementById("surgeon-alerts").innerHTML = alerts.length ? alerts.map((a) => `
       <div style="padding:6px 0; border-bottom:1px solid var(--border)">
@@ -89,9 +77,8 @@ const SurgeonTab = (() => {
     refresh();
   }
 
-  Bus.on("surgeon_unlocked", unlock);
-  Bus.on("alert", () => { if (unlocked) refresh(); });
-  Bus.on("message_delivered", () => { if (unlocked) refresh(); });
+  Bus.on("alert", refresh);
+  Bus.on("message_delivered", refresh);
 
   return { init, onShow };
 })();

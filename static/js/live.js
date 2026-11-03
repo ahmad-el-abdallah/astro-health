@@ -28,7 +28,9 @@ const LiveTab = (() => {
           </div>
         </div>
         <div class="card-grid" id="live-indicator-grid"></div>
-        <h3>Enter today's vitals</h3>
+        <h3>Today's vitals
+          <button class="btn secondary" id="simulate-btn" style="margin-left:10px; font-size:0.8em; padding:4px 10px;">Take a new reading</button>
+        </h3>
         <div class="card-grid">
           <div class="vital-field"><label>Heart rate (bpm)</label>
             <span class="guide-link" data-guide="heart_rate">${STRINGS.howToMeasure}</span>
@@ -49,13 +51,64 @@ const LiveTab = (() => {
         <div id="guide-box" class="dim" style="display:none; margin-bottom:10px;"></div>
         <button class="btn" id="assess-btn">${STRINGS.assessButton}</button>
         <div id="assess-result" style="margin-top:10px;"></div>
+
+        <h3>Report a symptom</h3>
+        <p class="dim">Tap a symptom to see what to do about it, and to include it in your report.</p>
+        <div class="card-grid" id="symptom-chips"></div>
+        <div id="symptom-guidance" style="display:none; margin-top:10px;"></div>
+        <button class="btn" id="symptom-confirm-btn" style="margin-top:10px;">Log symptoms</button>
+        <div id="symptom-result" style="margin-top:8px;"></div>
       </div>`;
 
     document.getElementById("assess-btn").addEventListener("click", submitAssess);
+    document.getElementById("simulate-btn").addEventListener("click", () => simulateVitals(currentId));
     document.getElementById("tab-live").addEventListener("click", (e) => {
       const g = e.target.closest(".guide-link");
       if (g) showGuide(g.dataset.guide);
+      const chip = e.target.closest(".symptom-chip");
+      if (chip) { chip.classList.toggle("active"); renderSymptomGuidance(); }
     });
+    document.getElementById("symptom-confirm-btn").addEventListener("click", confirmSymptoms);
+
+    renderSymptomChips();
+  }
+
+  let symptomCatalogCache = null;
+
+  async function renderSymptomChips() {
+    if (!symptomCatalogCache) symptomCatalogCache = await api("/symptoms/catalog");
+    document.getElementById("symptom-chips").innerHTML = symptomCatalogCache
+      .map((s) => `<button type="button" class="symptom-chip" data-id="${s.id}">${s.label}</button>`).join("");
+  }
+
+  function getSelectedSymptoms() {
+    return [...document.querySelectorAll(".symptom-chip.active")].map((el) => el.dataset.id);
+  }
+
+  function renderSymptomGuidance() {
+    const box = document.getElementById("symptom-guidance");
+    const selected = getSelectedSymptoms();
+    if (!selected.length || !symptomCatalogCache) { box.style.display = "none"; return; }
+    box.style.display = "block";
+    box.innerHTML = selected.map((id) => {
+      const s = symptomCatalogCache.find((s) => s.id === id);
+      return s ? `<div class="card" style="margin-bottom:8px;"><strong>${s.label}</strong><p class="dim" style="margin:4px 0 0">${s.guidance}</p></div>` : "";
+    }).join("");
+  }
+
+  async function confirmSymptoms() {
+    if (!currentId) return;
+    const items = getSelectedSymptoms();
+    const resultBox = document.getElementById("symptom-result");
+    if (!items.length) {
+      resultBox.innerHTML = `<span class="dim">Pick at least one symptom first.</span>`;
+      return;
+    }
+    const result = await api(`/astronauts/${currentId}/symptoms`, { method: "POST", body: JSON.stringify({ items }) });
+    resultBox.innerHTML = `${levelBadge(result.level, "Logged")}`;
+    document.querySelectorAll(".symptom-chip.active").forEach((el) => el.classList.remove("active"));
+    renderSymptomGuidance();
+    loadSummary(currentId);
   }
 
   function onShow() { if (currentId) loadSummary(currentId); }
@@ -91,13 +144,32 @@ const LiveTab = (() => {
 
     const grid = document.getElementById("live-indicator-grid");
     const entries = Object.entries(summary.today);
-    grid.innerHTML = entries.length
-      ? entries.map(([ind, v]) => `<div class="card" style="margin-bottom:0">
+    let cards = entries.map(([ind, v]) => `<div class="card" style="margin-bottom:0">
             <div class="dim">${ind.replace("_", " ")}</div>
             <div class="big-number">${formatIndicatorValue(ind, v.value)}</div>
             ${levelBadge(v.level)}
-          </div>`).join("")
-      : `<p class="dim">No readings yet today &mdash; sleep, mood, symptoms and reaction time fill in from the CYD.</p>`;
+          </div>`).join("");
+    if (summary.symptoms_today) {
+      if (!symptomCatalogCache) symptomCatalogCache = await api("/symptoms/catalog");
+      const labels = summary.symptoms_today.items
+        .map((id) => (symptomCatalogCache.find((s) => s.id === id) || { label: id }).label);
+      cards += `<div class="card" style="margin-bottom:0">
+            <div class="dim">symptoms</div>
+            <div class="big-number" style="font-size:1.1em">${labels.join(", ")}</div>
+            ${levelBadge(summary.symptoms_today.level)}
+          </div>`;
+    }
+    grid.innerHTML = cards || `<p class="dim">No readings yet today &mdash; sleep, mood, symptoms and reaction time fill in from the CYD.</p>`;
+  }
+
+  async function simulateVitals(id) {
+    if (!id) return;
+    const v = await api(`/astronauts/${id}/simulate_vitals`);
+    document.getElementById("in-hr").value = v.heart_rate;
+    document.getElementById("in-sys").value = v.blood_pressure.systolic;
+    document.getElementById("in-dia").value = v.blood_pressure.diastolic;
+    document.getElementById("in-sugar").value = v.blood_sugar;
+    document.getElementById("in-temp").value = v.temperature;
   }
 
   async function submitAssess() {
@@ -118,7 +190,7 @@ const LiveTab = (() => {
     loadSummary(currentId);
   }
 
-  Bus.on("session_started", (d) => loadSummary(d.astronaut_id));
+  Bus.on("session_started", (d) => { loadSummary(d.astronaut_id); simulateVitals(d.astronaut_id); });
   Bus.on("session_ended", (d) => { if (d.astronaut_id === currentId) showEmpty(); });
   Bus.on("scan", (d) => { if (d.type === "astronaut") { /* session_started follows right after */ } });
   Bus.on("cyd_event", () => { if (currentId) loadSummary(currentId); });

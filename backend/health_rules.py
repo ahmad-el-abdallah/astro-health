@@ -5,10 +5,13 @@ mission rules -- see docs/build-prompt.md section 8).
 Nothing in here is hard-coded: every number comes from the config file, so
 the thresholds can be replaced later without touching this module.
 """
+import random
+
 from backend.config import health_rules as load_rules
 
 GREEN, YELLOW, RED = "GREEN", "YELLOW", "RED"
 _LEVEL_RANK = {GREEN: 0, YELLOW: 1, RED: 2}
+_LEVEL_WEIGHTS = [(GREEN, 0.80), (YELLOW, 0.15), (RED, 0.05)]
 
 
 def worse(a, b):
@@ -134,3 +137,57 @@ def body_part_for(indicator, rules=None):
 def hazards_for(indicator, rules=None):
     rules = rules or load_rules()
     return rules["indicators"].get(indicator, {}).get("hazards", [])
+
+
+def _pick_level():
+    """GREEN most of the time, with occasional YELLOW/RED for demo variety."""
+    r = random.random()
+    cum = 0
+    for level, weight in _LEVEL_WEIGHTS:
+        cum += weight
+        if r <= cum:
+            return level
+    return GREEN
+
+
+def _sample_simple(cfg, level):
+    """Picks a plausible value for a {"green":[lo,hi], "yellow":[[lo,hi],...]}
+    indicator at the given level, straight from the config bands."""
+    if level == GREEN:
+        return random.uniform(*cfg["green"])
+    if level == YELLOW:
+        return random.uniform(*random.choice(cfg["yellow"]))
+    bounds = cfg["yellow"] + [cfg["green"]]
+    outer_lo = min(b[0] for b in bounds)
+    outer_hi = max(b[1] for b in bounds)
+    span = max(outer_hi - outer_lo, 1) * 0.25
+    if random.random() < 0.5:
+        return outer_lo - random.uniform(1, span)
+    return outer_hi + random.uniform(1, span)
+
+
+def sample_vitals(rules=None):
+    """A plausible stand-in reading for heart rate / blood pressure / blood
+    sugar / temperature -- used so the Live tab doesn't need a human to type
+    believable numbers by hand. Still placeholder data, same as everything
+    else (see docs/CLAUDE.md)."""
+    rules = rules or load_rules()
+    ind = rules["indicators"]
+    bp_cfg = ind["blood_pressure"]
+    bp_level = _pick_level()
+    if bp_level == GREEN:
+        systolic = random.uniform(*bp_cfg["systolic_green"])
+        diastolic = random.uniform(*bp_cfg["diastolic_green"])
+    elif bp_level == YELLOW:
+        systolic = random.uniform(*random.choice(bp_cfg["systolic_yellow"]))
+        diastolic = random.uniform(*bp_cfg["diastolic_yellow"])
+    else:
+        systolic = bp_cfg["systolic_red_high"] + random.uniform(1, 15)
+        diastolic = bp_cfg["diastolic_red_high"] + random.uniform(1, 10)
+
+    return {
+        "heart_rate": round(_sample_simple(ind["heart_rate"], _pick_level())),
+        "blood_pressure": {"systolic": round(systolic), "diastolic": round(diastolic)},
+        "blood_sugar": round(_sample_simple(ind["blood_sugar"], _pick_level())),
+        "temperature": round(_sample_simple(ind["temperature"], _pick_level()), 1),
+    }

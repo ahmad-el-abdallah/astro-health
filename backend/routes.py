@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request, Response
 
-from backend import db, sessions, health_rules, comms, seed, protocol
+from backend import db, sessions, health_rules, comms, seed, protocol, symptoms, auth
 from backend.config import (
     content as load_content, missions as load_missions,
     gamification as load_gamification, routine as load_routine,
@@ -43,16 +43,49 @@ def create_routes(app, socketio, bridge):
     def emit_fn(event, data):
         socketio.emit(event, data)
 
+    # ---- auth: NFC-card login is the only working method today; the
+    # username/password and Face ID options shown on the login screen are
+    # placeholders for later (README/docs/CLAUDE.md) ----
+    @bp.post("/auth/nfc_login")
+    def nfc_login():
+        uid = (request.get_json(force=True) or {}).get("uid")
+        with db.write_conn() as conn:
+            tag = conn.execute("SELECT * FROM tags WHERE uid = ?", (uid,)).fetchone()
+            if not tag or tag["astronaut_id"] is None:
+                return jsonify({"error": "that card isn't assigned to a crew member yet"}), 404
+            astro = conn.execute("SELECT * FROM astronauts WHERE id = ?", (tag["astronaut_id"],)).fetchone()
+        auth.login(astro["id"])
+        return jsonify({"astronaut_id": astro["id"], "name": astro["name"], "role": astro["role"]})
+
+    @bp.post("/auth/logout")
+    def auth_logout():
+        auth.logout()
+        return jsonify({"ok": True})
+
+    @bp.get("/auth/me")
+    def auth_me():
+        with db.write_conn() as conn:
+            astro = auth.current_astronaut(conn)
+        if not astro:
+            return jsonify({"astronaut_id": None})
+        return jsonify({"astronaut_id": astro["id"], "name": astro["name"], "role": astro["role"]})
+
     # ---- astronauts ----
     @bp.get("/astronauts")
     def list_astronauts():
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             data = rows(conn.execute("SELECT * FROM astronauts ORDER BY id").fetchall())
         return jsonify(data)
 
     @bp.get("/astronauts/<int:astro_id>")
     def get_astronaut(astro_id):
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             r = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
         if not r:
             return jsonify({"error": "not found"}), 404
@@ -62,6 +95,9 @@ def create_routes(app, socketio, bridge):
     def update_astronaut(astro_id):
         body = request.get_json(force=True) or {}
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             if "name" in body:
                 conn.execute("UPDATE astronauts SET name = ? WHERE id = ?", (body["name"], astro_id))
             r = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
@@ -70,6 +106,9 @@ def create_routes(app, socketio, bridge):
     @bp.get("/astronauts/<int:astro_id>/summary")
     def astronaut_summary(astro_id):
         with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
             astro = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
             if not astro:
                 return jsonify({"error": "not found"}), 404
@@ -89,6 +128,15 @@ def create_routes(app, socketio, bridge):
             points_total = conn.execute(
                 "SELECT COALESCE(SUM(amount),0) AS t FROM points WHERE astronaut_id = ?", (astro_id,)
             ).fetchone()["t"]
+            symptom_row = conn.execute(
+                "SELECT items_json, level, ts FROM symptoms WHERE astronaut_id = ? AND ts >= ? "
+                "ORDER BY ts DESC LIMIT 1",
+                (astro_id, (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()),
+            ).fetchone()
+            symptoms_today = (
+                {"items": json.loads(symptom_row["items_json"]), "level": symptom_row["level"], "ts": symptom_row["ts"]}
+                if symptom_row else None
+            )
             body_levels = {}
         body_cfg = load_content()["body_parts"]
         for part in body_cfg:
@@ -103,6 +151,7 @@ def create_routes(app, socketio, bridge):
             "points": points_total,
             "body_levels": body_levels,
             "session_active": astro_id in sessions.active_sessions,
+            "symptoms_today": symptoms_today,
         })
 
     @bp.get("/astronauts/<int:astro_id>/history")
@@ -111,12 +160,19 @@ def create_routes(app, socketio, bridge):
         days = int(request.args.get("days", 30))
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
             data = conn.execute(
                 "SELECT ts, value_json, level FROM readings WHERE astronaut_id = ? AND indicator = ? "
                 "AND ts >= ? ORDER BY ts ASC",
                 (astro_id, indicator, since),
             ).fetchall()
         return jsonify([{"ts": r["ts"], "value": json.loads(r["value_json"]), "level": r["level"]} for r in data])
+
+    @bp.get("/astronauts/<int:astro_id>/simulate_vitals")
+    def simulate_vitals(astro_id):
+        return jsonify(health_rules.sample_vitals())
 
     @bp.post("/astronauts/<int:astro_id>/assess")
     def assess(astro_id):
@@ -125,6 +181,9 @@ def create_routes(app, socketio, bridge):
         levels = []
         details = {}
         with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
             astro = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
             if not astro:
                 return jsonify({"error": "not found"}), 404
@@ -153,6 +212,10 @@ def create_routes(app, socketio, bridge):
                 record("temperature", v, health_rules.evaluate("temperature", v))
 
             # Fold in whatever the CYD already reported today (sleep, mood, reaction, symptoms).
+            # indicator_levels tracks every indicator considered for this assessment (name,
+            # level), not just the 4 manual vitals -- so the note below can name ALL of them
+            # that are flagged, not just whichever one happened to be recorded first.
+            indicator_levels = [(indicator, d["level"]) for indicator, d in details.items()]
             since = (now - timedelta(hours=18)).isoformat()
             for r in conn.execute(
                 "SELECT indicator, level FROM readings WHERE astronaut_id = ? AND ts >= ? "
@@ -160,17 +223,18 @@ def create_routes(app, socketio, bridge):
                 (astro_id, since),
             ):
                 levels.append(r["level"])
+                indicator_levels.append((r["indicator"], r["level"]))
             sym = conn.execute(
                 "SELECT level FROM symptoms WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 1",
                 (astro_id, since),
             ).fetchone()
             if sym:
                 levels.append(sym["level"])
+                indicator_levels.append(("symptoms", sym["level"]))
 
             overall = health_rules.overall_level(levels) if levels else "GREEN"
-            note_cfg = load_content()
-            worst_indicator = next((i for i, d in details.items() if d["level"] == overall), None)
-            note = f"{overall}: {worst_indicator or 'overall check'}"[:60]
+            flagged = [name.replace("_", " ") for name, lvl in indicator_levels if lvl == overall]
+            note = f"{overall}: {', '.join(flagged) or 'overall check'}"[:120]
             conn.execute(
                 "INSERT INTO assessments (astronaut_id, ts, overall_level, note, details_json) VALUES (?, ?, ?, ?, ?)",
                 (astro_id, now.isoformat(), overall, note, json.dumps(details)),
@@ -193,10 +257,34 @@ def create_routes(app, socketio, bridge):
         recompute_badges(astro_id, emit_fn)
         return jsonify({"overall_level": overall, "note": note, "details": details})
 
+    # ---- symptoms (manual reporting from the web app) ----
+    @bp.get("/symptoms/catalog")
+    def symptoms_catalog():
+        return jsonify(symptoms.catalog())
+
+    @bp.post("/astronauts/<int:astro_id>/symptoms")
+    def log_symptoms(astro_id):
+        body = request.get_json(force=True) or {}
+        items = body.get("items", [])
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            astro = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
+            if not astro:
+                return jsonify({"error": "not found"}), 404
+            lvl = symptoms.record(conn, astro_id, items)
+        symptoms.alert_if_red(astro_id, items, lvl, emit_fn)
+        emit_fn("cyd_event", {"type": "symptoms", "astronaut_id": astro_id, "items": items, "level": lvl})
+        return jsonify({"level": lvl})
+
     # ---- crew ----
     @bp.get("/crew")
     def crew():
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             crew_rows = conn.execute("SELECT * FROM astronauts WHERE role != 'Flight surgeon' ORDER BY id").fetchall()
             out = []
             for a in crew_rows:
@@ -210,7 +298,10 @@ def create_routes(app, socketio, bridge):
                 })
         return jsonify(out)
 
-    # ---- tags (admin) ----
+    # ---- tags (read is open: the Simulator panel needs the tag list to
+    # fake a card tap for *anyone*, including the not-yet-logged-in login
+    # screen -- that's how the Simulator logs you in with no hardware.
+    # Writes (assigning/removing a tag) stay Flight-Surgeon-only.) ----
     @bp.get("/tags")
     def list_tags():
         with db.write_conn() as conn:
@@ -221,6 +312,9 @@ def create_routes(app, socketio, bridge):
     def upsert_tag():
         body = request.get_json(force=True) or {}
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             conn.execute(
                 "INSERT OR REPLACE INTO tags (uid, type, label, astronaut_id, data_json) VALUES (?, ?, ?, ?, ?)",
                 (body["uid"], body["type"], body.get("label", body["uid"]), body.get("astronaut_id"),
@@ -231,19 +325,28 @@ def create_routes(app, socketio, bridge):
     @bp.delete("/tags/<uid>")
     def delete_tag(uid):
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             conn.execute("DELETE FROM tags WHERE uid = ?", (uid,))
         return jsonify({"ok": True})
 
-    # ---- alerts ----
+    # ---- alerts (flight surgeon) ----
     @bp.get("/alerts")
     def list_alerts():
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             data = rows(conn.execute("SELECT * FROM alerts ORDER BY ts DESC LIMIT 100").fetchall())
         return jsonify(data)
 
     @bp.post("/alerts/<int:alert_id>/ack")
     def ack_alert(alert_id):
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             conn.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
         return jsonify({"ok": True})
 
@@ -251,6 +354,9 @@ def create_routes(app, socketio, bridge):
     @bp.get("/messages")
     def list_messages():
         with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
             data = rows(conn.execute("SELECT * FROM messages ORDER BY sent_at DESC LIMIT 100").fetchall())
         now = datetime.now(timezone.utc).isoformat()
         for m in data:
@@ -260,6 +366,10 @@ def create_routes(app, socketio, bridge):
     @bp.post("/messages")
     def send_message():
         body = request.get_json(force=True) or {}
+        with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
         deliver_at = comms.queue_reply(body.get("astronaut_id"), body["body"])
         return jsonify({"ok": True, "deliver_at": deliver_at.isoformat()})
 
@@ -296,6 +406,9 @@ def create_routes(app, socketio, bridge):
     @bp.get("/rewards/<int:astro_id>")
     def rewards(astro_id):
         with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
             pts = conn.execute("SELECT COALESCE(SUM(amount),0) AS t FROM points WHERE astronaut_id = ?", (astro_id,)).fetchone()["t"]
             badges = rows(conn.execute("SELECT * FROM badges WHERE astronaut_id = ?", (astro_id,)).fetchall())
         gam = load_gamification()
@@ -309,6 +422,9 @@ def create_routes(app, socketio, bridge):
     @bp.get("/export/<int:astro_id>.csv")
     def export_csv(astro_id):
         with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
             data = conn.execute(
                 "SELECT ts, indicator, value_json, level, source FROM readings WHERE astronaut_id = ? ORDER BY ts",
                 (astro_id,),
@@ -347,6 +463,10 @@ def create_routes(app, socketio, bridge):
 
     @bp.post("/reset-demo")
     def reset_demo():
+        with db.write_conn() as conn:
+            _, err = auth.authorize_surgeon(conn)
+            if err:
+                return jsonify(err[0]), err[1]
         seed.seed_all()
         sessions.active_sessions.clear()
         sessions.open_toggles.clear()
@@ -416,17 +536,9 @@ def create_routes(app, socketio, bridge):
         if astro_id is None:
             return
         items = msg.get("items", [])
-        lvl = health_rules.symptom_level(items)
         with db.write_conn() as conn:
-            conn.execute("INSERT INTO symptoms (astronaut_id, ts, items_json, level) VALUES (?, ?, ?, ?)",
-                         (astro_id, datetime.now(timezone.utc).isoformat(), json.dumps(items), lvl))
-            points_cfg = load_gamification()["points"]
-            if points_cfg.get("symptom_report"):
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'symptom_report')",
-                             (astro_id, datetime.now(timezone.utc).isoformat(), points_cfg["symptom_report"]))
-        if lvl == "RED":
-            comms.queue_report(astro_id, f"RED symptoms reported: {', '.join(items)}")
-            emit_fn("alert", {"astronaut_id": astro_id, "level": "RED", "text": "Red-flag symptom reported"})
+            lvl = symptoms.record(conn, astro_id, items)
+        symptoms.alert_if_red(astro_id, items, lvl, emit_fn)
 
     def _record_reaction(msg):
         astro_id = _uid_to_astro(msg.get("uid"))

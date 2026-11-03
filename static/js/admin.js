@@ -55,6 +55,7 @@ const AdminTab = (() => {
   }
 
   async function onShow() {
+    if (!isSurgeon()) return;  // this tab is hidden from everyone else; Bus events still fire regardless of active tab
     await refreshTable();
     await refreshCrewNames();
     await refreshExportLinks();
@@ -114,6 +115,7 @@ const AdminTab = (() => {
   }
 
   async function showUnknownPopup(uid) {
+    if (!isSurgeon()) return;  // only the Flight Surgeon manages tag assignment
     document.getElementById("admin-unknown").style.display = "block";
     document.getElementById("unknown-uid").textContent = uid;
     document.getElementById("unknown-label").value = "";

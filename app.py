@@ -67,6 +67,11 @@ def choose_bridge(args, on_message, on_status, on_send):
 
 def create_app(args):
     app = Flask(__name__)
+    # Regenerated fresh every run -- every login session cookie it signs
+    # becomes invalid on the next restart, so (like backend/sessions.py's
+    # in-memory active_sessions) everyone's logged out when the demo app
+    # restarts. No secret to persist or leak.
+    app.secret_key = os.urandom(24)
     socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
     db.init_db()

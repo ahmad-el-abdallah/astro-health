@@ -1,0 +1,13 @@
+{
+  "_comment": "PLACEHOLDER symptom catalog -- IDs/labels copied from firmware/astro_cyd/screens.ino's SYMPTOM_KEYS/SYMPTOMS arrays (keep in sync if either changes). 'guidance' is general-reference self-care text, not real NASA flight-surgeon guidance. Severity (which symptoms are RED) is defined once, in health_rules.json's symptom_levels.red_symptoms -- not duplicated here.",
+  "symptoms": [
+    {"id": "headache", "label": "Headache", "guidance": "Rest in a dim, quiet area. Drink water -- dehydration is a common cause. Ask the flight surgeon about an approved pain reliever if it doesn't ease up."},
+    {"id": "nausea", "label": "Nausea", "guidance": "Sit still and avoid sudden head movement. Sip water slowly. Avoid food until it passes. Tell the flight surgeon if it continues more than a couple of hours."},
+    {"id": "back_pain", "label": "Back pain", "guidance": "Stop any exercise session and avoid heavy lifting. Try gentle stretching if it doesn't worsen the pain. Report it if it's sudden, severe, or spreading."},
+    {"id": "blurry_vision", "label": "Blurry vision", "guidance": "Stop any task that needs clear vision (reading, fine controls). This is treated as a red-flag symptom -- notify the flight surgeon immediately."},
+    {"id": "congestion", "label": "Congestion", "guidance": "Common in microgravity due to fluid shifts. Stay hydrated and rest. Mention it at your next check-in if it doesn't improve in a day or two."},
+    {"id": "fatigue", "label": "Fatigue", "guidance": "Check your sleep and exercise logs for the last couple of days. Prioritize rest before your next scheduled task. Report it if it's unusual for you or doesn't improve with rest."},
+    {"id": "chest_pain", "label": "Chest pain", "guidance": "Stop all activity immediately and sit or lie down. This is treated as a red-flag symptom -- notify the flight surgeon immediately, even if it's mild."},
+    {"id": "shortness_of_breath", "label": "Short of breath", "guidance": "Stop all activity and try to stay calm and upright. This is treated as a red-flag symptom -- notify the flight surgeon immediately."}
+  ]
+}

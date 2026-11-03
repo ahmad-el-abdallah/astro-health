@@ -17,6 +17,7 @@ from backend import protocol
 
 RECONNECT_S = 3
 PING_INTERVAL_S = 5
+MAX_CONSECUTIVE_READ_ERRORS = 40  # ~2s of a flaky adapter before giving up and reopening the port
 
 PORT_DESCRIPTION_HINTS = ("ch340", "cp210", "usb serial", "usb-serial")
 
@@ -108,9 +109,25 @@ class SerialBridge:
                 time.sleep(RECONNECT_S)
                 continue
             self._set_status("connected", self.requested_port or self._ser.port)
+            consecutive_errors = 0
             try:
                 while not self._stop.is_set():
-                    raw = self._ser.readline()
+                    try:
+                        raw = self._ser.readline()
+                    except serial.SerialException:
+                        # Some CH340-style USB-serial adapters spuriously raise
+                        # "device reports readiness to read but returned no
+                        # data" on Linux even though the device is still
+                        # there (confirmed: no USB disconnect in dmesg when
+                        # this happens, and the next line often reads clean).
+                        # Ride out a short burst of these instead of tearing
+                        # down and reopening the port on every one of them.
+                        consecutive_errors += 1
+                        if consecutive_errors > MAX_CONSECUTIVE_READ_ERRORS:
+                            raise
+                        time.sleep(0.05)
+                        continue
+                    consecutive_errors = 0
                     if not raw:
                         continue
                     line = raw.decode("utf-8", errors="ignore")

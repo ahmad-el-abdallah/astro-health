@@ -157,6 +157,36 @@ button.btn.secondary { background: var(--panel-raised); color: var(--text); bord
 button.btn.danger { background: var(--red); color: #210604; }
 button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.symptom-chip {
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  margin: 0 6px 6px 0;
+}
+.symptom-chip.active { background: var(--accent); color: #06201c; border-color: var(--accent); }
+
+.pulse-dot::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 6px;
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot::before { animation: none; }
+}
+
 /* ---- level colors: never color alone, always icon + word too ---- */
 .level-badge {
   display: inline-flex;

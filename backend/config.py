@@ -30,6 +30,7 @@ def load_all():
         "missions": _load("missions"),
         "routine": _load("routine"),
         "gamification": _load("gamification"),
+        "symptoms": _load("symptoms"),
     }
 
 
@@ -51,3 +52,7 @@ def routine():
 
 def gamification():
     return _load("gamification")
+
+
+def symptoms():
+    return _load("symptoms")

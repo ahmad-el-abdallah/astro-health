@@ -54,9 +54,8 @@ const TrendsTab = (() => {
   }
 
   async function onShow() {
-    const crew = await api("/crew");
     const select = document.getElementById("trends-astro");
-    if (!select.options.length) select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
+    const crew = await populateAstroSelect(select);
     select.value = window.selectedAstronautId || select.value || crew[0].id;
     rulesCache = rulesCache || await api("/health-rules");
     render();

@@ -19,11 +19,8 @@ const RewardsTab = (() => {
   }
 
   async function onShow() {
-    const crew = await api("/crew");
     const select = document.getElementById("rewards-astro");
-    if (!select.options.length) {
-      select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
-    }
+    const crew = await populateAstroSelect(select);
     const id = window.selectedAstronautId || Number(select.value) || crew[0].id;
     select.value = id;
     loadRewards(id);

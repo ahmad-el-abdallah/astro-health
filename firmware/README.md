@@ -98,10 +98,17 @@ arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32:PartitionScheme=huge
 Upload.) The port is normally the same CH340 port Lifeline's `build.sh` uses
 (`/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` on Linux).
 
-**This firmware has only been compile-checked** (`arduino-cli compile`, 32% flash / 14% RAM --
-see the repo root README for the exact command), not flashed or run on the real board. Please
-verify on hardware: rotation, touch calibration, the SD CS pin if you use a card, and the
-overall screen layout.
+**This firmware has only been compile-checked** (`arduino-cli compile`, 32% flash / 14% RAM as
+of the 2026-10-29 build -- see the repo root README for the exact command), not flashed or run
+on the real board. Please verify on hardware: rotation, touch calibration, the SD CS pin if you
+use a card, and the overall screen layout.
+
+**`screens.ino` has changed since that last compile** (`onStatusMsg()`'s note can now wrap
+across multiple lines via a new `drawWrapped()` helper, so the CYD can show every flagged
+vital instead of just one -- see `docs/CLAUDE.md`'s "CYD status screen shows every flagged
+indicator"), and `arduino-cli` isn't installed in the dev environment this was written in, so
+that change has **not** been recompiled, only reviewed by hand. Run the compile-check yourself
+before flashing.
 
 ## Files
 

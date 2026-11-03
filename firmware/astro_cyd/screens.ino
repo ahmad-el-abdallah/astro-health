@@ -54,6 +54,32 @@ void drawBigButton(int x, int y, int w, int h, const String& label, uint16_t fil
   tft.drawString(label, x + w / 2, y + h / 2, 2);
 }
 
+// Greedy word-wrap: draws `s` as however many centered lines of at most
+// maxW px it takes (e.g. a status note naming several flagged indicators,
+// which used to get cut down to just one so it would fit on one line --
+// see onStatusMsg). Assumes the caller already set the text color.
+void drawWrapped(const String& s, int cx, int yTop, int maxW, int lineH, int font) {
+  tft.setTextDatum(MC_DATUM);
+  int y = yTop;
+  String line = "";
+  int start = 0;
+  while (start <= (int)s.length()) {
+    int sp = s.indexOf(' ', start);
+    String word = (sp == -1) ? s.substring(start) : s.substring(start, sp);
+    String trial = line.length() ? line + " " + word : word;
+    if (line.length() == 0 || tft.textWidth(trial, font) <= maxW) {
+      line = trial;
+    } else {
+      tft.drawString(line, cx, y, font);
+      y += lineH;
+      line = word;
+    }
+    if (sp == -1) break;
+    start = sp + 1;
+  }
+  if (line.length()) { tft.drawString(line, cx, y, font); y += lineH; }
+}
+
 // SOS corner button, drawn last on every screen so it's always on top.
 static const int SOS_X = 4, SOS_Y_OFFSET = 44, SOS_W = 46, SOS_H = 44;
 void drawSosButton() {
@@ -274,7 +300,7 @@ void onStatusMsg(const String& name, const String& level, const String& note) {
   tft.setTextColor(level == "YELLOW" ? C_BG : TFT_WHITE, bg);
   tft.drawString(big, CX, 70, 4);
   tft.drawString(name, CX, 120, 2);
-  tft.drawString(note, CX, 150, 2);
+  drawWrapped(note, CX, 150, SCRW - 24, 20, 2);
   screen = SCR_STATUS;
   toastUntilMs = millis() + 4000;
   screenBeforeToast = curUid.length() ? SCR_SESSION : SCR_IDLE;

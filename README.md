@@ -24,6 +24,21 @@ python3 -m venv .venv
 Open **http://localhost:5000** (or this machine's LAN address on the same port, for a phone
 checking the Flight Surgeon view).
 
+### Signing in
+
+Every astronaut can only see their own data -- enforced on the backend, not just hidden in the
+UI. The one exception is the Flight Surgeon, who sees everyone (crew roster, alerts, anyone's
+trends), since that's the point of the role.
+
+The only working sign-in method right now is tapping your NFC card on the CYD (username/password
+and Face ID are shown on the login screen as "Coming soon" placeholders for later). No CYD
+plugged in? The **Simulator** panel works from the login screen too -- tap your card button
+there instead, it goes through the exact same path a real tap does. Signing out (the header's
+"Log out" button) is separate from your CYD session ending/timing out -- one doesn't affect the
+other. On a shared laptop, tapping a *different* card while you're still signed in doesn't
+switch who's logged in (a stray tap from someone else's routine check-in shouldn't silently
+boot you out of your own dashboard) -- log out first, then tap the next card.
+
 If `pip` isn't available on your system Python (no `ensurepip`/`python3-pip`), bootstrap it
 inside the venv instead of installing anything system-wide:
 
@@ -73,31 +88,40 @@ exact same JSON protocol USB serial uses, so nothing else about the app changes.
 - The ESP-NOW link to the separate ESP32-S3 NFC reader is unaffected by any of this --
   it keeps working exactly as before, no changes needed on that board.
 
-**Tests**: `.venv/bin/python -m pytest` (37 tests: the rules engine, the serial protocol, tag-tap
-session logic, and the REST API).
+**Tests**: `.venv/bin/python -m pytest` (48 tests: the rules engine, the serial protocol, tag-tap
+session logic, symptom reporting, login/access control, and the REST API).
 
 **Firmware**: see `firmware/README.md` for libraries, pin map, touch calibration and upload
 steps. Compile-check it with `arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app firmware/astro_cyd`
-(32% flash / 14% RAM here) -- it has not been flashed to real hardware as part of this build.
+(32% flash / 14% RAM as of the initial build) -- it has not been flashed to real hardware, and
+`screens.ino` has changed since that compile with no `arduino-cli` available to recheck it (see
+`firmware/README.md`) -- run that compile-check yourself before flashing.
 
 ## Demo script
 
 Works identically with the real CYD or in `--simulate` mode.
 
 1. **Mission** tab: switch to **Mars transit** (20-minute delay, sped up by `TIME_SCALE`, default 60x).
-2. Tap Ahmad's card (Simulator panel, or his real card). The Live tab jumps to him.
+2. Tap Ahmad's card (Simulator panel, or his real card). This signs you in as him (see "Signing
+   in" above) and the Live tab jumps to his data.
 3. Simulator -> "Reaction: slow" for Ahmad. Reaction time turns YELLOW/RED.
-4. On the Live tab, type a heart rate and blood pressure, press **Assess**. The overall result
-   reflects today's readings; the CYD (or the Simulator log) shows the `status` + `led` messages.
-5. If the result is RED, a report queues to the Flight Surgeon tab with a visible countdown
-   (sped up by the mission's comms delay); reply from there, or from a phone on the same
-   network.
-6. Simulator -> tap "Treadmill", wait a bit, tap it again to stop. Points land on the Rewards
-   tab; badge progress (e.g. "Bone Guardian") moves.
-7. Simulator -> tap the **Emergency card**. Every open tab shows the red overlay. Cancel it
-   (button on the overlay, or hold the CYD's corner SOS button 3s if testing on hardware).
-8. **Crew** tab: Ahmad and Sameer at a glance, then **Trends** for whichever indicator has
-   history so far.
+4. On the Live tab, click **Take a new reading** to fill in plausible vitals (or type your own),
+   press **Assess**. The overall result reflects today's readings; the CYD (or the Simulator
+   log) shows the `status` + `led` messages -- if more than one reading comes back flagged, the
+   result names all of them, not just one.
+5. If the result is RED, a report queues for the Flight Surgeon with a visible countdown
+   (sped up by the mission's comms delay). **Log out** (header button), then tap the surgeon's
+   card (Simulator panel, or her real card) to sign in as her -- the **Crew** and **Flight
+   Surgeon** tabs only show up for her, since only she can see every crew member's data. Reply
+   to the report from there, or from a phone on the same network, logged in the same way.
+6. Still as the surgeon: **Crew** tab shows Ahmad and Sameer at a glance. Tap either card to
+   jump to their **Live**/**Body**/**Trends** view -- something only the surgeon's login can do;
+   a regular astronaut's own login is locked to just themselves there.
+7. **Log out**, tap Ahmad's card to sign back in as him. Simulator -> tap "Treadmill", wait a
+   bit, tap it again to stop. Points land on the Rewards tab; badge progress moves.
+8. Simulator -> tap the **Emergency card**. Every open tab shows the red overlay regardless of
+   who's logged in -- SOS doesn't check login. Cancel it (button on the overlay, or hold the
+   CYD's corner SOS button 3s if testing on hardware).
 
 ## Replacing fake data with real data
 
@@ -117,6 +141,12 @@ Works identically with the real CYD or in `--simulate` mode.
   program holding the port open, then restart `app.py` (it also retries every 3s on its own).
 - **CYD resets when the port opens**: normal for most ESP32 boards (DTR/RTS toggles reset
   it); the firmware re-sends `hello` on boot and the laptop re-detects it within a few seconds.
+- **USB connects but messages come through garbled, or the port looks like it's constantly
+  reconnecting**: the app now rides out short bursts of a known spurious CH340 error so it
+  won't tear the connection down over it, but if raw data is still corrupted, that's a cable/
+  port signal-integrity issue, not software -- try a different (shorter) USB cable and a direct
+  port, not a hub. The Wi-Fi AP path ("Running the CYD on a power bank" below) is unaffected and
+  a reliable fallback for a demo in the meantime.
 - **Windows and the CH340 chip**: install the CH340 driver if the port doesn't show up in
   Device Manager; the port will be `COMx`, pass it with `--port COMx`.
 - **No CYD at all**: `--simulate` (or just don't plug anything in -- the app falls back to
@@ -128,16 +158,23 @@ Works identically with the real CYD or in `--simulate` mode.
 
 Built and tested (`pytest`, manual API calls, and a headless DOM check of the whole page with
 every tab clicked through, zero runtime errors): the full backend (sessions, rules engine,
-gamification, comms delay, scheduler, serial bridge + simulation mode), the full 10-tab web
-app, and the firmware (compiles cleanly).
+gamification, comms delay, scheduler, serial bridge + simulation mode, login/access control),
+symptom reporting, auto-simulated vitals, and the full 10-tab web app.
 
-**Not verified on real hardware** (no CYD/S3 boards attached to this build session):
+**Firmware**: compiled cleanly as of the initial build (`arduino-cli compile`). It's since
+changed (`screens.ino`'s status-note word-wrap, see `docs/CLAUDE.md`), but `arduino-cli` isn't
+installed in this dev environment to recheck that -- reviewed by hand only. Compile-check it
+yourself before trusting it or flashing.
+
+**Not verified on real hardware** (no CYD/S3 boards attached during this build):
 
 - The CYD's screen rotation and touch calibration -- see `firmware/README.md`.
 - The microSD CS pin (`SD_CS_PIN` in `protocol.ino`) -- SD logging is optional either way.
 - A live card tap arriving over the real serial port within 1s (this was validated end-to-end
   through `--simulate`'s identical code path, and the serial protocol itself is unit-tested,
-  but not against the physical boards).
+  but not against the physical boards). Also: a cable/signal-integrity issue that showed up
+  over a real USB link (garbled bytes even after a reconnect-storm bug was fixed) -- see
+  Troubleshooting above.
 - The LED/speaker's physical behavior.
 
 Please check those on the actual boards.
