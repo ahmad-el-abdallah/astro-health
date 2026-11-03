@@ -1,8 +1,12 @@
 // Superuser admin page (/admin): its own login (backend/admin_auth.py,
 // session["superuser_id"] -- independent of the main app's astronaut
 // session), the unknown-tag backlog, and the tag registry. Not part of
-// the main SPA (no Socket.IO/Chart.js/main.js Tabs system) -- see
-// docs/CLAUDE.md's "Superuser admin page".
+// the main SPA's Tabs/Chart.js/main.js, but does load the same
+// static/js/socket.js Bus the main app uses -- without it, a card tapped
+// while this page is open would never show up until you refreshed it;
+// the backlog was only ever (re)fetched on page load or after you
+// assign/dismiss something. See docs/CLAUDE.md's "Superuser admin page".
+let adminLoggedIn = false;
 const TAG_KINDS = [
   { value: "astronaut", label: "Astronaut card" },
   { value: "surgeon", label: "Flight surgeon card" },
@@ -31,6 +35,7 @@ async function checkAlreadyLoggedIn() {
   const me = await api("/admin/me");
   if (me.username) {
     document.getElementById("admin-user-pill").textContent = me.username;
+    adminLoggedIn = true;
     showApp();
     refreshAll();
     return true;
@@ -46,6 +51,7 @@ async function login() {
     const me = await api("/admin/login", { method: "POST", body: JSON.stringify({ username, password }) });
     document.getElementById("admin-user-pill").textContent = me.username;
     errBox.textContent = "";
+    adminLoggedIn = true;
     showApp();
     refreshAll();
   } catch (e) {
@@ -191,6 +197,12 @@ async function refreshTagRegistry() {
     refreshTagRegistry();
   }));
 }
+
+// Live push for a card tapped while this page is open -- the same "scan"
+// pipeline that already broadcasts "unknown_tag" to the main app
+// (backend/sessions.py's handle_scan). Without this, the backlog only
+// ever updated on page load or right after an assign/dismiss here.
+Bus.on("unknown_tag", () => { if (adminLoggedIn) refreshUnknownTags(); });
 
 document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("admin-login-btn").addEventListener("click", login);

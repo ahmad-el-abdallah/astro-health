@@ -7,10 +7,12 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-<!-- Standalone page, not part of the main SPA (no Socket.IO/Chart.js/main.js
-     Tabs system) -- a separate superuser login, kept deliberately apart from
-     the astronaut/Flight-Surgeon login (docs/CLAUDE.md's "Superuser admin
-     page"). Reuses style.css for visual consistency only. -->
+<!-- Standalone page, not part of the main SPA's Tabs/Chart.js/main.js --
+     a separate superuser login, kept deliberately apart from the
+     astronaut/Flight-Surgeon login (docs/CLAUDE.md's "Superuser admin
+     page"). Reuses style.css for visual consistency, and loads the same
+     socket.js Bus the main app uses so an unknown-tag tap shows up live
+     instead of needing a page refresh. -->
 <div id="admin-login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center;">
   <div class="card" style="max-width:420px; width:100%; margin:20px;">
     <h2 style="margin-top:0;">Admin sign in</h2>
@@ -46,6 +48,8 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/socket.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin_page.js') }}"></script>
 </body>
 </html>

@@ -383,12 +383,18 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
   drop every table, and "Reset demo data" calls it -- without this fix, that button would have
   deleted every superuser account, locking the superuser out until they re-ran the CLI. This is
   a correctness fix, not a design choice: superuser accounts aren't demo data.
-- **New standalone page**: `templates/admin.html` + `static/js/admin_page.js` -- deliberately
-  not part of the main SPA (no Socket.IO/Chart.js/`main.js` Tabs system), just reuses
-  `static/css/style.css` for visual consistency. Login form, then an "Unknown tags" backlog
-  (assign inline -- pick an existing astronaut and optionally change their role, or create a
-  brand-new one, for `astronaut`/`surgeon`-kind tags; any other kind just needs a label) and the
-  tag registry (ported from the deleted `admin.js`).
+- **New standalone page**: `templates/admin.html` + `static/js/admin_page.js` -- not part of the
+  main SPA's Tabs/Chart.js/`main.js`, just reuses `static/css/style.css` for visual consistency.
+  Login form, then an "Unknown tags" backlog (assign inline -- pick an existing astronaut and
+  optionally change their role, or create a brand-new one, for `astronaut`/`surgeon`-kind tags;
+  any other kind just needs a label) and the tag registry (ported from the deleted `admin.js`).
+  **Does** load `static/js/socket.js` (the same `Bus` the main app uses) -- an earlier version
+  didn't, so a card tapped while this page was open never showed up until you refreshed; the
+  backlog only ever got (re)fetched on page load or right after an assign/dismiss. Now
+  `Bus.on("unknown_tag", ...)` triggers a live re-fetch, same as the broadcast the CYD/main app
+  already got. Verified with a real Socket.IO client (`socket.io-client` via Node, scratch-only,
+  not a project dependency) that the broadcast actually arrives the instant `handle_scan` sees
+  an unrecognized uid.
 - Verified end-to-end against a throwaway `--simulate` instance on a separate port (not the
   user's own running server): superuser login/logout, an unknown tap landing in the backlog,
   both the "existing astronaut + role change" and "new astronaut + role" assign paths, the new
