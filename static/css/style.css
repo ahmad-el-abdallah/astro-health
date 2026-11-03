@@ -348,10 +348,42 @@ footer.app-footer {
   padding: 0; overflow: hidden;
   background: radial-gradient(ellipse at 20% 50%, #13233a 0%, var(--panel) 70%);
 }
-.mh-planet { display: block; width: 100%; height: 300px; }
+.mh-planet { display: block; width: 100%; height: 340px; }
 .mh-hero .mh-headline { padding: 20px 20px 20px 0; }
 @media (max-width: 720px) {
   .mh-hero { grid-template-columns: 1fr; gap: 0; }
-  .mh-planet { height: 230px; }
+  .mh-planet { height: 240px; }
   .mh-hero .mh-headline { padding: 0 16px 16px; }
+}
+/* Mission Health polish: entrance motion, risk meters, summary, progress bar */
+@keyframes mh-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.mh-in { animation: mh-fade-up 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.mh-eyebrow {
+  font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px;
+}
+.mh-meter { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.mh-meter i { width: 14px; height: 6px; border-radius: 3px; background: var(--border); transition: background 0.4s; }
+.mh-meter b { font-size: 0.75rem; font-weight: 600; margin-left: 6px; color: var(--text-dim); }
+.mh-meter.HIGH i.on { background: var(--red); }
+.mh-meter.MEDIUM i.on { background: var(--yellow); }
+.mh-meter.LOW i.on { background: var(--green); }
+.mh-meter.HIGH b { color: var(--red); }
+.mh-meter.MEDIUM b { color: var(--yellow); }
+.mh-risk-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.88rem; }
+.mh-sum { border-radius: 999px; padding: 3px 10px; background: color-mix(in srgb, currentColor 14%, transparent); }
+.mh-sum.HIGH { color: var(--red); }
+.mh-sum.MEDIUM { color: var(--yellow); }
+.mh-sum.LOW { color: var(--green); }
+.mh-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin: 2px 0 8px; }
+.mh-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 3px; transition: width 0.8s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.mh-part { box-shadow: 0 0 0 0 transparent; transition: transform 0.2s, box-shadow 0.25s, border-color 0.25s; }
+.mh-part:hover { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); }
+.mh-part.mh-alert { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 35%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .mh-in { animation: none; }
+  .mh-bar span, .mh-meter i { transition: none; }
+}
+.mh-planet { -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+@media (max-width: 720px) {
+  .mh-planet { -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent); mask-image: linear-gradient(180deg, #000 88%, transparent); }
 }

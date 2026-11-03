@@ -271,6 +271,21 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
   disabled, labeled "Coming soon") -- NFC is the only method that actually logs you in today.
   Wire up a real one the same way: resolve an identity server-side, call `auth.login(astro_id)`.
 
+## Mission Health tab (2026-11-04, branch `3wrf-edits`, by 3wrf -- not merged)
+
+- The old Mission tab (a profile dropdown + three numbers) became **Mission Health**: pick an
+  environment, see how it affects each body system (mission risk vs the astronaut's live level
+  from `/summary`'s `body_levels`), which systems need attention, and a per-mission monitoring
+  checklist (what / how often / why, ticked off from the last 24 h of readings).
+- Risk text and monitoring plans are PLACEHOLDER data in `config/mission_health.json`, served as
+  `health` inside `GET /api/mission`. Keys must match `content.json` `body_parts` and
+  `health_rules.json` `indicators` -- `test_every_mission_profile_has_a_health_plan` checks this.
+- `static/js/planet3d.js` draws the animated scene at the top (Earth/Moon/Mars, station, transit
+  ship, rover) as shaded spheres on a plain canvas -- no three.js/CDN, runs offline. Textures are
+  generated procedurally a few rows per frame (no freeze), the loop only draws while the tab is
+  visible, and `prefers-reduced-motion` gets one still frame.
+- The astronaut picker uses `auth.js`'s `populateAstroSelect()`, same as the other tabs.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 48 tests (rules engine, protocol, sessions, REST API, symptoms,

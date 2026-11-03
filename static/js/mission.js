@@ -12,6 +12,7 @@ const MissionTab = (() => {
   let rulesCache = null;
   let currentAstroId = null;
   let planet = null;
+  let lastProfile = null;   // entrance animations only run when the environment changes
 
   function init() {
     document.getElementById("tab-mission").innerHTML = `
@@ -75,8 +76,10 @@ const MissionTab = (() => {
   }
 
   function render(mission, summary) {
+    const animate = mission.profile_id !== lastProfile;
+    lastProfile = mission.profile_id;
     renderPicker(mission);
-    renderHeadline(mission);
+    renderHeadline(mission, animate);
     const plan = mission.health;
     if (!plan) {
       document.getElementById("mh-body-grid").innerHTML =
@@ -84,8 +87,32 @@ const MissionTab = (() => {
       document.getElementById("mh-plan").innerHTML = "";
       return;
     }
-    renderBody(plan, summary);
-    renderPlan(plan, summary);
+    renderBody(plan, summary, animate);
+    renderPlan(plan, summary, animate);
+  }
+
+  // Staggered fade-up: each element gets its own small delay.
+  const enter = (animate, i) => (animate ? `mh-in" style="--i:${i}` : "");
+
+  // Counts a number up from 0 for elements with data-count.
+  function countUp(root) {
+    root.querySelectorAll("[data-count]").forEach((el) => {
+      const target = Number(el.dataset.count), decimals = (el.dataset.count.split(".")[1] || "").length;
+      const suffix = el.dataset.suffix || "", start = performance.now(), dur = 900;
+      const step = (now) => {
+        const k = Math.min(1, (now - start) / dur), eased = 1 - Math.pow(1 - k, 3);
+        el.textContent = (target * eased).toFixed(decimals) + suffix;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  function riskMeter(risk) {
+    const filled = { LOW: 1, MEDIUM: 2, HIGH: 3 }[risk] || 0;
+    return `<span class="mh-meter ${risk}" title="Mission risk: ${risk}">
+      ${[1, 2, 3].map((n) => `<i class="${n <= filled ? "on" : ""}"></i>`).join("")}
+      <b>${risk.charAt(0) + risk.slice(1).toLowerCase()} risk</b></span>`;
   }
 
   function renderPicker(mission) {
@@ -97,22 +124,37 @@ const MissionTab = (() => {
       </button>`).join("");
   }
 
-  function renderHeadline(mission) {
+  function renderHeadline(mission, animate) {
     const p = mission.profile;
+    // Numbers count up; text values ("same as base") are shown as-is.
+    const stat = (value, suffix) => (typeof value === "number"
+      ? `<strong data-count="${value}" data-suffix="${suffix}">${value}${suffix}</strong>`
+      : `<strong>${value}</strong>`);
     const delay = typeof p.comms_delay_s === "number"
-      ? (p.comms_delay_s >= 60 ? `${Math.round(p.comms_delay_s / 60)} min` : `${p.comms_delay_s} s`)
-      : "same as base";
-    const gravity = p.gravity_g === "same_as_base" ? "same as base" : `${p.gravity_g} g`;
+      ? (p.comms_delay_s >= 60 ? stat(Math.round(p.comms_delay_s / 60), " min") : stat(p.comms_delay_s, " s"))
+      : stat("same as base");
+    const gravity = p.gravity_g === "same_as_base" ? stat("same as base") : stat(p.gravity_g, " g");
+    const counts = { HIGH: 0, MEDIUM: 0, LOW: 0 };
+    Object.values((mission.health || {}).body_risks || {}).forEach((r) => { counts[r.risk] += 1; });
     const hazards = (p.main_concerns || []).map((h) =>
       `<span class="mh-hazard">${(contentCache.hazards[h] || {}).label || h.replace(/_/g, " ")}</span>`).join("");
-    document.getElementById("mh-headline").innerHTML = `
-      <p class="mh-headline-text">${mission.health ? mission.health.headline : ""}</p>
-      <div class="mh-stats">
-        <div><div class="dim">Gravity</div><strong>${gravity}</strong></div>
-        <div><div class="dim">Delay to Earth's doctors</div><strong>${delay}</strong></div>
-        <div><div class="dim">Daily radiation (PLACEHOLDER)</div><strong>${p.daily_radiation_dose_uGy_PLACEHOLDER} &micro;Gy</strong></div>
+    const head = document.getElementById("mh-headline");
+    head.innerHTML = `
+      <div class="mh-eyebrow ${enter(animate, 0)}">${PROFILE_ICON[mission.profile_id] || ""} ${p.label}</div>
+      <p class="mh-headline-text ${enter(animate, 1)}">${mission.health ? mission.health.headline : ""}</p>
+      <div class="mh-stats ${enter(animate, 2)}">
+        <div><div class="dim">Gravity</div>${gravity}</div>
+        <div><div class="dim">Delay to Earth's doctors</div>${delay}</div>
+        <div><div class="dim">Daily radiation (PLACEHOLDER)</div>${stat(p.daily_radiation_dose_uGy_PLACEHOLDER, " µGy")}</div>
       </div>
-      <div class="mh-hazards"><span class="dim">Main hazards:</span> ${hazards}</div>`;
+      <div class="mh-risk-summary ${enter(animate, 3)}">
+        <span class="mh-sum HIGH"><b>${counts.HIGH}</b> high-risk</span>
+        <span class="mh-sum MEDIUM"><b>${counts.MEDIUM}</b> medium</span>
+        <span class="mh-sum LOW"><b>${counts.LOW}</b> low</span>
+        <span class="dim">body systems on this mission</span>
+      </div>
+      <div class="mh-hazards ${enter(animate, 4)}"><span class="dim">Main hazards:</span> ${hazards}</div>`;
+    if (animate) countUp(head);
   }
 
   // A body system needs attention when the mission puts it at high/medium
@@ -124,11 +166,11 @@ const MissionTab = (() => {
     return null;
   }
 
-  function renderBody(plan, summary) {
+  function renderBody(plan, summary, animate) {
     const levels = (summary && summary.body_levels) || {};
     const parts = Object.entries(plan.body_risks)
       .sort((a, b) => RISK_ORDER[a[1].risk] - RISK_ORDER[b[1].risk]);
-    document.getElementById("mh-body-grid").innerHTML = parts.map(([part, r]) => {
+    document.getElementById("mh-body-grid").innerHTML = parts.map(([part, r], i) => {
       const info = contentCache.body_parts[part] || { label: part };
       const level = levels[part] || "GRAY";
       const nowBadge = level === "GRAY"
@@ -136,10 +178,10 @@ const MissionTab = (() => {
         : levelBadge(level, "Now");
       const att = attentionFor(r.risk, level);
       return `
-        <div class="card mh-part ${att ? att.cls : ""}" data-part="${part}">
+        <div class="card mh-part ${att ? att.cls : ""} ${enter(animate, i + 2)}" data-part="${part}">
           <div class="mh-part-head">
             <strong>${info.label}</strong>
-            <span class="mh-risk ${r.risk}">Mission risk: ${r.risk}</span>
+            ${riskMeter(r.risk)}
           </div>
           <div>${nowBadge}</div>
           <p class="mh-why">${r.why}</p>
@@ -148,10 +190,10 @@ const MissionTab = (() => {
     }).join("");
   }
 
-  function renderPlan(plan, summary) {
+  function renderPlan(plan, summary, animate) {
     const today = (summary && summary.today) || {};
     let done = 0;
-    const rowsHtml = plan.monitoring.map((m) => {
+    const rowsHtml = plan.monitoring.map((m, i) => {
       const label = (rulesCache.indicators[m.indicator] || {}).label || m.indicator;
       const reading = today[m.indicator];
       if (reading) done += 1;
@@ -159,19 +201,20 @@ const MissionTab = (() => {
         ? `${levelBadge(reading.level)} <span class="dim">${fmtTime(reading.ts)}</span>`
         : `<span class="level-badge GRAY">&#9675; Not measured yet</span>`;
       return `
-        <tr>
+        <tr class="${enter(animate, i + 4)}">
           <td><strong>${label}</strong></td>
           <td>${m.how_often}</td>
           <td class="mh-why">${m.why}</td>
           <td>${status}</td>
         </tr>`;
     }).join("");
+    const total = plan.monitoring.length;
     document.getElementById("mh-plan").innerHTML = `
+      <div class="mh-bar"><span style="width:${(done / total) * 100}%"></span></div>
       <table class="mh-table">
         <thead><tr><th>Check</th><th>How often</th><th>Why on this mission</th><th>Last 24 h</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>`;
-    const total = plan.monitoring.length;
     const pill = document.getElementById("mh-progress");
     pill.textContent = `${done} of ${total} checks done in the last 24 h`;
     pill.classList.toggle("mh-progress-done", done === total);
