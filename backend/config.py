@@ -28,6 +28,7 @@ def load_all():
         "health_rules": _load("health_rules"),
         "content": _load("content"),
         "missions": _load("missions"),
+        "mission_health": _load("mission_health"),
         "routine": _load("routine"),
         "gamification": _load("gamification"),
         "symptoms": _load("symptoms"),
@@ -44,6 +45,10 @@ def content():
 
 def missions():
     return _load("missions")
+
+
+def mission_health():
+    return _load("mission_health")
 
 
 def routine():

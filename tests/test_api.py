@@ -148,6 +148,22 @@ def test_mission_profile_can_change(client):
     assert res.get_json()["profile_id"] == "station"
 
 
+def test_every_mission_profile_has_a_health_plan(client):
+    """Mission Health tab: every profile in missions.json needs body risks
+    for every body part and a monitoring plan using real indicator keys."""
+    from backend.config import missions, mission_health, content, health_rules
+    plans = mission_health()["profiles"]
+    parts = set(content()["body_parts"])
+    indicators = set(health_rules()["indicators"])
+    for profile_id in missions()["profiles"]:
+        plan = plans[profile_id]
+        assert set(plan["body_risks"]) == parts
+        assert all(r["risk"] in ("LOW", "MEDIUM", "HIGH") for r in plan["body_risks"].values())
+        assert plan["monitoring"] and all(m["indicator"] in indicators for m in plan["monitoring"])
+    res = client.put("/api/mission", json={"profile_id": "mars_transit"})
+    assert client.get("/api/mission").get_json()["health"]["body_risks"]["skeleton"]["risk"] == "HIGH"
+
+
 def test_content_and_health_rules_and_routine_are_served(client):
     for path in ("/api/content", "/api/health-rules", "/api/routine"):
         res = client.get(path)
