@@ -21,6 +21,7 @@ const RewardsTab = (() => {
   async function onShow() {
     const select = document.getElementById("rewards-astro");
     const crew = await populateAstroSelect(select);
+    if (!crew.length) return;  // not logged in yet -- nothing to show
     const id = window.selectedAstronautId || Number(select.value) || crew[0].id;
     select.value = id;
     loadRewards(id);

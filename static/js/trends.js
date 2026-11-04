@@ -56,6 +56,7 @@ const TrendsTab = (() => {
   async function onShow() {
     const select = document.getElementById("trends-astro");
     const crew = await populateAstroSelect(select);
+    if (!crew.length) return;  // not logged in yet -- nothing to show
     select.value = window.selectedAstronautId || select.value || crew[0].id;
     rulesCache = rulesCache || await api("/health-rules");
     render();

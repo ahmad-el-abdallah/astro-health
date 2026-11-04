@@ -13,14 +13,28 @@ function isSurgeon() { return Auth.role === "Flight surgeon"; }
 // locked to themselves -- the backend would reject anyone else's data
 // anyway (backend/auth.py), this just keeps the UI from offering a
 // choice that would only come back as a 403.
+//
+// Several tabs call this again every time a Bus broadcast fires (e.g.
+// trends.js on "assessment"/"cyd_event"), not just on first show -- which
+// can happen before login finishes, while Auth is still empty. An earlier
+// version only ever wrote the <select>'s options once (`if
+// (!select.options.length)`), so that premature call could permanently
+// stick in a single "null" option and silently block every later, correct
+// re-population -- the real crew names would never show up without a
+// hard refresh. Always rebuilding from the current Auth/crew state fixes
+// that; the previously-selected value is restored afterward if it's still
+// a valid choice, so a broadcast mid-session doesn't reset your pick.
 async function populateAstroSelect(select) {
+  if (!Auth.astronautId) return [];  // nobody logged in yet -- nothing real to show
+  const prev = select.value;
   if (isSurgeon()) {
     const crew = await api("/crew");
-    if (!select.options.length) select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
+    select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
+    if (crew.some((a) => String(a.id) === prev)) select.value = prev;
     select.disabled = false;
     return crew;
   }
-  if (!select.options.length) select.innerHTML = `<option value="${Auth.astronautId}">${Auth.name}</option>`;
+  select.innerHTML = `<option value="${Auth.astronautId}">${Auth.name}</option>`;
   select.value = Auth.astronautId;
   select.disabled = true;
   return [{ id: Auth.astronautId, name: Auth.name }];
@@ -50,6 +64,11 @@ function applyLogin(me) {
     // that anyway), so there's no reason the Live tab should need its
     // own card tap on top of the one that just logged you in.
     LiveTab.viewAstronaut(me.astronaut_id);
+  } else {
+    // Refresh the Live tab's empty-state message now that Auth.role is
+    // set -- it was rendered once already at init() time, before login,
+    // when isSurgeon() was still false.
+    LiveTab.showEmpty();
   }
   showApp();
   applyRoleVisibility();

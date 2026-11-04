@@ -37,6 +37,7 @@ const BodyTab = (() => {
   async function onShow() {
     const select = document.getElementById("body-astro-select");
     const crew = await populateAstroSelect(select);
+    if (!crew.length) return;  // not logged in yet -- nothing to show
     const id = window.selectedAstronautId || Number(select.value) || crew[0].id;
     select.value = id;
     loadFor(id);

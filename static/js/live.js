@@ -13,8 +13,7 @@ const LiveTab = (() => {
 
   function init() {
     document.getElementById("tab-live").innerHTML = `
-      <div id="live-empty" class="card"><h2>${STRINGS.tapYourCard}</h2>
-        <p class="dim">Or use the Simulator panel (bottom right) to tap a card without the hardware.</p></div>
+      <div id="live-empty" class="card"></div>
       <div id="live-active" class="card" style="display:none">
         <div style="display:flex; align-items:center; gap:14px; margin-bottom:10px;">
           <div class="avatar" id="live-avatar">?</div>
@@ -71,6 +70,7 @@ const LiveTab = (() => {
     document.getElementById("symptom-confirm-btn").addEventListener("click", confirmSymptoms);
 
     renderSymptomChips();
+    showEmpty();
   }
 
   let symptomCatalogCache = null;
@@ -122,8 +122,15 @@ const LiveTab = (() => {
     box.style.display = "block";
   }
 
+  // "Tap your card" is instructions for an astronaut logging in with their
+  // own card -- meaningless for the Flight Surgeon, who's never meant to
+  // view her own Live data here, only a crew member's (via the Crew tab).
+  // Show her the actual next step instead.
   function showEmpty() {
     currentId = null;
+    document.getElementById("live-empty").innerHTML = isSurgeon()
+      ? `<h2>Pick a crew member</h2><p class="dim">Go to the Crew tab and tap a card to view their Live data.</p>`
+      : `<h2>${STRINGS.tapYourCard}</h2><p class="dim">Or use the Simulator panel (bottom right) to tap a card without the hardware.</p>`;
     document.getElementById("live-empty").style.display = "block";
     document.getElementById("live-active").style.display = "none";
   }
@@ -205,6 +212,6 @@ const LiveTab = (() => {
   Bus.on("scan", (d) => { if (d.type === "astronaut") { /* session_started follows right after */ } });
   Bus.on("cyd_event", () => { if (currentId) loadSummary(currentId); });
 
-  return { init, onShow, viewAstronaut: loadSummary };
+  return { init, onShow, viewAstronaut: loadSummary, showEmpty };
 })();
 registerTab("live", LiveTab);
