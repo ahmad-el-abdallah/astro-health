@@ -1,35 +1,223 @@
-// Mission tab: pick the profile, see gravity / comms delay / radiation /
-// hazards (docs/build-prompt.md section 9.6).
+// Mission Health tab: how the chosen environment affects each body system,
+// compared with the selected astronaut's live levels, plus what to monitor
+// on this mission and why. Risk text and plans live in
+// config/mission_health.json (PLACEHOLDER); live levels come from the same
+// /summary endpoint the Body tab uses.
 const MissionTab = (() => {
+  const RISK_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+  // Flask sorts JSON keys alphabetically, so keep the journey order here.
+  const PROFILE_ORDER = ["station", "lunar_base", "mars_transit", "mars_base", "rover"];
+  const PROFILE_ICON = { station: "🛰️", lunar_base: "🌕", mars_transit: "🚀", mars_base: "🔴", rover: "🚙" };
+  let contentCache = null;
+  let rulesCache = null;
+  let currentAstroId = null;
+  let planet = null;
+  let lastProfile = null;   // entrance animations only run when the environment changes
+
   function init() {
     document.getElementById("tab-mission").innerHTML = `
-      <h2>Mission</h2>
-      <div class="card">
-        <label>Profile</label>
-        <select id="mission-select"></select>
+      <h2>Mission Health</h2>
+      <p class="dim">Every environment stresses the body differently. Pick where the crew is to see
+        which body systems are most at risk, how each astronaut is doing right now, and what to check.</p>
+      <div class="mh-env-picker" id="mh-env-picker"></div>
+      <div class="card mh-hero">
+        <canvas id="mh-planet" class="mh-planet" aria-hidden="true"></canvas>
+        <div class="mh-headline" id="mh-headline"></div>
       </div>
-      <div class="card" id="mission-details"></div>`;
-    document.getElementById("mission-select").addEventListener("change", (e) => setProfile(e.target.value));
+      <div class="mh-section-head">
+        <h3>What this mission does to your body</h3>
+        <label class="mh-astro">Astronaut <select id="mh-astro-select"></select></label>
+      </div>
+      <div class="mh-legend dim">
+        <span><b>Mission risk</b> = how hard this environment hits that body system.</span>
+        <span><b>Now</b> = this astronaut's latest readings.</span>
+      </div>
+      <div class="card-grid" id="mh-body-grid"></div>
+      <div class="mh-section-head">
+        <h3>What to monitor on this mission</h3>
+        <span class="pill" id="mh-progress">&ndash;</span>
+      </div>
+      <div class="card" id="mh-plan"></div>`;
+
+    planet = Planet3D.mount(document.getElementById("mh-planet"));
+    document.getElementById("mh-env-picker").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-profile]");
+      if (btn && !btn.classList.contains("active")) setProfile(btn.dataset.profile);
+    });
+    document.getElementById("mh-astro-select").addEventListener("change", (e) => {
+      currentAstroId = Number(e.target.value);
+      window.selectedAstronautId = currentAstroId;
+      onShow();
+    });
+    document.getElementById("mh-body-grid").addEventListener("click", (e) => {
+      const card = e.target.closest("[data-part]");
+      if (!card) return;
+      if (currentAstroId) window.selectedAstronautId = currentAstroId;
+      showTab("body");
+    });
   }
 
-  async function onShow() { render(await api("/mission")); }
+  async function onShow() {
+    if (!contentCache) contentCache = await api("/content");
+    if (!rulesCache) rulesCache = await api("/health-rules");
+    const mission = await api("/mission");
+    if (planet) planet.setProfile(mission.profile_id);
 
-  function render(mission) {
-    const select = document.getElementById("mission-select");
-    select.innerHTML = Object.entries(mission.all_profiles).map(([id, p]) =>
-      `<option value="${id}" ${id === mission.profile_id ? "selected" : ""}>${p.label}</option>`).join("");
+    // Shared helper from auth.js: the flight surgeon can pick anyone, an
+    // astronaut is locked to themselves.
+    const select = document.getElementById("mh-astro-select");
+    const crew = await populateAstroSelect(select);
+    if (!isSurgeon()) currentAstroId = Auth.astronautId;
+    currentAstroId = currentAstroId || window.selectedAstronautId || (crew[0] && crew[0].id);
+    if (currentAstroId) select.value = currentAstroId;
+
+    const summary = currentAstroId ? await api(`/astronauts/${currentAstroId}/summary`) : null;
+    render(mission, summary);
+  }
+
+  function render(mission, summary) {
+    const animate = mission.profile_id !== lastProfile;
+    lastProfile = mission.profile_id;
+    renderPicker(mission);
+    renderHeadline(mission, animate);
+    const plan = mission.health;
+    if (!plan) {
+      document.getElementById("mh-body-grid").innerHTML =
+        `<p class="dim">No health plan for "${mission.profile_id}" yet. Add one to config/mission_health.json.</p>`;
+      document.getElementById("mh-plan").innerHTML = "";
+      return;
+    }
+    renderBody(plan, summary, animate);
+    renderPlan(plan, summary, animate);
+  }
+
+  // Staggered fade-up: each element gets its own small delay.
+  const enter = (animate, i) => (animate ? `mh-in" style="--i:${i}` : "");
+
+  // Counts a number up from 0 for elements with data-count.
+  function countUp(root) {
+    root.querySelectorAll("[data-count]").forEach((el) => {
+      const target = Number(el.dataset.count), decimals = (el.dataset.count.split(".")[1] || "").length;
+      const suffix = el.dataset.suffix || "", start = performance.now(), dur = 900;
+      const step = (now) => {
+        const k = Math.min(1, (now - start) / dur), eased = 1 - Math.pow(1 - k, 3);
+        el.textContent = (target * eased).toFixed(decimals) + suffix;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  function riskMeter(risk) {
+    const filled = { LOW: 1, MEDIUM: 2, HIGH: 3 }[risk] || 0;
+    return `<span class="mh-meter ${risk}" title="Mission risk: ${risk}">
+      ${[1, 2, 3].map((n) => `<i class="${n <= filled ? "on" : ""}"></i>`).join("")}
+      <b>${risk.charAt(0) + risk.slice(1).toLowerCase()} risk</b></span>`;
+  }
+
+  function renderPicker(mission) {
+    const rank = (id) => (PROFILE_ORDER.indexOf(id) + 1) || 99;
+    const entries = Object.entries(mission.all_profiles).sort((a, b) => rank(a[0]) - rank(b[0]));
+    document.getElementById("mh-env-picker").innerHTML = entries.map(([id, p]) => `
+      <button data-profile="${id}" class="${id === mission.profile_id ? "active" : ""}">
+        <span class="mh-env-icon">${PROFILE_ICON[id] || "🌍"}</span>${p.label}
+      </button>`).join("");
+  }
+
+  function renderHeadline(mission, animate) {
     const p = mission.profile;
+    // Numbers count up; text values ("same as base") are shown as-is.
+    const stat = (value, suffix) => (typeof value === "number"
+      ? `<strong data-count="${value}" data-suffix="${suffix}">${value}${suffix}</strong>`
+      : `<strong>${value}</strong>`);
     const delay = typeof p.comms_delay_s === "number"
-      ? (p.comms_delay_s >= 60 ? `${Math.round(p.comms_delay_s / 60)} min` : `${p.comms_delay_s} s`)
-      : String(p.comms_delay_s);
-    document.getElementById("mission-details").innerHTML = `
-      <div class="card-grid">
-        <div><div class="dim">Gravity</div><div class="big-number">${p.gravity_g === "same_as_base" ? "same as base" : p.gravity_g + " g"}</div></div>
-        <div><div class="dim">One-way comms delay</div><div class="big-number">${delay}</div></div>
-        <div><div class="dim">Daily radiation dose (PLACEHOLDER)</div><div class="big-number">${p.daily_radiation_dose_uGy_PLACEHOLDER} &micro;Gy</div></div>
+      ? (p.comms_delay_s >= 60 ? stat(Math.round(p.comms_delay_s / 60), " min") : stat(p.comms_delay_s, " s"))
+      : stat("same as base");
+    const gravity = p.gravity_g === "same_as_base" ? stat("same as base") : stat(p.gravity_g, " g");
+    const counts = { HIGH: 0, MEDIUM: 0, LOW: 0 };
+    Object.values((mission.health || {}).body_risks || {}).forEach((r) => { counts[r.risk] += 1; });
+    const hazards = (p.main_concerns || []).map((h) =>
+      `<span class="mh-hazard">${(contentCache.hazards[h] || {}).label || h.replace(/_/g, " ")}</span>`).join("");
+    const head = document.getElementById("mh-headline");
+    head.innerHTML = `
+      <div class="mh-eyebrow ${enter(animate, 0)}">${PROFILE_ICON[mission.profile_id] || ""} ${p.label}</div>
+      <p class="mh-headline-text ${enter(animate, 1)}">${mission.health ? mission.health.headline : ""}</p>
+      <div class="mh-stats ${enter(animate, 2)}">
+        <div><div class="dim">Gravity</div>${gravity}</div>
+        <div><div class="dim">Delay to Earth's doctors</div>${delay}</div>
+        <div><div class="dim">Daily radiation (PLACEHOLDER)</div>${stat(p.daily_radiation_dose_uGy_PLACEHOLDER, " µGy")}</div>
       </div>
-      <h3>Main concerns</h3>
-      <p>${p.main_concerns.join(", ").replace(/_/g, " ")}</p>`;
+      <div class="mh-risk-summary ${enter(animate, 3)}">
+        <span class="mh-sum HIGH"><b>${counts.HIGH}</b> high-risk</span>
+        <span class="mh-sum MEDIUM"><b>${counts.MEDIUM}</b> medium</span>
+        <span class="mh-sum LOW"><b>${counts.LOW}</b> low</span>
+        <span class="dim">body systems on this mission</span>
+      </div>
+      <div class="mh-hazards ${enter(animate, 4)}"><span class="dim">Main hazards:</span> ${hazards}</div>`;
+    if (animate) countUp(head);
+  }
+
+  // A body system needs attention when the mission puts it at high/medium
+  // risk AND the astronaut's current level for it isn't green.
+  function attentionFor(risk, level) {
+    if (level === "RED") return { cls: "mh-alert", text: "Act now: check the Body tab for what to do." };
+    if (level === "YELLOW" && risk !== "LOW") return { cls: "mh-watch", text: "Watch closely: this mission makes it worse." };
+    if (level === "GRAY" && risk === "HIGH") return { cls: "mh-nodata", text: "High risk, but no reading today. Measure it." };
+    return null;
+  }
+
+  function renderBody(plan, summary, animate) {
+    const levels = (summary && summary.body_levels) || {};
+    const parts = Object.entries(plan.body_risks)
+      .sort((a, b) => RISK_ORDER[a[1].risk] - RISK_ORDER[b[1].risk]);
+    document.getElementById("mh-body-grid").innerHTML = parts.map(([part, r], i) => {
+      const info = contentCache.body_parts[part] || { label: part };
+      const level = levels[part] || "GRAY";
+      const nowBadge = level === "GRAY"
+        ? `<span class="level-badge GRAY">&#9679; Now: no data</span>`
+        : levelBadge(level, "Now");
+      const att = attentionFor(r.risk, level);
+      return `
+        <div class="card mh-part ${att ? att.cls : ""} ${enter(animate, i + 2)}" data-part="${part}">
+          <div class="mh-part-head">
+            <strong>${info.label}</strong>
+            ${riskMeter(r.risk)}
+          </div>
+          <div>${nowBadge}</div>
+          <p class="mh-why">${r.why}</p>
+          ${att ? `<div class="mh-att">${att.text}</div>` : ""}
+        </div>`;
+    }).join("");
+  }
+
+  function renderPlan(plan, summary, animate) {
+    const today = (summary && summary.today) || {};
+    let done = 0;
+    const rowsHtml = plan.monitoring.map((m, i) => {
+      const label = (rulesCache.indicators[m.indicator] || {}).label || m.indicator;
+      const reading = today[m.indicator];
+      if (reading) done += 1;
+      const status = reading
+        ? `${levelBadge(reading.level)} <span class="dim">${fmtTime(reading.ts)}</span>`
+        : `<span class="level-badge GRAY">&#9675; Not measured yet</span>`;
+      return `
+        <tr class="${enter(animate, i + 4)}">
+          <td><strong>${label}</strong></td>
+          <td>${m.how_often}</td>
+          <td class="mh-why">${m.why}</td>
+          <td>${status}</td>
+        </tr>`;
+    }).join("");
+    const total = plan.monitoring.length;
+    document.getElementById("mh-plan").innerHTML = `
+      <div class="mh-bar"><span style="width:${(done / total) * 100}%"></span></div>
+      <table class="mh-table">
+        <thead><tr><th>Check</th><th>How often</th><th>Why on this mission</th><th>Last 24 h</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>`;
+    const pill = document.getElementById("mh-progress");
+    pill.textContent = `${done} of ${total} checks done in the last 24 h`;
+    pill.classList.toggle("mh-progress-done", done === total);
   }
 
   async function setProfile(profileId) {
@@ -37,7 +225,13 @@ const MissionTab = (() => {
     onShow();
   }
 
-  Bus.on("mission_changed", onShow);
+  function refreshIfVisible() {
+    if (document.getElementById("tab-mission").classList.contains("active")) onShow();
+  }
+
+  Bus.on("mission_changed", refreshIfVisible);
+  Bus.on("assessment", refreshIfVisible);
+  Bus.on("cyd_event", refreshIfVisible);
 
   return { init, onShow };
 })();

@@ -11,6 +11,7 @@ from flask import Blueprint, jsonify, request, Response
 from backend import db, sessions, health_rules, comms, seed, protocol, symptoms, auth, admin_auth
 from backend.config import (
     content as load_content, missions as load_missions,
+    mission_health as load_mission_health,
     gamification as load_gamification, routine as load_routine,
 )
 from backend.gamification import recompute_badges, leaderboard_rows
@@ -425,7 +426,10 @@ def create_routes(app, socketio, bridge):
     @bp.get("/mission")
     def get_mission():
         profile_id, profile = comms.current_profile()
-        return jsonify({"profile_id": profile_id, "profile": profile, "all_profiles": load_missions()["profiles"]})
+        return jsonify({
+            "profile_id": profile_id, "profile": profile, "all_profiles": load_missions()["profiles"],
+            "health": load_mission_health()["profiles"].get(profile_id),
+        })
 
     @bp.put("/mission")
     def set_mission():

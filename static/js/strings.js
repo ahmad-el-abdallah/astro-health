@@ -8,7 +8,7 @@ const STRINGS = {
   levelWord: { GREEN: "Good", YELLOW: "Check", RED: "Alert", GRAY: "No data" },
   tabs: {
     live: "Live", body: "Body", trends: "Trends", crew: "Crew",
-    surgeon: "Flight Surgeon", mission: "Mission", learn: "Learn",
+    surgeon: "Flight Surgeon", mission: "Mission Health", learn: "Learn",
     rewards: "Rewards", schedule: "Schedule", admin: "Admin",
   },
   serialStatus: {
