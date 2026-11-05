@@ -108,8 +108,10 @@ exact same JSON protocol USB serial uses, so nothing else about the app changes.
 - **Keeping internet at the same time**: once your Wi-Fi joins the CYD's network, that
   adapter can no longer also reach your normal Wi-Fi/internet. Use Ethernet (or a second Wi-Fi
   adapter/phone hotspot) for internet while your built-in Wi-Fi talks to the CYD.
-- The ESP-NOW link to the separate ESP32-S3 NFC reader is unaffected by any of this --
-  it keeps working exactly as before, no changes needed on that board.
+- The NFC reader is unaffected by any of this either way -- as of 2026-11-05 it's a Raspberry
+  Pi Pico plugged into the laptop over its own USB port (see "Replacing fake data with real
+  data" below), not wired to the CYD at all, so nothing about the CYD's Wi-Fi/power-bank setup
+  touches it.
 
 **Tests**: `.venv/bin/python -m pytest` (62 tests: the rules engine, the serial protocol, tag-tap
 session logic, symptom reporting, login/access control, and the REST API).
@@ -156,6 +158,12 @@ Works identically with the real CYD or in `--simulate` mode.
 - Real crew: tap a new NFC card, then assign it and set its astronaut's role from the
   **superuser admin page** (`/admin` -- see "Superuser admin page" below). No code changes
   needed either way. Renaming an existing astronaut stays on the Flight Surgeon tab.
+- **NFC reader hardware**: a Raspberry Pi Pico + PN532 module (`firmware/pico_nfc_reader/`),
+  plugged into this laptop over its own USB port -- separate from the CYD's own USB connection.
+  It's entirely optional and auto-detected: with no Pico plugged in, taps still work via the
+  CYD's own card (if you ever wire a reader back onto it) or the Simulator panel; plug one in
+  and `app.py` picks it up with no flags needed, same philosophy as the CYD's own port
+  auto-detect. (An earlier ESP32-S3-based reader is dead hardware -- see `docs/CLAUDE.md`.)
 - To regenerate the fake 30-day history (e.g. after changing `backend/seed.py`'s stories),
   use the Flight Surgeon tab's "Reset demo data", or `.venv/bin/python -m backend.seed`.
 
@@ -185,10 +193,12 @@ every tab clicked through, zero runtime errors): the full backend (sessions, rul
 gamification, comms delay, scheduler, serial bridge + simulation mode, login/access control),
 symptom reporting, auto-simulated vitals, and the full 10-tab web app.
 
-**Firmware**: both `astro_cyd/` and the ESP32-S3 reader (`firmware/esp32s3_nfc_reader/`, new
-2026-11-04 -- a port of the user's own separate, already-working PN532 reader project, not
-written from scratch) compile cleanly (`arduino-cli compile`, confirmed 2026-11-04 now that
-`arduino-cli` is installed on this machine).
+**Firmware**: `astro_cyd/` compiles cleanly (`arduino-cli compile`). The NFC reader
+(`firmware/pico_nfc_reader/`, a Raspberry Pi Pico -- see "Replacing fake data with real data"
+below) is **flashed and verified end-to-end against the real backend**: a real crew card tap
+produces a correct scan/login over `app.py`. `firmware/esp32s3_nfc_reader/` -- the original
+reader board -- is dead hardware (its physical chip failed permanently; see
+`docs/CLAUDE.md`), kept in the repo for reference only. Don't flash it.
 
 **Not verified on real hardware yet:**
 
@@ -201,9 +211,5 @@ written from scratch) compile cleanly (`arduino-cli compile`, confirmed 2026-11-
   showed up over a real USB link (garbled bytes even after a reconnect-storm bug was fixed) --
   see Troubleshooting above.
 - The LED/speaker's physical behavior.
-- The ESP32-S3 reader's actual read range/speed on the real board, after switching from
-  placeholder pins/tuning to the ported, measured-good ones -- flashed once with the wrong
-  (placeholder) pins and confirmed via serial log that it just couldn't reach the PN532, as
-  expected; not yet re-flashed with the corrected version.
 
 Please check those on the actual boards.

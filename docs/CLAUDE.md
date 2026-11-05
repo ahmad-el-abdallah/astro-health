@@ -20,7 +20,10 @@ general reference ranges, not real NASA figures. Never treat them as real, and k
      two-board relay: `firmware/astro_cyd/nfc_link.h` is an unmodified copy of Lifeline's
      (same MACs/channel/keys, same two physical boards), and at the time the S3 reader's
      firmware didn't need to change at all -- **superseded 2026-11-04**, see "ESP32-S3 NFC
-     reader firmware" below: that board's firmware now lives in this repo too.
+     reader firmware" below: that board's firmware now lives in this repo too -- **and
+     superseded again 2026-11-05**, see "Pico NFC reader replaces the dead ESP32-S3" below:
+     that physical board failed permanently, and NFC now goes through a Raspberry Pi Pico
+     plugged straight into the laptop, bypassing the CYD/ESP-NOW link entirely for this.
 - `~/Desktop/nasa` is an old, unrelated pre-existing project — don't confuse it with this one,
   and don't touch it.
 - Real crew NFC cards (same physical cards as Lifeline, reused here): `9B:25:0F:54` "Ahmad"
@@ -46,7 +49,10 @@ static/, templates/         the 9-tab web app (vanilla JS, no build step, no CDN
                              plus the separate /admin page (templates/admin.html,
                              static/js/admin_page.js) -- not part of that SPA, its own login
 firmware/astro_cyd/         the CYD sketch (TFT_eSPI + XPT2046, not LovyanGFX like Lifeline)
-firmware/esp32s3_nfc_reader/ the separate ESP32-S3 board's sketch (PN532 -> ESP-NOW), new 2026-11-04
+firmware/esp32s3_nfc_reader/ dead hardware, kept for reference only -- see "Pico NFC reader
+                             replaces the dead ESP32-S3" below, do not try to revive this board
+firmware/pico_nfc_reader/   the live NFC reader now: Pico + PN532, USB-straight-to-laptop, new
+                             2026-11-05 -- see that section below
 firmware/existing/          reference-only copies of Lifeline's lock sketch + nfc_link.h
 tests/                      pytest — rules engine, protocol, sessions, REST API, symptoms, auth (62 tests)
 docs/build-prompt.md        the original 16-section spec
@@ -95,6 +101,13 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
 
 ## Firmware invariants
 
+- **`firmware/esp32s3_nfc_reader/` is dead hardware, not dead code to ignore but a specific
+  physical board that failed permanently (2026-11-05, see that section below).** Its
+  `nfc_link.h`-must-match-`astro_cyd`'s-copy invariant (below) is now vestigial for the same
+  reason the surgeon-PIN code is vestigial elsewhere in this file: nothing sends ESP-NOW frames
+  to the CYD anymore, so `astro_cyd/nfc.ino`'s receive side just sits idle. Left in place
+  (removing it is cleanup, not a fix) — don't spend time debugging it, and don't assume a
+  working ESP-NOW link if you ever see `astro_cyd` logs mentioning it.
 - `firmware/astro_cyd/nfc_link.h` must stay byte-for-byte identical to
   `firmware/esp32s3_nfc_reader/nfc_link.h` (both in this repo as of 2026-11-04) — same two
   physical boards, same MACs/channel/keys. If you change it, copy it over the other one. (It's
@@ -125,6 +138,12 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
   2026-11-03 session (hence the firmware changes that session went uncompiled); now that it's
   here, both sketches (`astro_cyd/` and `esp32s3_nfc_reader/`) compile clean — don't re-claim
   "arduino-cli isn't installed" without checking again first.
+- **`rp2040:rp2040` (earlephilhower) core added 2026-11-05** for `firmware/pico_nfc_reader/` --
+  not the official `arduino:mbed_rp2040` core, which doesn't support the per-pin UART remapping
+  (`Serial1.setRX()`/`.setTX()`, and `SerialPIO` for non-fixed-UART pin pairs) this sketch needs.
+  Added via `arduino-cli config add board_manager.additional_urls
+  https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`
+  then `arduino-cli core install rp2040:rp2040`. Board FQBN: `rp2040:rp2040:rpipico`.
 
 ## Deliverables in `docs/`
 
@@ -426,6 +445,75 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
   visible, and `prefers-reduced-motion` gets one still frame.
 - The astronaut picker uses `auth.js`'s `populateAstroSelect()`, same as the other tabs.
 
+## Pico NFC reader replaces the dead ESP32-S3 (2026-11-05)
+
+- **The ESP32-S3 reader board failed permanently this session** — not a pins/firmware bug, the
+  physical chip. Diagnosed exhaustively before concluding this: its WiFi radio brownout-resets
+  the instant it tries to calibrate (confirmed with the PN532 fully disconnected, on every
+  cable/USB port/power source tried including a wall charger, with the brownout detector
+  disabled in software and WiFi TX power lowered — none of it mattered), and separately it
+  started reporting an eFuse hardware revision ("block rev 3.4") that no toolchain recognizes as
+  real — not Arduino's `esp32:esp32` core, not PlatformIO's `espressif32` platform, not a
+  freshly-cloned, freshly-built official ESP-IDF `release/v5.4` bootloader compiled same-day.
+  Three independent toolchains agreeing it's not a real, currently-shipping chip revision is
+  what settled it: the chip's own hardware reporting is corrupted, most likely heat/electrical
+  stress from the hundreds of brownout-reset cycles this session's testing put it through.
+  Likely already somewhat marginal even before that (the board's own docs/CLAUDE.md note from
+  2026-11-04 recorded its ESP-NOW link coming up only once, briefly, never confirmed stable).
+  **Treat this specific board as dead. Don't retest its WiFi.**
+- **Replacement, decided with the user: a Raspberry Pi Pico (plain RP2040, no WiFi/Bluetooth at
+  all) reads the same PN532 module.** Since it has no radio, it can't relay taps to the CYD over
+  ESP-NOW the way the ESP32-S3 did — instead it's plugged into the laptop over its own USB port,
+  sends `{"type":"scan","uid":"XX:XX:XX:XX"}\n` lines straight there, and a new, tiny bridge
+  (`backend/pico_bridge.py`, started from `app.py` alongside the CYD's own bridge) feeds those
+  into the *exact same* `handle_cyd_message()` the CYD's own "scan" messages already go through
+  — so login/session toggling is 100% reused, unchanged. **No CYD firmware change at all** — the
+  CYD still gets the matching `session`/`led` commands from `sessions.handle_scan()`'s existing
+  `send_fn`, so its screen stays in sync with a Pico-originated tap. `PicoBridge` auto-detects
+  the port the same hint-matching way `serial_bridge.find_port()` does (now matching "pico" in
+  the port description) and is a no-op if none is plugged in — entirely optional hardware, same
+  philosophy as everything else that degrades to simulation/absence gracefully.
+- New sketch: `firmware/pico_nfc_reader/pico_nfc_reader.ino`. Library: Adafruit_PN532 (same one,
+  same version, already proven against this exact PN532 module). Board: `rp2040:rp2040:rpipico`
+  (see "Firmware invariants" above for the core).
+- **Wiring**: PN532 VCC -> Pico `3V3(OUT)`, GND -> GND, the two PN532 data pins -> Pico GP1/GP2
+  (either way round — swap in the sketch's `PN532_TX_PIN`/`PN532_RX_PIN` if a fresh board lands
+  the wires the other way). GP1/GP2 aren't a fixed hardware-UART TX/RX pair on RP2040 (only
+  specific pin groups are — GP0/1, GP4/5, GP8/9, GP12/13, GP16/17, GP20/21, GP24/25, GP28/29),
+  so the sketch uses `SerialPIO` (RP2040's PIO-based software serial, part of the earlephilhower
+  core) instead of a `HardwareSerial`/`Serial1` instance — this is what let the wiring stay on
+  whichever two pins the PN532 actually landed on rather than needing yet another rewire.
+- **A real library bug, not a wiring issue, wasted a lot of this session's debugging time**:
+  `Adafruit_PN532`'s UART constructor unconditionally runs `pinMode(_reset, OUTPUT)`, and the
+  conventional "I'm not using a reset pin" sentinel (`-1`) doesn't behave safely with that on
+  this core. Passing a real, otherwise-unused GPIO (`PN532_RESET_PIN = 15` in the sketch, PN532's
+  actual RSTPDN pin stays unconnected, same as on the ESP32-S3 build) fixed it. Diagnosed by
+  bisecting: a hand-rolled raw byte probe (bypassing the library entirely) got a clean, correctly
+  checksummed `GetFirmwareVersion` reply on wiring the library itself failed on with the exact
+  same pins seconds apart — proof the connection was fine and the bug was in library usage, not
+  hardware. If a from-scratch PN532+RP2040 sketch ever mysteriously can't find the chip again,
+  check this first before re-suspecting wiring.
+- **Verified end-to-end**: a real crew card (Sameer, `2B:ED:20:54`) tapped on this Pico produced
+  `scan` -> `session_started` (and a second tap -> `session_ended`, a third -> `session_started`
+  again) over the running `app.py`'s Socket.IO stream, watched live with a throwaway
+  `python-socketio` client (scratch-only, not a project dependency, same philosophy as the
+  Socket.IO verification during the superuser admin page work on 2026-11-04).
+- `firmware/README.md` and the root `README.md` got a matching pass the same day (both now
+  describe the Pico as the live reader and the ESP32-S3 as dead/reference-only) — the
+  superseded-architecture text earlier in *this* file (the "Where this came from" and "ESP32-S3
+  NFC reader firmware now lives in this repo" sections above) was left as-is with inline
+  "superseded" pointers rather than rewritten, matching how this file always handles history.
+  `firmware/esp32s3_nfc_reader/` itself is left in the repo for reference (same "don't delete,
+  mark superseded" convention as `docs/archive/` and the old trailer cut) rather than deleted.
+- **Future idea raised by the user, not yet built**: running the whole backend (`app.py`) on a
+  Raspberry Pi Zero 2 W instead of a laptop, with both the CYD and this Pico plugged into it over
+  USB. Assessed as workable: the app is lightweight enough for the Zero 2 W's CPU, its own WiFi
+  replaces the laptop's for LAN access to the dashboard, and none of this session's ESP32 WiFi
+  problems apply (completely different WiFi hardware/stack). Two real requirements if this
+  happens: a USB OTG hub (the Zero 2 W has only one USB data port, and two boards need plugging
+  in), and possibly `dtoverlay=dwc2,dr_mode=host` in `config.txt` if the port doesn't come up in
+  host mode by default. Nothing implemented yet — just scoped.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 62 tests (rules engine, protocol, sessions, REST API, symptoms,
@@ -436,14 +524,22 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
   (`pkill -f "app.py --simulate"`), don't leave it running between tasks.
 - Ask before flashing firmware to a real board, same as Lifeline.
 
-## Status (2026-11-04)
+## Status (2026-11-05)
 
-- Git has a remote (`origin`, a GitHub repo under the user's account) and two commits on
-  `master` so far: the initial build, then one covering everything since 2026-11-03 (symptom
-  reporting + guidance-on-tap, NFC login/access control, the CYD multi-indicator note fix, the
-  USB serial reliability fix, auto-simulated vitals, and matching doc updates). `git status`/
-  `git log` before assuming anything newer than that is saved anywhere but disk — this file
-  gets edited ahead of commits, not after.
+- Git has a remote (`origin`, a GitHub repo under the user's account); check `git status`/
+  `git log` before assuming anything past the last commit is saved anywhere but disk — this
+  file gets edited ahead of commits, not after, and as of this pass `firmware/pico_nfc_reader/`,
+  `backend/pico_bridge.py`, and `app.py`'s two-line hookup of it are all uncommitted working-tree
+  changes.
+- **NFC is working again as of today**, just on different hardware than planned: the ESP32-S3
+  reader board died permanently this session (see "Pico NFC reader replaces the dead ESP32-S3"
+  above for the full diagnosis), and a Raspberry Pi Pico + the same PN532 module replaces it,
+  verified end-to-end with a real crew card over the running backend. The CYD itself is
+  untouched by any of this — same firmware, same invariants as before.
+- Previously (2026-11-04): persisting the session secret key so restarting the dev server
+  doesn't force everyone to re-log in, the Live tab following login instead of a one-time
+  CYD-session broadcast, explicit sign-off syncing both ways between the web login and the CYD
+  session, the superuser admin page, and the Mission Health tab (`3wrf-edits` branch, merged).
 - Initial 2026-10-29 build (backend, full 10-tab web app, firmware) passed its own checks that
   session (pytest, a headless full-page click-through, `arduino-cli compile`) but was never run
   on real CYD/S3 hardware. Since then (2026-11-03): auto-simulated vitals, a USB serial

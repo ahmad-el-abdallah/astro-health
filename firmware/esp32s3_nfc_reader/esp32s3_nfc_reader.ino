@@ -32,6 +32,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <Adafruit_PN532.h>
+#include "soc/rtc_cntl_reg.h"
 #include "nfc_link.h"
 
 // ---- PN532 over UART (HSU) ----
@@ -99,6 +100,12 @@ static void onLinkRecv(const esp_now_recv_info_t* info, const uint8_t* data, int
 // Station mode, never connected: frames go out from the fixed READER_MAC on LINK_CHANNEL.
 static void setupLink() {
   WiFi.mode(WIFI_STA);
+  // Lower TX power = a smaller current spike when the radio actually keys
+  // up. This board browns out the instant WiFi turns on with a marginal
+  // USB supply -- real range to the CYD isn't the constraint here (same
+  // room), so trading max range for a power draw that fits what's
+  // actually available is the right call until better power is in hand.
+  WiFi.setTxPower(WIFI_POWER_2dBm);
   WiFi.disconnect();
   esp_wifi_set_ps(WIFI_PS_NONE);  // stay awake, or HELLOs from the CYD get missed
   esp_wifi_set_channel(LINK_CHANNEL, WIFI_SECOND_CHAN_NONE);
@@ -229,6 +236,18 @@ static void handleSerial() {
 // ---- setup / loop ----
 
 void setup() {
+  // Stopgap, not a real fix: this board browns out the instant the WiFi
+  // radio keys up on the current power source (confirmed -- a bare sketch
+  // with no WiFi/PN532 ran rock-stable for 8+ seconds; this exact firmware
+  // crash-loops right after setupLink() calls WiFi.mode()). Disabling BOD
+  // just stops it from auto-resetting over a brief power sag -- it does
+  // NOT fix a genuinely insufficient supply, and a severe enough sag can
+  // still corrupt/hang the chip instead of cleanly resetting it. Paired
+  // with the lower TX power in setupLink() below, this is meant to get
+  // through that one startup spike; the real fix is a better USB port/
+  // cable/powered hub or a proper 5V supply. Remove this once that's sorted.
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
   Serial.setTimeout(100);
   delay(200);
