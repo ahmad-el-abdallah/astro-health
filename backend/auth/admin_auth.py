@@ -16,6 +16,7 @@ from werkzeug.security import check_password_hash
 
 
 def login(superuser_id):
+    session.permanent = True  # expires after LOGIN_LIFETIME of inactivity (app.py)
     session["superuser_id"] = superuser_id
 
 

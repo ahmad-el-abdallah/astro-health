@@ -5,7 +5,7 @@ _record_symptoms) and by the web app's manual symptom reporting.
 import json
 from datetime import datetime, timezone
 
-from backend.config import symptoms as load_symptoms, gamification as load_gamification
+from backend.config import symptoms as load_symptoms
 from backend.logic import health_rules
 from backend.jobs import comms
 
@@ -15,7 +15,7 @@ def catalog():
 
 
 def record(conn, astro_id, items):
-    """Inserts a symptom report and awards points; returns the computed
+    """Inserts a symptom report; returns the computed
     level. Callers decide separately how to notify listeners (see
     routes.py's handle_cyd_message trailing cyd_event emit vs. the
     dedicated /symptoms route, which aren't the same for every caller)."""
@@ -25,12 +25,6 @@ def record(conn, astro_id, items):
         "INSERT INTO symptoms (astronaut_id, ts, items_json, level) VALUES (?, ?, ?, ?)",
         (astro_id, now, json.dumps(items), lvl),
     )
-    points_cfg = load_gamification()["points"]
-    if points_cfg.get("symptom_report"):
-        conn.execute(
-            "INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'symptom_report')",
-            (astro_id, now, points_cfg["symptom_report"]),
-        )
     return lvl
 
 

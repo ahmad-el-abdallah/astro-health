@@ -1,0 +1,155 @@
+// Account & Security: the signed-in astronaut's own sign-in methods (NFC card on file,
+// username/password, Face ID enroll/clear). Port of static/js/core/account.js; a
+// superuser can do the same resets from /admin via the same backend routes.
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { del, get, post } from "../../lib/api.js";
+import { captureDescriptor, startCamera, stopCamera } from "../../lib/faceId.js";
+import { useAuth } from "../../auth/AuthProvider.jsx";
+import { Button, Field } from "../ui/index.jsx";
+import { Drawer } from "./Drawer.jsx";
+
+function Row({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-divider py-2.5 text-sm last:border-0">
+      <span className="text-muted">{label}</span>
+      <strong className="font-semibold">{value}</strong>
+    </div>
+  );
+}
+
+export function AccountDrawer({ open, onClose }) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const id = user?.astronaut_id;
+  const account = useQuery({ queryKey: ["account", id], queryFn: () => get(`/astronauts/${id}/account`), enabled: open && !!id });
+  // null = "not edited yet", so the field shows the saved username until you type.
+  const [usernameDraft, setUsername] = useState(null);
+  const username = usernameDraft ?? account.data?.username ?? "";
+  const [password, setPassword] = useState("");
+  const [pwNotice, setPwNotice] = useState("");
+  const [faceNotice, setFaceNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [liteGlass, setLiteGlass] = useState(() => document.documentElement.dataset.glass === "lite");
+  function toggleGlass() {
+    const next = !liteGlass;
+    setLiteGlass(next);
+    if (next) document.documentElement.dataset.glass = "lite";
+    else delete document.documentElement.dataset.glass;
+    try { localStorage.setItem("ah-glass", next ? "lite" : "full"); } catch { /* not remembered */ }
+  }
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  // Camera runs only while the drawer is open.
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const s = await startCamera(videoRef.current);
+        if (cancelled) stopCamera(s); else streamRef.current = s;
+      } catch (err) {
+        if (!cancelled) setFaceNotice(`Camera unavailable: ${err.message}`);
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); stopCamera(streamRef.current); streamRef.current = null; };
+  }, [open]);
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ["account", id] });
+
+  async function savePassword(e) {
+    e.preventDefault();
+    setPwNotice("");
+    try {
+      await post(`/astronauts/${id}/password`, { username, password });
+      setPassword("");
+      setPwNotice("Saved.");
+      refresh();
+    } catch {
+      setPwNotice("Couldn't save -- check the username isn't taken and the password is long enough.");
+    }
+  }
+
+  async function enrollFace() {
+    setBusy(true);
+    setFaceNotice("Loading face model…");
+    try {
+      const descriptor = await captureDescriptor(videoRef.current);
+      if (!descriptor) { setFaceNotice("No clear face found -- center your face and try again."); return; }
+      await post(`/astronauts/${id}/face_id`, { descriptor });
+      setFaceNotice("Face ID enrolled.");
+      refresh();
+    } catch {
+      setFaceNotice("Couldn't enroll -- try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearFace() {
+    try {
+      await del(`/astronauts/${id}/face_id`);
+      setFaceNotice("Face ID cleared.");
+      refresh();
+    } catch {
+      setFaceNotice("Couldn't clear Face ID.");
+    }
+  }
+
+  const info = account.data || {};
+  return (
+    <Drawer open={open} onClose={onClose} title="Account and security" width={460}>
+      <div className="flex items-center justify-between border-b border-line px-6 py-5">
+        <div>
+          <div className="ah-eyebrow">Account</div>
+          <h2 className="m-0 font-display text-xl font-semibold">Sign-in & security</h2>
+        </div>
+        <button onClick={onClose} className="min-h-10 cursor-pointer rounded-xl px-3 text-sm text-ink-2 hover:bg-raised">Close</button>
+      </div>
+      <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <p className="m-0 text-sm text-muted">Set a username/password or enroll Face ID so you don't need your NFC card every time.</p>
+        <div>
+          <Row label="NFC card" value={info.nfc_uid || "Not assigned"} />
+          <Row label="Username" value={info.username || "Not set"} />
+          <Row label="Face ID" value={info.has_face_id ? "Enrolled" : "Not enrolled"} />
+        </div>
+
+        <form onSubmit={savePassword} className="space-y-3">
+          <h3 className="m-0 text-[15px] font-semibold">Username & password</h3>
+          <Field label="Username"><input className="ah-input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></Field>
+          <Field label="New password"><input className="ah-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
+          <Button variant="primary" type="submit">Save</Button>
+          {pwNotice && <p className="m-0 text-xs text-check-fg" role="status">{pwNotice}</p>}
+        </form>
+
+        <div className="flex items-center justify-between gap-4 rounded-xl bg-raised p-3.5">
+          <div>
+            <div className="text-sm font-semibold">Reduce glass effects</div>
+            <div className="text-xs text-muted">Turns off the frosted blur. Try this if scrolling feels slow.</div>
+          </div>
+          <button
+            role="switch"
+            aria-checked={liteGlass}
+            onClick={toggleGlass}
+            className={`relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors ${liteGlass ? "bg-accent" : "bg-line-strong"}`}
+          >
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${liteGlass ? "translate-x-6" : "translate-x-1"}`} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="m-0 text-[15px] font-semibold">Face ID</h3>
+          <div className="overflow-hidden rounded-xl bg-space">
+            <video ref={videoRef} muted playsInline className="block max-h-56 w-full -scale-x-100 object-cover" />
+          </div>
+          <div className="flex gap-2">
+            <Button variant="primary" className="flex-1" onClick={enrollFace} disabled={busy}>Enroll Face ID</Button>
+            <Button className="flex-1" onClick={clearFace}>Clear Face ID</Button>
+          </div>
+          {faceNotice && <p className="m-0 text-xs text-check-fg" role="status">{faceNotice}</p>}
+        </div>
+      </div>
+    </Drawer>
+  );
+}

@@ -105,21 +105,6 @@ CREATE TABLE IF NOT EXISTS messages (
     read INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS points (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    astronaut_id INTEGER NOT NULL,
-    ts TEXT NOT NULL,
-    amount INTEGER NOT NULL,
-    reason TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS badges (
-    astronaut_id INTEGER NOT NULL,
-    badge_id TEXT NOT NULL,
-    earned_at TEXT NOT NULL,
-    PRIMARY KEY (astronaut_id, badge_id)
-);
-
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

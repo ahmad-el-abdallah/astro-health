@@ -12,17 +12,16 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
 from backend.logic import sessions, health_rules, symptoms
-from backend.jobs import comms
+from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
 from backend.services import consult, voice
 from backend.config import (
     content as load_content, missions as load_missions,
     mission_health as load_mission_health,
-    gamification as load_gamification, routine as load_routine,
+    routine as load_routine,
     MAX_CONSULT_HISTORY_TURNS, MAX_CONSULT_HISTORY_MSG_CHARS,
 )
-from backend.logic.gamification import recompute_badges, leaderboard_rows, rewards_summary
 
 
 def row(r):
@@ -205,6 +204,10 @@ def _sanitize_chat_history(raw):
             continue
         out.append({"role": role, "content": content.strip()[:MAX_CONSULT_HISTORY_MSG_CHARS]})
     return out
+
+
+# Older CYD firmware's idle timeout is 2 minutes; anything this quiet is that timeout.
+CYD_IDLE_GUESS_S = 100
 
 
 def create_routes(app, socketio, bridge):
@@ -458,9 +461,6 @@ def create_routes(app, socketio, bridge):
             last_assessment = conn.execute(
                 "SELECT * FROM assessments WHERE astronaut_id = ? ORDER BY ts DESC LIMIT 1", (astro_id,)
             ).fetchone()
-            points_total = conn.execute(
-                "SELECT COALESCE(SUM(amount),0) AS t FROM points WHERE astronaut_id = ?", (astro_id,)
-            ).fetchone()["t"]
             symptom_row = conn.execute(
                 "SELECT items_json, level, ts FROM symptoms WHERE astronaut_id = ? AND ts >= ? "
                 "ORDER BY ts DESC LIMIT 1",
@@ -477,7 +477,6 @@ def create_routes(app, socketio, bridge):
             "today": today_levels,
             "overall_level": last_assessment["overall_level"] if last_assessment else "GRAY",
             "last_check": last_assessment["ts"] if last_assessment else None,
-            "points": points_total,
             "body_levels": body_levels,
             "discomfort": discomfort,
             "session_active": astro_id in sessions.active_sessions,
@@ -494,11 +493,14 @@ def create_routes(app, socketio, bridge):
             if err:
                 return jsonify(err[0]), err[1]
             data = conn.execute(
-                "SELECT ts, value_json, level FROM readings WHERE astronaut_id = ? AND indicator = ? "
+                "SELECT ts, value_json, level, source FROM readings WHERE astronaut_id = ? AND indicator = ? "
                 "AND ts >= ? ORDER BY ts ASC",
                 (astro_id, indicator, since),
             ).fetchall()
-        return jsonify([{"ts": r["ts"], "value": json.loads(r["value_json"]), "level": r["level"]} for r in data])
+        return jsonify([
+            {"ts": r["ts"], "value": json.loads(r["value_json"]), "level": r["level"], "source": r["source"]}
+            for r in data
+        ])
 
     @bp.get("/astronauts/<int:astro_id>/simulate_vitals")
     def simulate_vitals(astro_id):
@@ -569,11 +571,6 @@ def create_routes(app, socketio, bridge):
                 "INSERT INTO assessments (astronaut_id, ts, overall_level, note, details_json) VALUES (?, ?, ?, ?, ?)",
                 (astro_id, now.isoformat(), overall, note, json.dumps(details)),
             )
-            points_cfg = load_gamification()["points"]
-            amount = points_cfg.get("assess_complete", 0)
-            if amount:
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'assess_complete')",
-                             (astro_id, now.isoformat(), amount))
             if overall == "RED":
                 conn.execute("INSERT INTO alerts (astronaut_id, ts, level, text, acknowledged) VALUES (?, ?, 'RED', ?, 0)",
                              (astro_id, now.isoformat(), note))
@@ -584,7 +581,6 @@ def create_routes(app, socketio, bridge):
         bridge.send(protocol.status(astro["name"], overall, note))
         bridge.send(protocol.led(overall))
         emit_fn("assessment", {"astronaut_id": astro_id, "overall_level": overall, "note": note, "details": details})
-        recompute_badges(astro_id, emit_fn)
         return jsonify({"overall_level": overall, "note": note, "details": details})
 
     # ---- symptoms (manual reporting from the web app) ----
@@ -718,13 +714,7 @@ def create_routes(app, socketio, bridge):
                 "VALUES (?, ?, 'mood', ?, ?, 'manual')",
                 (astro_id, now.isoformat(), json.dumps({"mood": mood, "score": score, "note": note}), lvl),
             )
-            points_cfg = load_gamification()["points"]
-            amount = points_cfg.get("mood_logged", 0)
-            if amount:
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'mood_logged')",
-                             (astro_id, now.isoformat(), amount))
         emit_fn("cyd_event", {"type": "mood", "astronaut_id": astro_id, "mood": mood, "level": lvl})
-        recompute_badges(astro_id, emit_fn)
         return jsonify({"mood": mood, "score": score, "level": lvl})
 
     @bp.get("/astronauts/<int:astro_id>/journal")
@@ -796,30 +786,14 @@ def create_routes(app, socketio, bridge):
                 (astro_id, now.isoformat(),
                  json.dumps({"hours": hours, "bedtime": body["bedtime"], "wake_time": body["wake_time"]}), lvl),
             )
-            # sleep_logged/good_sleep_night are already configured in
-            # config/gamification.json but, confirmed by reading
-            # handle_cyd_message's own points dict, were never actually wired
-            # to anything (only "mood" is in that lookup) -- no CYD path
-            # reports sleep at all today. Wiring them here completes an
-            # already-configured feature rather than inventing a new one.
-            points_cfg = load_gamification()["points"]
-            amount = points_cfg.get("sleep_logged", 0)
-            if amount:
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'sleep_logged')",
-                             (astro_id, now.isoformat(), amount))
-            bonus = points_cfg.get("good_sleep_night", 0)
-            if lvl == health_rules.GREEN and bonus:
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'good_sleep_night')",
-                             (astro_id, now.isoformat(), bonus))
         emit_fn("cyd_event", {"type": "sleep", "astronaut_id": astro_id, "hours": hours, "level": lvl})
-        recompute_badges(astro_id, emit_fn)
         return jsonify({"hours": hours, "level": lvl})
 
     # ---- Body tab's Consultation chat: an NVIDIA-hosted AI agent, optional
     # (falls back client-side to keyword matching with no key configured).
     # Gives the AI more than a reply to work with: elevated_today/
-    # trend_lines/rewards are read fresh from the DB every call, and
-    # schedule_lines from static config -- but consult_chat() itself still
+    # trend_lines/schedule_lines (with each task's live status) are read
+    # fresh from the DB every call -- but consult_chat() itself still
     # performs zero writes. Every action the AI decides on (vital, symptom,
     # alert, breathing, emergency) is persisted by the FRONTEND calling an
     # already-existing route (or the one new /alert route above) after the
@@ -843,32 +817,25 @@ def create_routes(app, socketio, bridge):
             if not astro:
                 return jsonify({"error": "not found"}), 404
             elevated_today = _elevated_today_lines(conn, astro_id, content_cfg)
+            plan = scheduler.day_plan(conn, astro_id)
+            schedule_lines = [f"{e['time']} - {e['text']} ({e['status']})" for e in plan["entries"]]
             trend_lines = [
                 line for line in (
                     _recent_trend_summary(conn, astro_id, ind)
                     for ind in ("heart_rate", "temperature", "blood_sugar")
                 ) if line
             ]
-            rewards = rewards_summary(conn, astro_id)
         profile_id, profile = comms.current_profile()
         hazard_lines = []
         for region, info in content_cfg["body_parts"].items():
             match = next((h for h in info.get("hazards", []) if h in profile.get("main_concerns", [])), None)
             if match:
                 hazard_lines.append(f"{info['label']}: {content_cfg['hazards'][match]['summary']}")
-        schedule_lines = [f"{e['time']} - {e['text']}" for e in load_routine().get("schedule", [])]
-        gam = load_gamification()
-        badge_labels = [gam["badges"][b["badge_id"]]["label"] for b in rewards["badges"] if b["badge_id"] in gam["badges"]]
-        rewards_line = (
-            f"Progress: {rewards['points']} points. "
-            f"Badges earned: {', '.join(badge_labels) if badge_labels else 'none yet'}. "
-            f"Current exercise streak: {rewards['streak_days']} day(s)."
-        )
         try:
             decision = consult.ask(
                 message, astro["name"], profile["label"], hazard_lines, content_cfg["body_parts"],
                 symptoms.catalog(), history=history, elevated_today=elevated_today,
-                schedule_lines=schedule_lines, trend_lines=trend_lines, rewards_line=rewards_line,
+                schedule_lines=schedule_lines, trend_lines=trend_lines,
             )
         except consult.ConsultError:
             return jsonify({"error": "AI consultation failed"}), 502
@@ -904,11 +871,10 @@ def create_routes(app, socketio, bridge):
             out = []
             for a in crew_rows:
                 last = conn.execute("SELECT * FROM assessments WHERE astronaut_id = ? ORDER BY ts DESC LIMIT 1", (a["id"],)).fetchone()
-                pts = conn.execute("SELECT COALESCE(SUM(amount),0) AS t FROM points WHERE astronaut_id = ?", (a["id"],)).fetchone()["t"]
                 active_alerts = conn.execute("SELECT COUNT(*) AS c FROM alerts WHERE astronaut_id = ? AND acknowledged = 0", (a["id"],)).fetchone()["c"]
                 out.append({
                     **row(a), "overall_level": last["overall_level"] if last else "GRAY",
-                    "last_check": last["ts"] if last else None, "points": pts, "active_alerts": active_alerts,
+                    "last_check": last["ts"] if last else None, "active_alerts": active_alerts,
                     "session_active": a["id"] in sessions.active_sessions,
                 })
         return jsonify(out)
@@ -1017,28 +983,20 @@ def create_routes(app, socketio, bridge):
     def routine():
         return jsonify(load_routine())
 
-    @bp.get("/health-rules")
-    def health_rules_config():
-        from backend.config import health_rules as load_health_rules
-        return jsonify(load_health_rules())
-
-    # ---- rewards ----
-    @bp.get("/rewards/<int:astro_id>")
-    def rewards(astro_id):
+    # ---- Schedule page: today's routine on the mission clock, with each
+    # task's real status for this astronaut (backend/jobs/scheduler.py). ----
+    @bp.get("/astronauts/<int:astro_id>/schedule")
+    def astronaut_schedule(astro_id):
         with db.write_conn() as conn:
             _, err = auth.authorize_view(conn, astro_id)
             if err:
                 return jsonify(err[0]), err[1]
-            summary = rewards_summary(conn, astro_id)
-        gam = load_gamification()
-        return jsonify({
-            "points": summary["points"], "badges": summary["badges"],
-            "badge_catalog": gam["badges"], "team_goal": gam["team_goal"],
-        })
+            return jsonify(scheduler.day_plan(conn, astro_id))
 
-    @bp.get("/leaderboard")
-    def leaderboard():
-        return jsonify(leaderboard_rows())
+    @bp.get("/health-rules")
+    def health_rules_config():
+        from backend.config import health_rules as load_health_rules
+        return jsonify(load_health_rules())
 
     # ---- export ----
     @bp.get("/export/<int:astro_id>.csv")
@@ -1102,10 +1060,31 @@ def create_routes(app, socketio, bridge):
     def on_connect():
         socketio.emit("serial_status", {"status": bridge.status})
 
+    def _is_explicit_done(msg, astro_id):
+        """Was this end_session the Done button (sign the browser out too) rather
+        than the CYD's own 2-minute idle timeout (must not)? Firmware from
+        2026-11-11 on says so directly ("reason"). Older firmware sends both the
+        same way, so fall back to timing: the idle timeout only fires ~2 minutes
+        after the CYD's last contact for this session (the session message or
+        a touchscreen message -- NOT Pico tag scans, which never reset the CYD's
+        timer), so a session that's already closed or has been that quiet is
+        treated as idle. Erring this way only ever means
+        a missed auto-logout (the browser's own Log out still works), never a
+        surprise one."""
+        reason = msg.get("reason")
+        if reason:
+            return reason == "done"
+        quiet = sessions.seconds_since_cyd_contact(astro_id)
+        return quiet is not None and quiet < CYD_IDLE_GUESS_S
+
     def handle_cyd_message(msg):
         """The single entry point for every CYD -> laptop message, whether
         it arrived over real serial or the Simulator panel (bridge.inject)."""
         mtype = msg.get("type")
+        if mtype not in ("scan", "end_session", "hello", "log"):
+            touched = _uid_to_astro(msg.get("uid"))
+            if touched is not None:
+                sessions.note_cyd_contact(touched)
         if mtype == "scan":
             sessions.handle_scan(msg.get("uid", ""), send_fn, emit_fn)
         elif mtype == "mood":
@@ -1123,6 +1102,7 @@ def create_routes(app, socketio, bridge):
         elif mtype == "end_session":
             astro_id = _uid_to_astro(msg.get("uid"))
             if astro_id is not None:
+                explicit_done = _is_explicit_done(msg, astro_id)
                 sessions.end_session_for(astro_id, send_fn, emit_fn)
                 # Pressing "Done" on the CYD is an explicit sign-off, unlike
                 # a re-tap toggle or the idle timeout (both of which also end
@@ -1131,11 +1111,14 @@ def create_routes(app, socketio, bridge):
                 # that's actually logged in as this astronaut (if any) reacts
                 # to this broadcast itself; the server has no reverse lookup
                 # from astro_id to a specific session cookie.
-                emit_fn("logout_requested", {"astronaut_id": astro_id})
+                if explicit_done:
+                    emit_fn("logout_requested", {"astronaut_id": astro_id})
         elif mtype == "hello":
             emit_fn("serial_status", {"status": bridge.status, "fw": msg.get("fw")})
         elif mtype == "log":
             emit_fn("cyd_event", {"type": "log", "msg": msg.get("msg", "")})
+        if mtype == "active":
+            return  # the CYD's once-a-minute "someone's still using me" ping: no browser refresh
         emit_fn("cyd_event", {"type": mtype, **{k: v for k, v in msg.items() if k != "type"}})
 
     def _uid_to_astro(uid):
@@ -1155,11 +1138,6 @@ def create_routes(app, socketio, bridge):
                 "INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, ?, ?, ?, 'cyd')",
                 (astro_id, datetime.now(timezone.utc).isoformat(), indicator, json.dumps(value), lvl),
             )
-            points_cfg = load_gamification()["points"]
-            reason = {"mood": "mood_logged"}.get(indicator)
-            if reason and points_cfg.get(reason):
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, ?)",
-                             (astro_id, datetime.now(timezone.utc).isoformat(), points_cfg[reason], reason))
 
     def _record_symptoms(msg):
         astro_id = _uid_to_astro(msg.get("uid"))
@@ -1186,10 +1164,6 @@ def create_routes(app, socketio, bridge):
                 "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, 'reaction', ?, ?, ?)",
                 (astro_id, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), json.dumps(msg)),
             )
-            points_cfg = load_gamification()["points"]
-            if points_cfg.get("reaction_test"):
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'reaction_test')",
-                             (astro_id, datetime.now(timezone.utc).isoformat(), points_cfg["reaction_test"]))
 
     def _record_breathing(msg):
         astro_id = _uid_to_astro(msg.get("uid"))
@@ -1201,9 +1175,5 @@ def create_routes(app, socketio, bridge):
                 "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, 'breathing', ?, ?, ?)",
                 (astro_id, now, now, json.dumps({"seconds": msg.get("seconds", 60)})),
             )
-            points_cfg = load_gamification()["points"]
-            if points_cfg.get("breathing_session"):
-                conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, 'breathing_session')",
-                             (astro_id, now, points_cfg["breathing_session"]))
 
     return handle_cyd_message

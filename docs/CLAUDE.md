@@ -111,9 +111,46 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
   and a two-variable rule for blood pressure. Reaction time is the standout: evaluated against
   that astronaut's own `baseline_reaction_ms`, so the same raw ms can be GREEN for one crew
   member and RED for another. Overall level = the single worst indicator present.
-- **Gamification rules are parsed by hand, never `eval()`'d** (`backend/gamification.py`'s
-  `_rule_met()`) — a badge rule string like `"exercise_days_streak >= 7"` is still config, not
-  trusted code. Keep it that way if you add rule kinds.
+- **Rewards/gamification was removed entirely (2026-11-11, user's request: "remove the rewards
+  section from everywhere")** — no points, badges, leaderboard or team goal anywhere: deleted
+  `backend/logic/gamification.py` + `config/gamification.json`, the `/rewards` + `/leaderboard`
+  routes, every points insert (sessions/symptoms/assess/mood/sleep/CYD paths, seed history),
+  the `points`/`badges` table definitions (an older `data/astro.db` may still contain those two
+  tables — harmless, nothing reads them), `"points"` from `/summary`, `/crew` and the CYD
+  `session` protocol message, Doctor AI's rewards context line, the React nav item/route/
+  sidebar badge/Overview + Body mentions, and the CYD session screen's "N pts" header
+  (firmware compile-checked, **not flashed** — until it's reflashed, the old firmware just shows
+  "0 pts" since the field is gone). Older entries below that mention points/badges/Rewards are
+  historical. If a reward system ever comes back, parse any rule strings by hand, never `eval()`.
+- **Schedule page = the routine on the mission clock (2026-11-11, React rebuild)**:
+  `GET /astronauts/<id>/schedule` (self-or-surgeon) returns `backend/jobs/scheduler.py`'s
+  `day_plan()` -- mission day, seconds into it, `time_scale`, and every `config/routine.json`
+  entry with a status. **"done" comes from the DB** (an assessment for `vitals`, a
+  mood/sleep/exercise reading or activity, or an open sleep-tag toggle) inside the task's
+  window: from 1 mission hour before its slot up to the next same-kind slot, so one workout
+  never ticks off both exercise blocks. Otherwise `upcoming` → `due` once the clock passes
+  the slot → `missed` 3 mission hours later (or once the next same-kind slot starts). The
+  clock is `scheduler.clock_started_at` (set by `app.py`'s background loop) × `TIME_SCALE`,
+  so it restarts at 00:00 with the server, same as reminders always did. The page ticks the
+  clock locally and applies the upcoming→due→missed steps itself (`withLiveStatus` in
+  `frontend/src/pages/crew/Schedule.jsx`, same rules) so it never lags the dial. Doctor AI's
+  schedule context now includes each task's live status too.
+- **CYD session idle time is set by the laptop (2026-11-11)**: `backend/config.py`'s
+  `SESSION_IDLE_S` (default 600 s, env `ASTRO_SESSION_IDLE_S`) goes out in every `session`
+  message as `idle_s`; the CYD uses it for its own untouched-screen timeout (firmware
+  default 10 min if absent), so changing it never needs a reflash. While someone touches the
+  CYD it sends `{"type":"active","uid":…}` at most once a minute (no `cyd_event` broadcast
+  for it), and every CYD message refreshes the laptop's copy of the session
+  (`sessions.note_cyd_contact`). The laptop's own `SESSION_TIMEOUT_S` = idle + 30 s is only a
+  safety net. Before this, the laptop ended every CYD session exactly 2 min after the tap
+  even mid-use, because CYD touches never reached it.
+- **Sidebar (React, 2026-11-11)**: tablet/desktop = sticky column that collapses to a 76px
+  icon rail (edge chevron or Ctrl/⌘+B, saved in localStorage `ah-sidebar`, first visit
+  collapsed below 1200px); only `AppShell`'s wrapper animates width, and inside
+  `Sidebar.jsx` every icon/avatar sits at the same x in both widths (labels fade + clip),
+  rail tooltips are portalled to `<body>`. Phones (<768px) = ☰ in the top bar opening the
+  same sidebar as a slide-in drawer (Account + Log out live in its user card; the top bar
+  hides them there).
 - **Mission comms delay**: `config/missions.json` profiles each have their own delay; everything
   is sped up by `TIME_SCALE` (`backend/config.py`, default 60, override with `ASTRO_TIME_SCALE`)
   so e.g. a 20-minute Mars-transit delay becomes a ~20s real wait. Messages carry a `deliver_at`

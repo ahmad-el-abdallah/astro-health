@@ -11,3 +11,7 @@ node_modules/
 video3-src/
 video3b-src/
 docs/archive/
+
+# React frontend: BodyParts3D download cache for scripts/build-anatomy.mjs (the built
+# frontend/public/models/anatomy.glb and frontend/dist/ ARE committed)
+frontend/.anatomy-cache/

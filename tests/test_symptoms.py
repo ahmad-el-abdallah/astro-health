@@ -16,17 +16,15 @@ def test_catalog_has_the_eight_firmware_symptoms():
         assert s["guidance"]
 
 
-def test_record_inserts_symptom_and_awards_points(fresh_db):
+def test_record_inserts_symptom(fresh_db):
     with db.write_conn() as conn:
         astro_id = seed_minimal(conn)
         lvl = symptoms.record(conn, astro_id, ["headache"])
     assert lvl == "YELLOW"
     with db.write_conn() as conn:
         row = conn.execute("SELECT items_json, level FROM symptoms WHERE astronaut_id = ?", (astro_id,)).fetchone()
-        points = conn.execute("SELECT amount, reason FROM points WHERE astronaut_id = ?", (astro_id,)).fetchone()
     assert json.loads(row["items_json"]) == ["headache"]
     assert row["level"] == "YELLOW"
-    assert points["reason"] == "symptom_report"
 
 
 def test_record_red_symptom_level(fresh_db):

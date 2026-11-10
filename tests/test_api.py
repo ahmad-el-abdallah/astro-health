@@ -195,13 +195,11 @@ def test_content_and_health_rules_and_routine_are_served(client):
         assert isinstance(res.get_json(), dict)
 
 
-def test_leaderboard_and_rewards(client):
-    board = client.get("/api/leaderboard").get_json()
-    assert len(board) == 2
-    assert board[0]["points"] >= board[-1]["points"]
+def test_rewards_routes_are_gone(client):
     login_as(client, AHMAD_UID)
-    rewards = client.get("/api/rewards/1").get_json()
-    assert "points" in rewards and "badge_catalog" in rewards
+    assert client.get("/api/rewards/1").status_code == 404
+    assert client.get("/api/leaderboard").status_code == 404
+    assert "points" not in client.get("/api/astronauts/1/summary").get_json()
 
 
 def test_export_csv(client):
@@ -292,12 +290,8 @@ def test_mood_logs_a_reading_with_the_right_level(client):
         reading = conn.execute(
             "SELECT * FROM readings WHERE astronaut_id = ? AND indicator = 'mood' ORDER BY id DESC LIMIT 1", (1,)
         ).fetchone()
-        points = conn.execute(
-            "SELECT amount FROM points WHERE astronaut_id = ? AND reason = 'mood_logged' ORDER BY id DESC LIMIT 1", (1,)
-        ).fetchone()
     assert reading["level"] == "GREEN"
     assert json.loads(reading["value_json"])["note"] == "crew morale is high"
-    assert points is not None and points["amount"] > 0
 
 
 def test_mood_low_score_evaluates_to_a_worse_level(client):
@@ -355,12 +349,8 @@ def test_sleep_computes_hours_and_evaluates_level(client):
         reading = conn.execute(
             "SELECT * FROM readings WHERE astronaut_id = ? AND indicator = 'sleep' ORDER BY id DESC LIMIT 1", (1,)
         ).fetchone()
-        bonus = conn.execute(
-            "SELECT amount FROM points WHERE astronaut_id = ? AND reason = 'good_sleep_night' ORDER BY id DESC LIMIT 1", (1,)
-        ).fetchone()
     value = json.loads(reading["value_json"])
     assert value == {"hours": 8.0, "bedtime": "23:00", "wake_time": "07:00"}
-    assert bonus is not None and bonus["amount"] > 0
 
 
 def test_sleep_handles_overnight_wraparound(client):
@@ -405,7 +395,7 @@ def test_consult_truncates_oversized_history(client, monkeypatch_module):
     captured = {}
 
     def fake_ask(message, astro_name, mission_label, hazard_lines, body_parts, symptoms_catalog=None,
-                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None, rewards_line=None):
+                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None):
         captured["history"] = history
         return {"region": None, "intensity": None, "reply": "ok"}
 
@@ -422,7 +412,7 @@ def test_consult_drops_non_user_assistant_roles_from_history(client, monkeypatch
     captured = {}
 
     def fake_ask(message, astro_name, mission_label, hazard_lines, body_parts, symptoms_catalog=None,
-                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None, rewards_line=None):
+                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None):
         captured["history"] = history
         return {"region": None, "intensity": None, "reply": "ok"}
 
@@ -440,7 +430,7 @@ def test_consult_passes_elevated_regions_when_something_is_flagged(client, monke
     captured = {}
 
     def fake_ask(message, astro_name, mission_label, hazard_lines, body_parts, symptoms_catalog=None,
-                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None, rewards_line=None):
+                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None):
         captured["elevated_today"] = elevated_today
         return {"region": None, "intensity": None, "reply": "ok"}
 
@@ -457,7 +447,7 @@ def test_consult_passes_empty_elevated_regions_for_a_clean_astronaut(client, mon
     captured = {}
 
     def fake_ask(message, astro_name, mission_label, hazard_lines, body_parts, symptoms_catalog=None,
-                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None, rewards_line=None):
+                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None):
         captured["elevated_today"] = elevated_today
         return {"region": None, "intensity": None, "reply": "ok"}
 
@@ -471,7 +461,7 @@ def test_consult_passes_empty_elevated_regions_for_a_clean_astronaut(client, mon
 
 def test_consult_passes_new_decision_fields_through_unchanged(client, monkeypatch_module):
     def fake_ask(message, astro_name, mission_label, hazard_lines, body_parts, symptoms_catalog=None,
-                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None, rewards_line=None):
+                 history=None, elevated_today=None, schedule_lines=None, trend_lines=None):
         return {
             "region": None, "intensity": None,
             "vital": {"heart_rate": 140},
@@ -531,18 +521,6 @@ def test_alert_route_requires_login(client):
     client.post("/api/auth/logout")
     res = client.post("/api/astronauts/1/alert", json={"text": "hello"})
     assert res.status_code == 401
-
-
-def test_rewards_summary_agrees_with_the_rewards_route(client):
-    from backend import db as db_module
-    from backend.logic.gamification import rewards_summary
-
-    login_as(client, AHMAD_UID)
-    route_result = client.get("/api/rewards/1").get_json()
-    with db_module.write_conn() as conn:
-        summary = rewards_summary(conn, 1)
-    assert route_result["points"] == summary["points"]
-    assert {b["id"] for b in route_result["badges"]} == {b["id"] for b in summary["badges"]}
 
 
 def test_speak_rejects_empty_text(client):
@@ -719,3 +697,22 @@ def test_reset_demo_restores_seeded_crew(client):
     assert "Ahmad" in names
     tags = {t["uid"] for t in client.get("/api/tags").get_json()}
     assert "9B:25:0F:54" in tags
+
+
+def test_schedule_route_returns_todays_plan_with_statuses(client):
+    login_as(client, AHMAD_UID)
+    plan = client.get("/api/astronauts/1/schedule").get_json()
+    assert plan["day"] >= 1 and plan["time_scale"] > 0
+    assert plan["entries"] and all(e["status"] in ("done", "due", "missed", "upcoming") for e in plan["entries"])
+
+
+def test_schedule_route_is_private(client):
+    login_as(client, SAMEER_UID)
+    assert client.get("/api/astronauts/1/schedule").status_code == 403
+
+
+def test_history_rows_say_where_each_reading_came_from(client):
+    login_as(client, AHMAD_UID)
+    client.post("/api/astronauts/1/assess", json={"heart_rate": 71})
+    rows = client.get("/api/astronauts/1/history?indicator=heart_rate&days=1").get_json()
+    assert rows and rows[-1]["source"] == "manual"

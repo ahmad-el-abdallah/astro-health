@@ -11,7 +11,7 @@ LEVELS = {"GREEN", "YELLOW", "RED"}
 # Messages the CYD sends to the laptop.
 CYD_TO_LAPTOP_TYPES = {
     "hello", "scan", "mood", "symptoms", "reaction", "breathing_done",
-    "emergency", "cancel_emergency", "end_session", "pong", "log",
+    "emergency", "cancel_emergency", "end_session", "pong", "log", "active",
 }
 # Messages the laptop sends to the CYD.
 LAPTOP_TO_CYD_TYPES = {
@@ -51,8 +51,11 @@ def encode(msg_type, **fields):
 
 # ---- convenience builders for each laptop -> CYD message type ----
 
-def session(name, uid, level, points):
-    return encode("session", name=name, uid=uid, level=level, points=points)
+def session(name, uid, level, idle_s=None):
+    """idle_s: how long the CYD keeps this session open untouched (older firmware ignores it)."""
+    if idle_s is None:
+        return encode("session", name=name, uid=uid, level=level)
+    return encode("session", name=name, uid=uid, level=level, idle_s=int(idle_s))
 
 
 def status(name, level, note):

@@ -66,7 +66,9 @@ static const int PIN_SPK = 26;
 
 // ---------------- settings ----------------
 static const char* FW_VERSION = "1.0";
-static const uint32_t SESSION_IDLE_MS = 2UL * 60 * 1000;   // screen 2: back to Idle after this long untouched
+static const uint32_t DEFAULT_SESSION_IDLE_MS = 10UL * 60 * 1000;  // screen 2: back to Idle after this long untouched
+                                                                  // (the laptop overrides it with each session's idle_s)
+static const uint32_t ACTIVE_PING_MS = 60UL * 1000;         // while touched, tell the laptop at most this often
 static const uint32_t LAPTOP_OFFLINE_MS = 10UL * 1000;      // no `ping` for this long -> "Laptop offline"
 static const uint32_t TOAST_MS = 3000;
 static const uint32_t SOS_HOLD_MS = 2000;                   // hold the corner SOS button this long to send `emergency`
@@ -102,8 +104,9 @@ uint32_t toastUntilMs = 0;
 
 // the active session (empty uid = nobody tapped in / laptop hasn't named them yet)
 String curUid = "", curName = "", curLevel = "GRAY";
-long curPoints = 0;
 uint32_t lastTouchMs = 0;
+uint32_t sessionIdleMs = DEFAULT_SESSION_IDLE_MS;
+uint32_t lastActivePingMs = 0;
 
 // exercise timer
 bool exerciseRunning = false;

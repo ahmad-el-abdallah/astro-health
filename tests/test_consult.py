@@ -368,16 +368,15 @@ def test_system_prompt_includes_symptom_catalog():
     assert '"nausea" (Nausea)' in prompt
 
 
-def test_system_prompt_includes_schedule_trends_rewards_when_present():
+def test_system_prompt_includes_schedule_and_trends_when_present():
     prompt = consult._system_prompt(
         "Ahmad", "Mars transit", [], FAKE_BODY_PARTS,
         schedule_lines=["07:00 - Morning vitals check"],
         trend_lines=["Heart rate, last 7 days: avg 78 bpm (range 65-95)"],
-        rewards_line="Progress: 340 points.",
     )
     assert "07:00 - Morning vitals check" in prompt
     assert "Heart rate, last 7 days" in prompt
-    assert "Progress: 340 points." in prompt
+    assert "points" not in prompt.lower()
 
 
 def test_system_prompt_omits_new_context_blocks_when_absent():

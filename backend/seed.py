@@ -19,7 +19,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from backend import db
-from backend.config import health_rules as load_health_rules, gamification as load_gamification, missions as load_missions
+from backend.config import health_rules as load_health_rules, missions as load_missions
 from backend.logic.health_rules import evaluate, symptom_level, overall_level
 
 SEED = 42
@@ -137,15 +137,7 @@ def _insert_activity(conn, astronaut_id, kind, started_at, ended_at, data):
     )
 
 
-def _insert_points(conn, astronaut_id, ts, amount, reason):
-    if amount:
-        conn.execute(
-            "INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, ?)",
-            (astronaut_id, _iso(ts), amount, reason),
-        )
-
-
-def _seed_history(conn, rng, astronaut_id, story, baseline_ms, points_cfg):
+def _seed_history(conn, rng, astronaut_id, story, baseline_ms):
     today = datetime.now(timezone.utc).date()
     for day_index in range(DAYS):
         day_date = today - timedelta(days=(DAYS - 1 - day_index))
@@ -185,15 +177,11 @@ def _seed_history(conn, rng, astronaut_id, story, baseline_ms, points_cfg):
         day_levels.append(lvl)
         night_start = morning - timedelta(hours=8, minutes=30)
         _insert_activity(conn, astronaut_id, "sleep", night_start, morning, {"hours": sleep_hours})
-        _insert_points(conn, astronaut_id, morning, points_cfg.get("sleep_logged", 0), "sleep logged")
-        if sleep_hours >= 7:
-            _insert_points(conn, astronaut_id, morning, points_cfg.get("good_sleep_night", 0), "good sleep night")
 
         mood_v = max(1, min(5, round(_noisy(rng, prof["mood"], 0.6))))
         lvl = evaluate("mood", mood_v)
         _insert_reading(conn, astronaut_id, evening, "mood", mood_v, lvl)
         day_levels.append(lvl)
-        _insert_points(conn, astronaut_id, evening, points_cfg.get("mood_logged", 0), "mood logged")
 
         exercise_min = max(0, round(_noisy(rng, prof["exercise"], 15)))
         lvl = evaluate("exercise", exercise_min)
@@ -203,9 +191,6 @@ def _seed_history(conn, rng, astronaut_id, story, baseline_ms, points_cfg):
             ex_start = morning + timedelta(hours=1)
             _insert_activity(conn, astronaut_id, "exercise", ex_start, ex_start + timedelta(minutes=exercise_min),
                               {"minutes": exercise_min, "tag": "T2000001"})
-            _insert_points(conn, astronaut_id, ex_start, points_cfg.get("exercise_session", 0), "exercise session")
-            if exercise_min >= 90:
-                _insert_points(conn, astronaut_id, ex_start, points_cfg.get("full_exercise_day", 0), "full exercise day")
 
         water_ml = max(500, round(_noisy(rng, prof["water"], 250)))
         lvl = evaluate("water", water_ml)
@@ -216,7 +201,6 @@ def _seed_history(conn, rng, astronaut_id, story, baseline_ms, points_cfg):
         for meal_time in (morning + timedelta(hours=4), evening - timedelta(hours=2)):
             food = OBJECT_TAGS[4 + rng.randrange(6)]
             _insert_activity(conn, astronaut_id, "meal", meal_time, meal_time, {"tag": food[0], "label": food[2], **food[3]})
-            _insert_points(conn, astronaut_id, meal_time, points_cfg.get("meal_logged", 0), "meal logged")
 
         # Reaction test roughly every other day.
         if day_index % 2 == 0:
@@ -230,13 +214,11 @@ def _seed_history(conn, rng, astronaut_id, story, baseline_ms, points_cfg):
             _insert_activity(conn, astronaut_id, "reaction", evening, evening, {
                 "trials_ms": trials, "avg_ms": avg_ms, "lapses": lapses, "false_starts": false_starts,
             })
-            _insert_points(conn, astronaut_id, evening, points_cfg.get("reaction_test", 0), "reaction test")
 
         # Breathing sessions: Alex leans on these to recover from the week-3 mood dip.
         do_breathing = (story == "mood_dip" and 18 <= day_index <= 22) or rng.random() < 0.08
         if do_breathing:
             _insert_activity(conn, astronaut_id, "breathing", evening, evening + timedelta(seconds=60), {"seconds": 60})
-            _insert_points(conn, astronaut_id, evening, points_cfg.get("breathing_session", 0), "breathing session")
 
         symptoms = prof["symptoms"]
         sym_level = symptom_level(symptoms)
@@ -246,7 +228,6 @@ def _seed_history(conn, rng, astronaut_id, story, baseline_ms, points_cfg):
                 (astronaut_id, _iso(evening), json.dumps(symptoms), sym_level),
             )
             day_levels.append(sym_level)
-            _insert_points(conn, astronaut_id, evening, points_cfg.get("symptom_report", 0), "symptom report")
 
         overall = overall_level(day_levels)
         note = "All indicators normal" if overall == "GREEN" else "Some indicators need attention"
@@ -254,8 +235,6 @@ def _seed_history(conn, rng, astronaut_id, story, baseline_ms, points_cfg):
             "INSERT INTO assessments (astronaut_id, ts, overall_level, note, details_json) VALUES (?, ?, ?, ?, ?)",
             (astronaut_id, _iso(evening), overall, note, json.dumps({"levels": day_levels})),
         )
-        _insert_points(conn, astronaut_id, evening, points_cfg.get("assess_complete", 0), "daily assessment")
-        _insert_points(conn, astronaut_id, morning, points_cfg.get("vitals_check", 0), "vitals check")
 
 
 def seed_all():
@@ -263,7 +242,6 @@ def seed_all():
     db.wipe_db()
     db.init_db()
     rng = random.Random(SEED)
-    points_cfg = load_gamification()["points"]
     missions_cfg = load_missions()
 
     with db.write_conn() as conn:
@@ -287,7 +265,7 @@ def seed_all():
 
         for a in ASTRONAUTS:
             if "story" in a:
-                _seed_history(conn, rng, astronaut_ids[a["uid"]], a["story"], a["baseline_reaction_ms"], points_cfg)
+                _seed_history(conn, rng, astronaut_ids[a["uid"]], a["story"], a["baseline_reaction_ms"])
 
 
 if __name__ == "__main__":

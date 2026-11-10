@@ -123,9 +123,6 @@ void drawSessionScreen() {
   tft.setTextDatum(ML_DATUM);
   tft.setTextColor(C_BG, colorForLevel(curLevel));
   tft.drawString(curName.length() ? curName : curUid, 10, 17, 2);
-  tft.setTextDatum(MR_DATUM);
-  char pts[16]; snprintf(pts, sizeof(pts), "%ld pts", curPoints);
-  tft.drawString(pts, SCRW - 10, 17, 2);
 
   int w = sessColW();
   drawBigButton(4, SESS_TOP, w, SESS_H, "Mood", C_ACCENT, C_TEXT);
@@ -142,12 +139,12 @@ void sessionTouch(int x, int y) {
   else if (hitRect(4 + w + SESS_GAP, SESS_TOP, w, SESS_H, x, y)) { screen = SCR_SYMPTOMS; drawSymptomsScreen(); }
   else if (hitRect(4, SESS_TOP + SESS_H + SESS_GAP, w, SESS_H, x, y)) { startReactionTest(); }
   else if (hitRect(4 + w + SESS_GAP, SESS_TOP + SESS_H + SESS_GAP, w, SESS_H, x, y)) { startBreathing(); }
-  else if (hitRect(4, SESS_TOP + 2 * (SESS_H + SESS_GAP), 2 * w + SESS_GAP, SESS_H, x, y)) { endSessionLocally(); }
+  else if (hitRect(4, SESS_TOP + 2 * (SESS_H + SESS_GAP), 2 * w + SESS_GAP, SESS_H, x, y)) { endSessionLocally("done"); }
 }
 
-void endSessionLocally() {
-  sendEndSession(curUid);
-  curUid = ""; curName = ""; curLevel = "GRAY"; curPoints = 0;
+void endSessionLocally(const char* reason) {
+  sendEndSession(curUid, reason);
+  curUid = ""; curName = ""; curLevel = "GRAY";
   goIdle();
 }
 
@@ -372,16 +369,18 @@ void onCardScanned(const String& uid) {
   }
   // Optimistic: open the session menu locally even if the laptop is slow
   // or offline (docs/build-prompt.md section 10) -- onSessionMsg() will
-  // fill in the real name/level/points if and when it arrives.
-  curUid = uid; curName = ""; curLevel = "GRAY"; curPoints = 0;
+  // fill in the real name/level if and when it arrives.
+  curUid = uid; curName = ""; curLevel = "GRAY";
   screen = SCR_SESSION;
   drawSessionScreen();
 }
 
-void onSessionMsg(const String& name, const String& uid, const String& level, long points) {
+void onSessionMsg(const String& name, const String& uid, const String& level, uint32_t idleS) {
   curUid = uid.length() ? uid : curUid;
-  curName = name; curLevel = level; curPoints = points;
+  curName = name; curLevel = level;
+  if (idleS > 0) sessionIdleMs = idleS * 1000UL;
   lastTouchMs = millis();
+  lastActivePingMs = lastTouchMs;
   screen = SCR_SESSION;
   drawSessionScreen();
 }
@@ -441,6 +440,11 @@ void handleTouch() {
   }
   lastDownMs = now;
   lastTouchMs = now;
+  // Keep the laptop's own copy of this session alive while someone is using the screen.
+  if (curUid.length() && now - lastActivePingMs > ACTIVE_PING_MS) {
+    lastActivePingMs = now;
+    sendActive(curUid);
+  }
   if (wasDown) return;  // one action per press
   wasDown = true;
 
@@ -505,8 +509,8 @@ void updateScreenTimers() {
     }
   }
 
-  if (screen == SCR_SESSION && now - lastTouchMs > SESSION_IDLE_MS) {
-    endSessionLocally();
+  if (screen == SCR_SESSION && now - lastTouchMs > sessionIdleMs) {
+    endSessionLocally("idle");
     return;
   }
 

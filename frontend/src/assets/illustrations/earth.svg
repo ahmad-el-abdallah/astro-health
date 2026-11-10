@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1000" viewBox="0 0 1000 1000" style="position: absolute; inset: 0">
+        <defs>
+          <clipPath id="lg-earth"><circle cx="500" cy="500" r="450"></circle></clipPath>
+          <radialGradient id="lg-ocean" cx="30%" cy="24%" r="85%"><stop offset="0" stop-color="#2f78c9"></stop><stop offset="0.4" stop-color="#174a91"></stop><stop offset="1" stop-color="#061537"></stop></radialGradient>
+          <radialGradient id="lg-shade" cx="22%" cy="16%" r="95%"><stop offset="0.3" stop-color="#020611" stop-opacity="0"></stop><stop offset="0.62" stop-color="#020611" stop-opacity="0.55"></stop><stop offset="0.85" stop-color="#020611" stop-opacity="0.92"></stop></radialGradient>
+          <radialGradient id="lg-rim" cx="50%" cy="50%" r="50%"><stop offset="0.86" stop-color="#9fd0ff" stop-opacity="0"></stop><stop offset="0.97" stop-color="#9fd0ff" stop-opacity="0.35"></stop><stop offset="1" stop-color="#d6ecff" stop-opacity="0.7"></stop></radialGradient>
+          <radialGradient id="lg-spec" cx="32%" cy="26%" r="30%"><stop offset="0" stop-color="#ffffff" stop-opacity="0.28"></stop><stop offset="1" stop-color="#ffffff" stop-opacity="0"></stop></radialGradient>
+          <filter id="lg-soft"><feGaussianBlur stdDeviation="1.2"></feGaussianBlur></filter>
+          <filter id="lg-cloudblur"><feGaussianBlur stdDeviation="6"></feGaussianBlur></filter>
+          <filter id="lg-glow"><feGaussianBlur stdDeviation="8"></feGaussianBlur></filter>
+        </defs>
+        <circle cx="500" cy="500" r="456" fill="none" stroke="#8cc0ff" stroke-width="14" opacity="0.55" filter="url(#lg-glow)"></circle>
+        <g clip-path="url(#lg-earth)">
+          <rect x="0" y="0" width="1000" height="1000" fill="url(#lg-ocean)"></rect>
+          <g filter="url(#lg-soft)" opacity="0.92">
+            
+              <g transform="translate(0 110) scale(0.62)">
+                <path d="M120 260 C180 200 300 210 330 270 C360 330 300 360 320 420 C340 480 280 520 240 500 C200 480 210 420 160 400 C110 380 80 310 120 260Z" fill="#4d7a4c"></path>
+                <path d="M300 560 C340 540 400 560 410 610 C420 670 380 760 340 800 C310 830 290 780 300 730 C310 680 270 620 300 560Z" fill="#5a7f45"></path>
+                <path d="M520 220 C580 190 660 200 700 240 C740 280 720 320 680 330 C640 340 620 380 580 370 C540 360 500 300 520 220Z" fill="#567f4b"></path>
+                <path d="M560 420 C620 400 690 430 700 500 C710 570 670 650 620 690 C590 715 570 660 560 610 C550 560 520 470 560 420Z" fill="#9a8458"></path>
+                <path d="M600 460 C640 450 670 480 660 520 C650 560 610 560 595 520 C585 495 585 470 600 460Z" fill="#3f7a4e"></path>
+                <path d="M760 300 C840 270 940 300 960 360 C980 420 920 440 880 430 C840 420 800 460 770 420 C740 380 720 320 760 300Z" fill="#4c8550"></path>
+                <path d="M820 620 C870 600 930 620 930 660 C930 700 880 710 840 700 C800 690 790 640 820 620Z" fill="#b39a63"></path>
+              </g>
+            
+              <g transform="translate(620 110) scale(0.62)">
+                <path d="M120 260 C180 200 300 210 330 270 C360 330 300 360 320 420 C340 480 280 520 240 500 C200 480 210 420 160 400 C110 380 80 310 120 260Z" fill="#4d7a4c"></path>
+                <path d="M300 560 C340 540 400 560 410 610 C420 670 380 760 340 800 C310 830 290 780 300 730 C310 680 270 620 300 560Z" fill="#5a7f45"></path>
+                <path d="M520 220 C580 190 660 200 700 240 C740 280 720 320 680 330 C640 340 620 380 580 370 C540 360 500 300 520 220Z" fill="#567f4b"></path>
+                <path d="M560 420 C620 400 690 430 700 500 C710 570 670 650 620 690 C590 715 570 660 560 610 C550 560 520 470 560 420Z" fill="#9a8458"></path>
+                <path d="M600 460 C640 450 670 480 660 520 C650 560 610 560 595 520 C585 495 585 470 600 460Z" fill="#3f7a4e"></path>
+                <path d="M760 300 C840 270 940 300 960 360 C980 420 920 440 880 430 C840 420 800 460 770 420 C740 380 720 320 760 300Z" fill="#4c8550"></path>
+                <path d="M820 620 C870 600 930 620 930 660 C930 700 880 710 840 700 C800 690 790 640 820 620Z" fill="#b39a63"></path>
+              </g>
+            
+              <g transform="translate(1240 110) scale(0.62)">
+                <path d="M120 260 C180 200 300 210 330 270 C360 330 300 360 320 420 C340 480 280 520 240 500 C200 480 210 420 160 400 C110 380 80 310 120 260Z" fill="#4d7a4c"></path>
+                <path d="M300 560 C340 540 400 560 410 610 C420 670 380 760 340 800 C310 830 290 780 300 730 C310 680 270 620 300 560Z" fill="#5a7f45"></path>
+                <path d="M520 220 C580 190 660 200 700 240 C740 280 720 320 680 330 C640 340 620 380 580 370 C540 360 500 300 520 220Z" fill="#567f4b"></path>
+                <path d="M560 420 C620 400 690 430 700 500 C710 570 670 650 620 690 C590 715 570 660 560 610 C550 560 520 470 560 420Z" fill="#9a8458"></path>
+                <path d="M600 460 C640 450 670 480 660 520 C650 560 610 560 595 520 C585 495 585 470 600 460Z" fill="#3f7a4e"></path>
+                <path d="M760 300 C840 270 940 300 960 360 C980 420 920 440 880 430 C840 420 800 460 770 420 C740 380 720 320 760 300Z" fill="#4c8550"></path>
+                <path d="M820 620 C870 600 930 620 930 660 C930 700 880 710 840 700 C800 690 790 640 820 620Z" fill="#b39a63"></path>
+              </g>
+            
+          </g>
+          <ellipse cx="500" cy="62" rx="300" ry="40" fill="#e9f2ff" opacity="0.85" filter="url(#lg-soft)"></ellipse>
+          <g filter="url(#lg-cloudblur)" opacity="0.6">
+            
+              <g transform="translate(0 0)">
+                <ellipse cx="200" cy="330" rx="140" ry="22" fill="#ffffff" transform="rotate(-12 200 330)"></ellipse>
+                <ellipse cx="430" cy="470" rx="110" ry="18" fill="#ffffff" transform="rotate(8 430 470)"></ellipse>
+                <ellipse cx="640" cy="300" rx="160" ry="20" fill="#ffffff" transform="rotate(-6 640 300)"></ellipse>
+                <ellipse cx="800" cy="560" rx="130" ry="24" fill="#ffffff" transform="rotate(14 800 560)"></ellipse>
+                <ellipse cx="300" cy="680" rx="120" ry="16" fill="#ffffff" transform="rotate(-18 300 680)"></ellipse>
+                <ellipse cx="900" cy="200" rx="90" ry="14" fill="#ffffff"></ellipse>
+              </g>
+            
+              <g transform="translate(1000 0)">
+                <ellipse cx="200" cy="330" rx="140" ry="22" fill="#ffffff" transform="rotate(-12 200 330)"></ellipse>
+                <ellipse cx="430" cy="470" rx="110" ry="18" fill="#ffffff" transform="rotate(8 430 470)"></ellipse>
+                <ellipse cx="640" cy="300" rx="160" ry="20" fill="#ffffff" transform="rotate(-6 640 300)"></ellipse>
+                <ellipse cx="800" cy="560" rx="130" ry="24" fill="#ffffff" transform="rotate(14 800 560)"></ellipse>
+                <ellipse cx="300" cy="680" rx="120" ry="16" fill="#ffffff" transform="rotate(-18 300 680)"></ellipse>
+                <ellipse cx="900" cy="200" rx="90" ry="14" fill="#ffffff"></ellipse>
+              </g>
+            
+          </g>
+          <rect x="0" y="0" width="1000" height="1000" fill="url(#lg-spec)"></rect>
+          <circle cx="500" cy="500" r="450" fill="url(#lg-rim)"></circle>
+          <rect x="0" y="0" width="1000" height="1000" fill="url(#lg-shade)"></rect>
+        </g>
+      </svg>

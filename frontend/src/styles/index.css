@@ -1,0 +1,315 @@
+@import "tailwindcss";
+
+/* Self-hosted fonts (SIL OFL) -- bundled by Vite, no Google Fonts call, works offline. */
+@font-face { font-family: "Inter"; font-weight: 400; font-display: swap; src: url("../assets/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; font-display: swap; src: url("../assets/fonts/inter-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url("../assets/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; font-display: swap; src: url("../assets/fonts/inter-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 500; font-display: swap; src: url("../assets/fonts/space-grotesk-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 600; font-display: swap; src: url("../assets/fonts/space-grotesk-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-weight: 700; font-display: swap; src: url("../assets/fonts/space-grotesk-latin-700-normal.woff2") format("woff2"); }
+
+/* Role tokens straight from AstroHealth-Redesign/design-system/theme.css + tokens.json.
+   <html data-role="crew|doctor"> is set by src/auth/AuthProvider.jsx after sign-in:
+   crew = blue accent, doctor (Flight Surgeon) = teal accent. */
+:root,
+[data-role="crew"] {
+  --ah-bg: #0b1020;
+  --ah-surface-1: #131a30;
+  --ah-surface-nav: #121a30;
+  --ah-surface-2: #182039;
+  --ah-surface-3: #1f2945;
+  --ah-surface-input: #0e1427;
+  --ah-border: #1f2844;
+  --ah-border-strong: #2c3757;
+  --ah-divider: #222b47;
+  --ah-accent: #4a68ec;
+  --ah-accent-hover: #5a77f2;
+  --ah-accent-on: #ffffff;
+  --ah-accent-soft: #24336b;
+  --ah-accent-text: #8fa6ff;
+  --ah-accent-rgb: 74 104 236;
+  --ah-text: #e8ecf7;
+  --ah-text-2: #b4bdd8;
+  --ah-text-muted: #9aa4c2;
+  --ah-text-subtle: #8a94b2;
+  --ah-placeholder: #6f7a99;
+  --ah-chart-line: #8fa6ff;
+  --ah-sleep-awake: #ff7a6b;
+  --ah-sleep-rem: #c3cdff;
+  --ah-sleep-light: #7f96e8;
+  --ah-sleep-deep: #3550c4;
+  --ah-none-bg: #232c47;
+  --ah-none-fg: #b4bdd8;
+  /* Glass (see .ah-glass below): translucent tint + light edge, crew = blue cast */
+  --ah-glass-tint: rgba(13, 20, 44, .36);
+  --ah-glass-tint-strong: rgba(11, 17, 38, .74);
+  --ah-glass-tint-solid: rgba(12, 18, 38, .9);
+  --ah-glass-edge: rgba(160, 182, 255, .14);
+  --ah-glass-rim: rgba(214, 224, 255, .62);
+  --ah-glass-raised: rgba(255, 255, 255, .055);
+  --ah-glass-control: rgba(255, 255, 255, .085);
+  --ah-glass-input: rgba(4, 7, 20, .42);
+  --ah-glow-1: rgba(74, 104, 236, .34);
+  --ah-glow-2: rgba(47, 191, 168, .14);
+  --ah-planet-air: rgba(96, 150, 255, .55);
+  /* Frost grain: static SVG noise, rasterized once and tiled -- the fine texture that makes
+     the panels read as frosted glass instead of flat tinted plastic. */
+  --ah-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .26 0 0 0 -.075'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+[data-role="doctor"] {
+  --ah-bg: #091118;
+  --ah-surface-1: #101c26;
+  --ah-surface-nav: #0f1b26;
+  --ah-surface-2: #13232f;
+  --ah-surface-3: #16303a;
+  --ah-surface-input: #0c161e;
+  --ah-border: #1c2c3a;
+  --ah-border-strong: #1c3340;
+  --ah-divider: #1a2a36;
+  --ah-accent: #2fbfa8;
+  --ah-accent-hover: #3fd0b9;
+  --ah-accent-on: #062019;
+  --ah-accent-soft: #16303a;
+  --ah-accent-text: #5fd6c2;
+  --ah-accent-rgb: 47 191 168;
+  --ah-text: #e6eef3;
+  --ah-text-2: #b5c7d2;
+  --ah-text-muted: #93a9b8;
+  --ah-text-subtle: #8aa0ae;
+  --ah-chart-line: #5fd6c2;
+  --ah-sleep-rem: #bff0e6;
+  --ah-sleep-light: #6fc7b8;
+  --ah-sleep-deep: #1f7a6b;
+  --ah-none-bg: #1d2b36;
+  --ah-none-fg: #b5c7d2;
+  --ah-glass-tint: rgba(7, 24, 31, .36);
+  --ah-glass-tint-strong: rgba(6, 20, 26, .76);
+  --ah-glass-tint-solid: rgba(7, 20, 26, .9);
+  --ah-glass-edge: rgba(120, 224, 206, .14);
+  --ah-glass-rim: rgba(208, 255, 244, .58);
+  --ah-glass-input: rgba(2, 10, 14, .42);
+  --ah-glow-1: rgba(47, 191, 168, .28);
+  --ah-glow-2: rgba(74, 104, 236, .16);
+  --ah-planet-air: rgba(80, 200, 220, .5);
+}
+
+/* Tailwind utilities backed by those variables, so one class (bg-surface, text-accent-text…)
+   automatically follows the active role. */
+@theme inline {
+  --color-bg: var(--ah-bg);
+  --color-surface: var(--ah-surface-1);
+  --color-nav: var(--ah-surface-nav);
+  --color-raised: var(--ah-glass-raised);
+  --color-control: var(--ah-glass-control);
+  --color-input: var(--ah-glass-input);
+  --color-line: var(--ah-glass-edge);
+  --color-line-strong: var(--ah-border-strong);
+  --color-divider: var(--ah-divider);
+  --color-accent: var(--ah-accent);
+  --color-accent-hover: var(--ah-accent-hover);
+  --color-accent-on: var(--ah-accent-on);
+  --color-accent-soft: var(--ah-accent-soft);
+  --color-accent-text: var(--ah-accent-text);
+  --color-ink: var(--ah-text);
+  --color-ink-2: var(--ah-text-2);
+  --color-muted: var(--ah-text-muted);
+  --color-subtle: var(--ah-text-subtle);
+  --color-placeholder: var(--ah-placeholder);
+  --color-chart-line: var(--ah-chart-line);
+  --color-none-bg: var(--ah-none-bg);
+  --color-none-fg: var(--ah-none-fg);
+}
+
+@theme {
+  --color-good-bg: #12352a;
+  --color-good-fg: #5fe0a0;
+  --color-good-edge: #1f5a43;
+  --color-check-bg: #3a3014;
+  --color-check-fg: #f5cd63;
+  --color-check-edge: #8a6d1f;
+  --color-alert-bg: #4a1e28;
+  --color-alert-fg: #ffa3a3;
+  --color-alert-edge: #a3384b;
+  --color-alert-surface: #2a1520;
+  --color-alert-border: #5a2533;
+  --color-alert-action: #e85a6a;
+  --color-risk-high: #ff8a8a;
+  --color-risk-medium: #f5cd63;
+  --color-risk-low: #5fe0a0;
+  --color-band-normal: #15302e;
+  --color-band-caution: #2e2a1c;
+  --color-mars: #e0734f;
+  --color-space: #05080f;
+
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+
+  --radius-card-s: 18px;
+  --radius-card: 20px;
+  --radius-card-l: 22px;
+  --radius-hero: 26px;
+
+  --ease-enter: cubic-bezier(.2, .7, .2, 1);
+}
+
+@layer base {
+  html, body, #root { min-height: 100%; }
+  body {
+    margin: 0;
+    background: #04070e;
+    color: var(--ah-text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 300ms ease;
+  }
+  a { color: var(--ah-accent-text); text-decoration: none; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--ah-accent-text); outline-offset: 2px; }
+  ::placeholder { color: var(--ah-placeholder); }
+  ::selection { background: rgb(var(--ah-accent-rgb) / .35); }
+
+  /* Thin, theme-matched scrollbars. */
+  * { scrollbar-width: thin; scrollbar-color: var(--ah-border-strong) transparent; }
+}
+
+@layer components {
+  /* Frosted glass panels (user's choice: real blur everywhere). Cheap-as-possible rules:
+     the app backdrop behind them never animates (SpaceBackdrop.jsx), glass is never
+     nested inside glass, and nothing that sits over the animating 3D views uses it.
+     html[data-glass="lite"] (Account → "Reduce glass effects") or the OS "reduce
+     transparency" setting drops the blur and keeps the look. */
+  /* What makes it read as real glass rather than a tinted box:
+     - a clear, low tint over a strong blur + saturation boost (the backdrop's colors glow
+       through, like frosted glass in front of a light);
+     - fine static frost grain (--ah-grain);
+     - light falling from the top: a brighter top band and a faint diagonal reflection;
+     - a specular rim (::before) -- bright where the light catches the top-left edge, fading
+       out along the sides, picking up the accent color at the bottom-right -- plus a darker
+       bottom inner edge for the slab's thickness;
+     - a soft contact shadow + a long ambient one so panels float above the backdrop.
+     The rim is a 1px masked ring, so it only covers the edge, never the content. */
+  .ah-glass, .ah-glass-strong, .ah-glass-flat {
+    position: relative;
+    border: 1px solid var(--ah-glass-edge);
+    background-image:
+      var(--ah-grain),
+      linear-gradient(112deg, rgba(255, 255, 255, 0) 34%, rgba(255, 255, 255, .032) 47%, rgba(255, 255, 255, 0) 60%),
+      linear-gradient(180deg, rgba(255, 255, 255, .09) 0%, rgba(255, 255, 255, .022) 32%, rgba(255, 255, 255, 0) 68%);
+    background-size: 180px 180px, 100% 100%, 100% 100%;
+    background-color: var(--ah-glass-tint);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .13),
+      inset 0 -1px 0 rgba(0, 0, 0, .28),
+      inset 0 0 32px rgba(255, 255, 255, .022),
+      0 1px 2px rgba(0, 0, 0, .3),
+      0 24px 56px -14px rgba(0, 0, 0, .6);
+    -webkit-backdrop-filter: blur(26px) saturate(185%) brightness(1.08);
+    backdrop-filter: blur(26px) saturate(185%) brightness(1.08);
+  }
+  .ah-glass-strong {
+    background-color: var(--ah-glass-tint-strong);
+    -webkit-backdrop-filter: blur(34px) saturate(170%) brightness(1.04);
+    backdrop-filter: blur(34px) saturate(170%) brightness(1.04);
+  }
+  /* Same glass material, no backdrop blur -- for things over animating content (the 3D
+     twin's toolbar, the login card), where a blur would be recomputed every frame. */
+  .ah-glass-flat {
+    background-color: var(--ah-glass-tint-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .ah-glass::before, .ah-glass-strong::before, .ah-glass-flat::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      148deg,
+      var(--ah-glass-rim) 0%,
+      rgba(255, 255, 255, .16) 18%,
+      rgba(255, 255, 255, .03) 40%,
+      rgba(255, 255, 255, 0) 60%,
+      rgb(var(--ah-accent-rgb) / .3) 86%,
+      rgba(255, 255, 255, .22) 100%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  .ah-eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ah-accent-text);
+  }
+  .ah-input {
+    min-height: 44px; width: 100%; box-sizing: border-box; padding: 0 12px;
+    background: var(--ah-glass-input); color: var(--ah-text);
+    border: 1px solid var(--ah-border-strong); border-radius: 10px;
+    transition: border-color 200ms, box-shadow 200ms;
+  }
+  .ah-input:hover { border-color: color-mix(in srgb, var(--ah-accent-text) 35%, var(--ah-border-strong)); }
+  .ah-input:focus {
+    outline: none; border-color: var(--ah-accent-text);
+    box-shadow: 0 0 0 4px rgb(var(--ah-accent-rgb) / .18);
+  }
+  textarea.ah-input { padding: 12px 14px; min-height: 92px; resize: vertical; line-height: 1.5; }
+  select.ah-input { padding-right: 32px; appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ah-text-muted) 50%), linear-gradient(135deg, var(--ah-text-muted) 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px; background-repeat: no-repeat; }
+}
+
+/* Floating labels on the 3D anatomy (Body page), like the reference dashboard's
+   "Mild inflammation" tags: a dot on the organ, a leader line, and a small glass box. */
+.ah-callout { position: relative; width: 0; height: 0; font-family: var(--font-sans); }
+.ah-callout__dot {
+  position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c, #e4ecff); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, #e4ecff) 25%, transparent);
+}
+.ah-callout__line { position: absolute; top: -0.5px; height: 1px; width: 46px; background: var(--c, #e4ecff); opacity: .7; }
+.ah-callout__box {
+  position: absolute; top: -18px; display: flex; flex-direction: column; gap: 1px; white-space: nowrap;
+  padding: 6px 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--c, #e4ecff) 45%, transparent);
+  background: var(--ah-grain), linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, 0) 60%), rgba(10, 14, 28, .82);
+  background-size: 180px 180px, 100% 100%;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 8px 22px rgba(0, 0, 0, .4);
+  color: var(--ah-text); font-size: 12px; line-height: 1.25;
+}
+.ah-callout__box small { color: var(--ah-text-muted); font-size: 11px; }
+.ah-callout--right .ah-callout__line { left: 4px; }
+.ah-callout--right .ah-callout__box { left: 50px; }
+.ah-callout--left .ah-callout__line { right: 4px; }
+.ah-callout--left .ah-callout__box { right: 50px; }
+.ah-callout[data-level="YELLOW"] { --c: #ffd25e; }
+.ah-callout[data-level="RED"] { --c: #ff6b6b; }
+.ah-callout[data-level="GREEN"] { --c: #8fa6ff; }
+
+/* Loading shimmer: moves with transform (GPU-composited) -- never background-position,
+   which repaints every frame (one of the causes of the old login screen's lag). */
+@keyframes ah-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes ah-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+/* Lite glass: same material (rim, grain, light) minus the live blur. */
+html[data-glass="lite"] .ah-glass,
+html[data-glass="lite"] .ah-glass-strong {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: var(--ah-glass-tint-solid);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .ah-glass, .ah-glass-strong, .ah-glass-flat {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: var(--ah-surface-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

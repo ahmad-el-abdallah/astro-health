@@ -13,14 +13,16 @@ import argparse
 import os
 import threading
 import time
+from datetime import timedelta
 
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template, send_from_directory
 from flask_socketio import SocketIO
 
 from backend import db, seed
 from backend.logic import sessions
 from backend.jobs import comms, scheduler
 from backend.routes import routes, admin_routes
+from backend import config
 from backend.config import DATA_DIR
 from backend.hardware.pico_bridge import PicoBridge
 from backend.hardware.serial_bridge import SerialBridge, find_port
@@ -30,6 +32,7 @@ from backend.hardware.wifi_bridge import (
 )
 
 BACKGROUND_TICK_S = 2
+LOGIN_LIFETIME = timedelta(hours=1)
 SECRET_KEY_PATH = os.path.join(DATA_DIR, "secret_key")
 
 
@@ -93,6 +96,9 @@ def create_app(args):
     # Persisted across restarts (see _load_or_create_secret_key) so signed-in
     # sessions survive both an ordinary page refresh and a dev-server restart.
     app.secret_key = _load_or_create_secret_key()
+    # Signed-in browsers stay signed in for an hour after their last request (the
+    # cookie is renewed on every request, so active use never logs you out).
+    app.permanent_session_lifetime = LOGIN_LIFETIME
     socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
     db.init_db()
@@ -125,11 +131,31 @@ def create_app(args):
     pico_bridge = PicoBridge(on_message=handle_cyd_message)
     pico_bridge.start()
 
-    @app.get("/")
-    def index():
+    # The old vanilla HTML/JS app, kept reachable only while its pages are being
+    # ported to React (frontend/) one at a time -- removed once the port is done.
+    @app.get("/legacy")
+    def legacy_index():
         return render_template("index.html")
 
+    # The React app (frontend/dist, built by `npm run build`). Real files (JS/CSS
+    # bundles, fonts, 3D models) are served as-is; any other path gets index.html so
+    # a deep link like /body or /doctor/alerts loads the app and React Router takes
+    # over. /api/* is never handed to the SPA -- an unknown API path stays a JSON 404.
+    # (/socket.io never reaches Flask's router at all; Flask-SocketIO intercepts it.)
+    @app.get("/", defaults={"path": ""})
+    @app.get("/<path:path>")
+    def spa(path):
+        if path == "api" or path.startswith("api/"):
+            return jsonify({"error": "not found"}), 404
+        dist = config.FRONTEND_DIST
+        if path and os.path.isfile(os.path.join(dist, path)):
+            return send_from_directory(dist, path)
+        if not os.path.isfile(os.path.join(dist, "index.html")):
+            return ("Frontend not built yet -- run: cd frontend && npm install && npm run build", 503)
+        return send_from_directory(dist, "index.html")
+
     start_time = time.time()
+    scheduler.clock_started_at = start_time  # the Schedule page's mission clock
 
     def background_loop():
         while True:

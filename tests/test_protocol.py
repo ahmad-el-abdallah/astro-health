@@ -28,10 +28,10 @@ def test_decode_requires_object_not_list():
 
 
 def test_encode_roundtrips_through_decode():
-    line = protocol.session("Omar Saleh", "A1000002", "YELLOW", 1509)
+    line = protocol.session("Omar Saleh", "A1000002", "YELLOW")
     assert line.endswith("\n")
     msg = protocol.decode(line)
-    assert msg == {"type": "session", "name": "Omar Saleh", "uid": "A1000002", "level": "YELLOW", "points": 1509}
+    assert msg == {"type": "session", "name": "Omar Saleh", "uid": "A1000002", "level": "YELLOW"}
 
 
 def test_each_builder_produces_its_type():

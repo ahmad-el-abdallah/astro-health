@@ -21,6 +21,7 @@ SURGEON_ROLE = "Flight surgeon"
 
 
 def login(astro_id):
+    session.permanent = True  # expires after LOGIN_LIFETIME of inactivity (app.py)
     session["astronaut_id"] = astro_id
 
 

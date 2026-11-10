@@ -56,7 +56,7 @@ def available():
 
 
 def _system_prompt(astro_name, mission_label, mission_hazard_lines, body_parts, symptoms_catalog=(),
-                    elevated_today=None, schedule_lines=None, trend_lines=None, rewards_line=None):
+                    elevated_today=None, schedule_lines=None, trend_lines=None):
     region_block = "\n".join(
         f'- "{rid}" ({info["label"]}): {info["what_it_does"]} In spaceflight: {info["space_effects"]} '
         f'What to do: {info["what_to_do"]}'
@@ -69,14 +69,14 @@ def _system_prompt(astro_name, mission_label, mission_hazard_lines, body_parts, 
         "into every reply):\n" + "\n".join(elevated_today) + "\n"
     ) if elevated_today else ""
     schedule = (
-        "\nToday's schedule (the day's plan -- not a live record of what's already been done):\n"
+        "\nToday's schedule on the mission clock, with each task's status for this astronaut "
+        "(done / due / missed / upcoming):\n"
         + "\n".join(schedule_lines) + "\n"
     ) if schedule_lines else ""
     trends = (
         "\nRecent vital trends (context only, use if relevant to the conversation):\n"
         + "\n".join(trend_lines) + "\n"
     ) if trend_lines else ""
-    rewards = f"\n{rewards_line}\n" if rewards_line else ""
     return (
         "You are a self-care triage assistant inside a NASA Space Apps hackathon demo "
         "called Astro Health Station. All data here is PLACEHOLDER demo data, not real "
@@ -95,8 +95,7 @@ def _system_prompt(astro_name, mission_label, mission_hazard_lines, body_parts, 
         f"{hazards}"
         f"{elevated}"
         f"{schedule}"
-        f"{trends}"
-        f"{rewards}\n"
+        f"{trends}\n"
         "The body regions you may log, with this app's own guidance for each -- ground your "
         "replies in this, not generic knowledge, since the astronaut sees this same text "
         "elsewhere in the app and your answer should stay consistent with it:\n"
@@ -197,7 +196,7 @@ def _call_once(messages):
 
 
 def ask(message, astro_name, mission_label, mission_hazard_lines, body_parts, symptoms_catalog=(),
-        history=None, elevated_today=None, schedule_lines=None, trend_lines=None, rewards_line=None):
+        history=None, elevated_today=None, schedule_lines=None, trend_lines=None):
     """Raises ConsultError on any failure. On success returns a dict with
     keys region/intensity/vital/alert_surgeon/alert_text/symptom/
     start_breathing/trigger_emergency/emergency_text/reply -- see
@@ -209,15 +208,15 @@ def ask(message, astro_name, mission_label, mission_hazard_lines, body_parts, sy
     `symptoms_catalog`: config/symptoms.json's list of {"id","label",...}
     dicts (same shape symptoms.catalog() returns) -- used both to build the
     prompt's symptom list and to validate the model's "symptom" field.
-    `elevated_today`/`schedule_lines`/`trend_lines`/`rewards_line`:
+    `elevated_today`/`schedule_lines`/`trend_lines`:
     pre-formatted context strings, or None/empty if there's nothing to add
     -- built by the caller (routes.py) from data this app already has
     elsewhere (the body tab's own alert box, config/routine.json, the
-    readings table, the rewards route).
+    readings table).
     """
     system = {"role": "system", "content": _system_prompt(
         astro_name, mission_label, mission_hazard_lines, body_parts, symptoms_catalog,
-        elevated_today, schedule_lines, trend_lines, rewards_line,
+        elevated_today, schedule_lines, trend_lines,
     )}
     messages = [system] + (history or []) + [{"role": "user", "content": message}]
     known_region_ids = set(body_parts.keys())

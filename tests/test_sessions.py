@@ -56,15 +56,15 @@ def test_exercise_tag_toggles_start_and_stop(fresh_db):
     assert row is not None
 
 
-def test_meal_tag_logs_activity_and_awards_points(fresh_db):
+def test_meal_tag_logs_activity(fresh_db):
     with db.write_conn() as conn:
         astro_id = seed_minimal(conn)
     sent, emitted, send_fn, emit_fn = _recorder()
     sessions.handle_scan("A0000001", send_fn, emit_fn)
     sessions.handle_scan("T4000001", send_fn, emit_fn)
     with db.write_conn() as conn:
-        pts = conn.execute("SELECT COALESCE(SUM(amount),0) AS t FROM points WHERE astronaut_id = ?", (astro_id,)).fetchone()["t"]
-    assert pts > 0
+        meal = conn.execute("SELECT * FROM activities WHERE kind = 'meal' AND astronaut_id = ?", (astro_id,)).fetchone()
+    assert meal is not None
     assert any("Meal logged" in s for s in sent)
 
 

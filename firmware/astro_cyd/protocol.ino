@@ -107,9 +107,16 @@ void sendCancelEmergencyEvent() {
   doc["type"] = "cancel_emergency";
   sendLine(doc);
 }
-void sendEndSession(const String& uid) {
+// reason: "done" = the astronaut pressed Done (also signs their browser out);
+// "idle" = the 2-minute no-touch timeout (must NOT sign the browser out).
+void sendEndSession(const String& uid, const char* reason) {
   JsonDocument doc;
-  doc["type"] = "end_session"; doc["uid"] = uid;
+  doc["type"] = "end_session"; doc["uid"] = uid; doc["reason"] = reason;
+  sendLine(doc);
+}
+void sendActive(const String& uid) {
+  JsonDocument doc;
+  doc["type"] = "active"; doc["uid"] = uid;
   sendLine(doc);
 }
 void sendPong() {
@@ -144,7 +151,7 @@ void handleSerialIn() {
 
   String type = doc["type"].as<String>();
   if (type == "session") {
-    onSessionMsg(doc["name"].as<String>(), doc["uid"].as<String>(), doc["level"].as<String>(), doc["points"].as<long>());
+    onSessionMsg(doc["name"].as<String>(), doc["uid"].as<String>(), doc["level"].as<String>(), doc["idle_s"] | 0);
   } else if (type == "status") {
     onStatusMsg(doc["name"].as<String>(), doc["level"].as<String>(), doc["note"].as<String>());
   } else if (type == "toast") {

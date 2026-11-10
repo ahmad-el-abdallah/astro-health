@@ -16,9 +16,14 @@ from backend import db
 from backend.hardware import protocol
 from backend.logic import health_rules
 from backend.jobs import comms
-from backend.config import gamification as load_gamification
 
-SESSION_TIMEOUT_S = 120
+from backend.config import SESSION_IDLE_S
+
+# The CYD runs the real idle timeout (SESSION_IDLE_S since its last touch) and reports it
+# as end_session reason "idle". This laptop-side timeout is only the safety net for when
+# no CYD is connected or it went silent, so it's a little longer; CYD touches keep it
+# fresh via note_cyd_contact() (any CYD message, including the once-a-minute "active").
+SESSION_TIMEOUT_S = SESSION_IDLE_S + 30
 SURGEON_UNLOCK_S = 10 * 60
 
 # astronaut_id -> {"uid":, "started_at":, "last_activity":}
@@ -59,30 +64,18 @@ def _latest_level(conn, astronaut_id):
     return row["overall_level"] if row else "GREEN"
 
 
-def _total_points(conn, astronaut_id):
-    row = conn.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM points WHERE astronaut_id = ?",
-                        (astronaut_id,)).fetchone()
-    return row["total"]
-
-
-def _award(conn, astronaut_id, reason):
-    points_cfg = load_gamification()["points"]
-    amount = points_cfg.get(reason, 0)
-    if amount:
-        conn.execute("INSERT INTO points (astronaut_id, ts, amount, reason) VALUES (?, ?, ?, ?)",
-                     (astronaut_id, _now_iso(), amount, reason))
-    return amount
-
-
 def _start_session(conn, astronaut, uid, send_fn, emit_fn):
     active_sessions[astronaut["id"]] = {
         "uid": uid, "started_at": time.time(), "last_activity": time.time(),
+        # When the CYD's own 2-minute idle timer was last reset, as far as the laptop
+        # can tell: the session message resets it, and so does any message the CYD
+        # sends from its touchscreen. Object-tag scans (from the Pico reader) don't.
+        "cyd_contact": time.time(),
     }
     level = _latest_level(conn, astronaut["id"])
-    points = _total_points(conn, astronaut["id"])
-    send_fn(protocol.session(astronaut["name"], uid, level, points))
+    send_fn(protocol.session(astronaut["name"], uid, level, SESSION_IDLE_S))
     send_fn(protocol.led(level))
-    emit_fn("session_started", {"astronaut_id": astronaut["id"], "name": astronaut["name"], "level": level, "points": points})
+    emit_fn("session_started", {"astronaut_id": astronaut["id"], "name": astronaut["name"], "level": level})
 
 
 def _end_session(conn, astronaut_id, send_fn, emit_fn):
@@ -143,6 +136,21 @@ def _current_session_astronaut_id():
     return next(iter(active_sessions.keys()))
 
 
+def note_cyd_contact(astronaut_id):
+    """The CYD sent something from its touchscreen for this astronaut (mood,
+    symptoms, a test...), so its own idle timer was just reset."""
+    if astronaut_id in active_sessions:
+        active_sessions[astronaut_id]["cyd_contact"] = time.time()
+        active_sessions[astronaut_id]["last_activity"] = time.time()
+
+
+def seconds_since_cyd_contact(astronaut_id):
+    """How long since the CYD's idle timer was last (known to be) reset for this
+    astronaut's session, or None if they have no open session."""
+    info = active_sessions.get(astronaut_id)
+    return None if info is None else time.time() - info["cyd_contact"]
+
+
 def _touch_session(astronaut_id):
     if astronaut_id in active_sessions:
         active_sessions[astronaut_id]["last_activity"] = time.time()
@@ -167,9 +175,8 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
             lvl = health_rules.evaluate("exercise", minutes)
             conn.execute("INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'exercise', ?, ?, 'tag')",
                          (astronaut_id, _now_iso(), json.dumps(minutes), lvl))
-            amount = _award(conn, astronaut_id, "exercise_session")
             send_fn(protocol.exercise("stop", minutes))
-            send_fn(protocol.toast(f"Workout done: {minutes} min (+{amount} pts)"))
+            send_fn(protocol.toast(f"Workout done: {minutes} min"))
             emit_fn("cyd_event", {"type": "exercise_stop", "astronaut_id": astronaut_id, "minutes": minutes})
         elif kind == "sleep":
             hours = round(duration_s / 3600, 1)
@@ -180,9 +187,8 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
             lvl = health_rules.evaluate("sleep", hours)
             conn.execute("INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'sleep', ?, ?, 'tag')",
                          (astronaut_id, _now_iso(), json.dumps(hours), lvl))
-            amount = _award(conn, astronaut_id, "sleep_logged")
             send_fn(protocol.sleep("stop", hours))
-            send_fn(protocol.toast(f"Slept {hours} h (+{amount} pts)"))
+            send_fn(protocol.toast(f"Slept {hours} h"))
             emit_fn("cyd_event", {"type": "sleep_stop", "astronaut_id": astronaut_id, "hours": hours})
         return
 
@@ -211,9 +217,8 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
     if kind == "meal":
         conn.execute("INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, ?, ?, ?, ?)",
                      (astronaut_id, "meal", _now_iso(), _now_iso(), json.dumps({"tag": tag["uid"], "label": tag["label"], **extra})))
-        amount = _award(conn, astronaut_id, "meal_logged")
         kcal = extra.get("kcal", 0)
-        send_fn(protocol.toast(f"Meal logged: {kcal} kcal (+{amount} pts)"))
+        send_fn(protocol.toast(f"Meal logged: {kcal} kcal"))
         emit_fn("cyd_event", {"type": "meal", "astronaut_id": astronaut_id, "label": tag["label"], **extra})
     elif kind == "medicine":
         conn.execute("INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, ?, ?, ?, ?)",
