@@ -5,20 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Astro Health Station</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <!-- Import map for the Face to Face avatar's ES modules only (TalkingHead.js
+       + a separate, newer three.js build it requires -- static/js/tabs/body.js's
+       own digital-twin viewer uses the older vendored three.min.js/UMD build
+       via a classic <script>, unrelated to this). Vendored locally, not
+       loaded from a CDN, same "no CDN at runtime" rule as every other
+       library here -- see docs/CLAUDE.md. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "{{ url_for('static', filename='vendor/three.module.js') }}",
+      "three/addons/": "{{ url_for('static', filename='vendor/addons/') }}"
+    }
+  }
+  </script>
 </head>
 <body>
-<div id="login-screen" style="min-height:100vh; display:flex; align-items:center; justify-content:center;">
-  <div class="card" style="max-width:420px; width:100%; margin:20px;">
-    <h2 style="margin-top:0;">Sign in</h2>
-    <p class="dim">Tap your crew card on the CYD to sign in.</p>
-    <div id="login-nfc-status" class="dim" style="margin:16px 0; min-height:1.2em;"></div>
-    <div style="opacity:0.55; border-top:1px solid var(--border); padding-top:14px; margin-top:4px;">
-      <p class="dim" style="margin:0 0 10px;">Coming soon</p>
-      <button class="btn secondary" disabled style="width:100%; margin-bottom:8px;">Username &amp; password</button>
-      <button class="btn secondary" disabled style="width:100%;">Face ID</button>
-    </div>
-  </div>
-</div>
+<!-- Built by static/js/core/login.js, not pasted static markup -- see
+     docs/CLAUDE.md's login-system entry. -->
+<div id="login-screen"></div>
 
 <div id="app" style="display:none">
   <header class="app-header">
@@ -27,6 +32,7 @@
       <span id="mission-pill" class="pill">Mission: &ndash;</span>
       <span id="serial-status-pill" class="pill"><span class="pill-dot"></span><span id="serial-status-text">&ndash;</span></span>
       <span id="user-pill" class="pill">&ndash;</span>
+      <button class="btn secondary" id="account-btn" style="padding:4px 10px; font-size:0.85rem;">Account</button>
       <button class="btn secondary" id="logout-btn" style="padding:4px 10px; font-size:0.85rem;">Log out</button>
     </div>
   </header>
@@ -38,6 +44,8 @@
     <button data-tab="crew" data-surgeon-only>Crew</button>
     <button data-tab="surgeon" data-surgeon-only>Flight Surgeon</button>
     <button data-tab="mission">Mission Health</button>
+    <button data-tab="mental">Mental Health</button>
+    <button data-tab="sleep">Sleep Lab</button>
     <button data-tab="learn">Learn</button>
     <button data-tab="rewards">Rewards</button>
     <button data-tab="schedule">Schedule</button>
@@ -50,6 +58,8 @@
     <section class="tab-panel" id="tab-crew"></section>
     <section class="tab-panel" id="tab-surgeon"></section>
     <section class="tab-panel" id="tab-mission"></section>
+    <section class="tab-panel" id="tab-mental"></section>
+    <section class="tab-panel" id="tab-sleep"></section>
     <section class="tab-panel" id="tab-learn"></section>
     <section class="tab-panel" id="tab-rewards"></section>
     <section class="tab-panel" id="tab-schedule"></section>
@@ -72,7 +82,7 @@
 <!-- Outside #app (not behind the login gate): this is how you sign in and
      use the CYD events without real hardware, including from the login
      screen itself -- tapping a card here goes through the exact same
-     "scan" broadcast a real NFC tap does (static/js/auth.js listens for it). -->
+     "scan" broadcast a real NFC tap does (static/js/core/auth.js listens for it). -->
 <div id="simulator-panel" class="collapsed">
   <div class="sim-header" id="sim-toggle">
     <strong>Simulator</strong>
@@ -109,20 +119,30 @@
 
 <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/strings.js') }}"></script>
-<script src="{{ url_for('static', filename='js/socket.js') }}"></script>
-<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
-<script src="{{ url_for('static', filename='js/main.js') }}"></script>
-<script src="{{ url_for('static', filename='js/live.js') }}"></script>
-<script src="{{ url_for('static', filename='js/body.js') }}"></script>
-<script src="{{ url_for('static', filename='js/trends.js') }}"></script>
-<script src="{{ url_for('static', filename='js/crew.js') }}"></script>
-<script src="{{ url_for('static', filename='js/surgeon.js') }}"></script>
-<script src="{{ url_for('static', filename='js/planet3d.js') }}"></script>
-<script src="{{ url_for('static', filename='js/mission.js') }}"></script>
-<script src="{{ url_for('static', filename='js/learn.js') }}"></script>
-<script src="{{ url_for('static', filename='js/rewards.js') }}"></script>
-<script src="{{ url_for('static', filename='js/schedule.js') }}"></script>
-<script src="{{ url_for('static', filename='js/simulator.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/three.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/OrbitControls.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/face-api.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/strings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/socket.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/face_id.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/auth.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/login.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/account.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/live.js') }}"></script>
+<script src="{{ url_for('static', filename='js/3d/face_avatar.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/3d/face_avatar_rpm.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/body.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/trends.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/crew.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/surgeon.js') }}"></script>
+<script src="{{ url_for('static', filename='js/3d/planet3d.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/mission.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/mental_health.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/sleep_lab.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/learn.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/rewards.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/schedule.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs/simulator.js') }}"></script>
 </body>
 </html>

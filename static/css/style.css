@@ -157,6 +157,125 @@ button.btn.secondary { background: var(--panel-raised); color: var(--text); bord
 button.btn.danger { background: var(--red); color: #210604; }
 button.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Body tab: hero strip + two-column (Consultation | Digital Twin) layout,
+   matching the proportions of the reference demo this was ported from --
+   this grid is what makes the 3D view read as "big", not a fixed pixel box. */
+.body-hero { display: flex; align-items: center; gap: 14px; }
+
+.body-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; margin-bottom: 16px; }
+@media (max-width: 900px) { .body-cols { grid-template-columns: 1fr; } }
+
+.body-chat-head, .body-twin-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.body-chat-msgs { max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.body-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 0.92rem; line-height: 1.4; }
+.body-msg.assistant { background: var(--panel-raised); border: 1px solid var(--border); align-self: flex-start; }
+.body-msg.user { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); border: 1px solid var(--accent); align-self: flex-end; }
+.body-msg time { display: block; font-size: 0.7rem; color: var(--text-dim); margin-top: 4px; }
+.body-msg.pending { font-style: italic; color: var(--text-dim); animation: pulse-opacity 1.4s infinite; }
+
+/* Consultation AI's guided-breathing visual (start_breathing decision) --
+   a slow pulse rather than a new animation, same pulse-opacity keyframe
+   RED regions already use, just a much longer cycle to read as breathing
+   (in/out) rather than an alert. */
+.breathing-pacer {
+  width: 56px; height: 56px; border-radius: 50%; margin: 6px 0;
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  border: 2px solid var(--accent);
+  animation: pulse-opacity 4s infinite;
+}
+
+/* .body-chip is a deliberately separate class from .symptom-chip (Live
+   tab's named-symptom reporting) -- same visual recipe, but these two chip
+   systems (boolean symptoms vs. per-region discomfort) are never conflated. */
+.body-chip {
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin: 0 6px 6px 0;
+}
+.body-chip:hover { border-color: var(--accent); }
+.body-chat-compose { display: flex; gap: 8px; }
+.body-chat-compose input { margin-bottom: 0; }
+
+/* 3D digital-twin viewer */
+#body-3d-view {
+  height: 400px;
+  width: 100%;
+  touch-action: none;
+  background: radial-gradient(circle at 50% 38%, #1c3156, var(--bg) 72%);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+#body-3d-view canvas { display: block; width: 100%; height: 100%; }
+.body-3d-tools { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.body-3d-tools label { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 0; width: auto; color: var(--text-dim); font-size: 0.85rem; cursor: pointer; }
+.body-3d-tools input[type="checkbox"] { width: auto; margin: 0; }
+
+/* Selected-region panel: chip + discomfort slider + About-this-part accordion */
+.body-sel { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
+.body-sel-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.body-discomfort-num { min-width: 42px; text-align: center; font-weight: 700; font-size: 1.1rem; border: 1px solid var(--border); border-radius: 8px; padding: 2px 8px; background: var(--bg); color: var(--accent); }
+
+input[type="range"] { width: 100%; accent-color: var(--accent); background: transparent; margin: 10px 0 2px; }
+.body-scale { display: flex; justify-content: space-between; font-size: 0.72rem; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 4px; }
+
+#tab-body details { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin: 10px 0; background: var(--panel-raised); }
+#tab-body summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+#tab-body details p { margin: 6px 0; }
+
+/* Reuses Mission Health's .mh-part.mh-alert idiom (red left-border + inset
+   shadow), not its selector -- that one carries Mission-Health-only layout. */
+.body-alert {
+  border-left: 4px solid var(--red);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 35%, transparent);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 12px 0;
+  background: var(--panel);
+}
+
+.body-readings-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.body-legend-btn {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 14px; cursor: pointer; font: inherit; color: var(--text); width: 100%; text-align: left;
+}
+.body-legend-btn:hover { border-color: var(--accent); }
+
+/* Face to Face: a full-screen overlay for the talking-head avatar, same
+   fixed/z-index idiom as #emergency-overlay. */
+#face-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
+  z-index: 110;
+  align-items: center;
+  justify-content: center;
+}
+#face-overlay.active { display: flex; }
+.face-panel {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  width: min(92vw, 560px);
+  padding: 32px 24px;
+}
+#face-avatar-view { width: 100%; height: 340px; }
+#face-avatar-view canvas { display: block; width: 100%; height: 100%; }
+.face-caption { max-width: 480px; text-align: center; min-height: 1.6em; font-size: 1.05rem; }
+.face-mic {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--accent); border: none; color: #06201c; font-size: 1.8rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.face-mic.listening { background: var(--red); animation: pulse-opacity 1s infinite; }
+.face-mic.thinking { background: var(--panel-raised); color: var(--text); animation: pulse-opacity 1.4s infinite; }
+.face-mic:disabled { cursor: not-allowed; }
+.face-mic:disabled:not(.listening):not(.thinking) { opacity: 0.5; }
+
 .symptom-chip {
   background: var(--panel-raised);
   color: var(--text);
@@ -387,3 +506,528 @@ footer.app-footer {
 @media (max-width: 720px) {
   .mh-planet { -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent); mask-image: linear-gradient(180deg, #000 88%, transparent); }
 }
+
+/* =========================================================
+   Mental Health tab -- "Mission Control UI" card family.
+   Shared card-kicker/card-heading/card-number vocabulary is reused by the
+   Sleep Lab tab below it too, so the two new tabs read as a visual pair.
+   ========================================================= */
+
+.mental-health-page {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.mental-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.section-kicker,
+.card-kicker {
+  display: block;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mental-hero h2 {
+  margin: 3px 0 2px;
+  font-size: 1.8rem;
+}
+
+.mental-hero p {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.wellness-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green);
+}
+
+.mental-dashboard {
+  display: grid;
+  grid-template-columns: 1.45fr 0.75fr;
+  gap: 16px;
+}
+
+.mental-card {
+  background: linear-gradient(145deg, var(--panel), rgba(18, 28, 40, 0.88));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.mental-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.45;
+}
+
+.card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 18px;
+}
+
+.card-heading h3 { margin: 4px 0 0; font-size: 1rem; }
+.card-heading p { margin: 4px 0 0; color: var(--text-dim); font-size: 0.78rem; }
+.card-number { color: var(--text-dim); font-family: monospace; font-size: 0.75rem; }
+
+.mood-card { grid-column: 1; }
+
+.mood-options {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.mood-option {
+  min-height: 86px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 6px;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.mood-option:hover { border-color: var(--accent); transform: translateY(-2px); }
+.mood-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  box-shadow: 0 0 20px rgba(79, 209, 197, 0.08);
+}
+
+.mood-icon { font-size: 1.55rem; }
+.mood-name { font-size: 0.75rem; color: var(--text-dim); }
+.mood-option.selected .mood-name { color: var(--accent); font-weight: 600; }
+
+.mental-note label { margin-bottom: 6px; }
+.mental-note textarea { min-height: 92px; resize: vertical; margin-bottom: 10px; }
+.mental-primary-btn { min-width: 110px; }
+
+.wellbeing-card { grid-column: 2; }
+
+.wellbeing-badge {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border));
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.wellbeing-score { display: flex; justify-content: center; margin: 5px 0 18px; }
+
+.score-ring {
+  width: 125px; height: 125px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at center, var(--panel) 57%, transparent 58%),
+    conic-gradient(var(--accent) 0deg 295deg, var(--border) 295deg 360deg);
+}
+
+.score-ring > div { display: flex; align-items: baseline; }
+.score-ring strong { font-size: 2.1rem; }
+.score-ring span { color: var(--text-dim); font-size: 0.8rem; }
+
+.wellbeing-stats { border-top: 1px solid var(--border); }
+.wellbeing-stat {
+  display: flex; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid rgba(34, 49, 63, 0.6);
+  font-size: 0.78rem;
+}
+.wellbeing-stat span { color: var(--text-dim); }
+.wellbeing-stat strong { color: var(--text); }
+
+.chart-card { grid-column: 1 / -1; }
+
+.trend-indicator {
+  color: var(--accent);
+  font-size: 0.72rem;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 5px 9px;
+  border-radius: 999px;
+}
+
+.mental-chart-container { height: 300px; }
+
+.breathing-card { grid-column: 1; text-align: center; }
+.breathing-content {
+  min-height: 260px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px;
+}
+
+.breathing-circle {
+  width: 145px; height: 145px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--accent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 12%, var(--panel)), var(--panel));
+  box-shadow: 0 0 35px rgba(79, 209, 197, 0.08), inset 0 0 25px rgba(79, 209, 197, 0.05);
+  transition: transform 0.5s ease;
+}
+
+.breathing-circle > div { text-align: center; }
+#breathing-phase { display: block; color: var(--accent); font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; }
+#breathing-timer { display: block; font-size: 2.5rem; font-weight: 700; line-height: 1; }
+
+.breathing-circle.breathing-in { animation: breathe-in 4s ease-in-out; }
+.breathing-circle.breathing-hold { transform: scale(1.18); }
+.breathing-circle.breathing-out { animation: breathe-out 8s ease-in-out; }
+
+@keyframes breathe-in { from { transform: scale(0.82); } to { transform: scale(1.18); } }
+@keyframes breathe-out { from { transform: scale(1.18); } to { transform: scale(0.82); } }
+
+.journal-card { grid-column: 2; }
+.journal-card .card-heading { align-items: center; }
+
+.journal-entry {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 15px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; margin-bottom: 8px;
+}
+.journal-entry h4 { margin: 0 0 4px; font-size: 0.85rem; }
+.journal-entry p { margin: 0; color: var(--text-dim); font-size: 0.78rem; white-space: pre-wrap; }
+.journal-date { color: var(--text-dim); font-size: 0.65rem; white-space: nowrap; }
+
+.journal-empty {
+  min-height: 120px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--text-dim); text-align: center;
+}
+.journal-empty-icon {
+  width: 38px; height: 38px; border: 1px solid var(--border); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent); margin-bottom: 8px;
+}
+.journal-empty p { margin: 0; font-size: 0.8rem; }
+.journal-empty span { font-size: 0.68rem; }
+
+.journal-composer { margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.journal-composer input, .journal-composer textarea { margin-bottom: 8px; }
+.journal-composer textarea { min-height: 80px; resize: vertical; }
+
+.self-care-card, .tip-card {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 8%, var(--panel)), var(--panel));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+}
+
+.tip-icon {
+  width: 34px; height: 34px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.self-care-card p, .tip-card p { margin: 3px 0 0; color: var(--text-dim); font-size: 0.78rem; }
+
+@media (max-width: 850px) {
+  .mental-dashboard, .sleep-dashboard { grid-template-columns: 1fr; }
+  .mood-card, .wellbeing-card, .chart-card, .breathing-card, .journal-card, .self-care-card,
+  .sleep-summary-card, .sleep-stages-card, .sleep-trend-card, .circadian-card, .sleep-tips-card {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .mental-hero, .sleep-hero { flex-direction: column; }
+  .wellness-status { align-self: flex-start; }
+  .mood-options { grid-template-columns: repeat(2, 1fr); }
+  .mood-option:last-child { grid-column: 1 / -1; }
+  .mental-card, .sleep-card { padding: 15px; }
+  .mental-chart-container, .sleep-chart-container { height: 240px; }
+  .journal-card .card-heading { align-items: flex-start; flex-direction: column; }
+}
+
+/* =========================================================
+   Sleep Lab tab -- shares the card-kicker/card-heading vocabulary above,
+   its own .sleep-card container (same visual recipe as .mental-card, kept
+   as a separate class per this app's existing per-tab-prefix convention --
+   .mh-*, .body-*, .mental-* -- rather than a new shared cross-tab class).
+   ========================================================= */
+
+.sleep-health-page { max-width: 1120px; margin: 0 auto; }
+
+.sleep-hero {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+  margin-bottom: 20px;
+}
+.sleep-hero h2 { margin: 3px 0 2px; font-size: 1.8rem; }
+.sleep-hero p { margin: 0; color: var(--text-dim); }
+
+.sleep-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.sleep-card {
+  background: linear-gradient(145deg, var(--panel), rgba(18, 28, 40, 0.88));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 0;
+  position: relative;
+  overflow: hidden;
+}
+.sleep-card::before {
+  content: "";
+  position: absolute; top: 0; left: 0; width: 100%; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.45;
+}
+
+.sleep-summary-card, .circadian-card, .sleep-tips-card { grid-column: 1 / -1; }
+.sleep-stages-card, .sleep-trend-card { grid-column: 1 / -1; }
+
+.sleep-summary { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.sleep-summary-num { font-size: 2.3rem; font-weight: 700; line-height: 1; }
+.sleep-stats-row { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 4px; }
+.sleep-stat-label { font-size: 0.72rem; color: var(--text-dim); margin-bottom: 2px; }
+.sleep-stat-val { font-size: 1rem; font-weight: 600; }
+
+.sleep-log-link { background: none; border: none; color: var(--accent); font-size: 0.82rem; cursor: pointer; padding: 0; margin-top: 8px; }
+.sleep-log-form {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+  display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-end;
+}
+.sleep-log-form .field label { display: block; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 6px; }
+
+.sleep-stages-bar { display: flex; height: 34px; border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
+.stage-awake { background: var(--red); }
+.stage-light { background: color-mix(in srgb, var(--accent) 45%, var(--gray)); }
+.stage-deep { background: var(--accent); }
+.stage-rem { background: color-mix(in srgb, var(--accent) 70%, var(--green) 30%); }
+
+.sleep-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-dim); margin-bottom: 6px; }
+.sleep-legend-item { display: flex; align-items: center; gap: 6px; }
+.sleep-legend-dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+.sleep-trend-toggle { display: flex; gap: 6px; }
+.sleep-trend-toggle button {
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: 999px; padding: 5px 14px; font-size: 0.8rem; cursor: pointer;
+}
+.sleep-trend-toggle button.active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  border-color: var(--accent); color: var(--accent);
+}
+
+.sleep-chart-container { height: 260px; margin-top: 10px; }
+
+.circadian-card .card-heading, .sleep-tips-card .card-heading { margin-bottom: 10px; }
+
+ul.sleep-tips { margin: 0; padding-left: 20px; font-size: 0.88rem; color: var(--text-dim); }
+ul.sleep-tips li { margin-bottom: 6px; }
+
+/* ---- Login screen: ported from a downloaded mockup's two-column "crew
+   access" layout (hero scene | sign-in panel), rebuilt as this app's own
+   JS-generated markup (static/js/core/login.js) instead of pasted static
+   HTML, and reusing this app's existing --bg/--panel/--accent/--border
+   variables instead of the mockup's own near-identical palette, so the
+   login screen reads as the same product as the rest of the app. NFC
+   keeps the primary ".login-main" card slot (it's the main login method);
+   username/password and Face ID are the two ".login-alt" secondary cards
+   -- a deliberate swap from the mockup, where password was the main card
+   and NFC was an alternative, per the user's explicit "NFC is the main
+   login, not username/password." */
+#login-screen { min-height: 100vh; display: flex; }
+.login-shell { display: grid; grid-template-columns: 45% 55%; min-height: 100vh; width: 100%; }
+
+.login-scene {
+  position: relative; overflow: hidden; padding: 48px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  background:
+    radial-gradient(ellipse at 95% 2%, color-mix(in srgb, var(--accent) 22%, var(--bg)) 0, transparent 38%),
+    linear-gradient(170deg, var(--panel) 0%, var(--bg) 90%);
+}
+.login-stars, .login-stars::before { position: absolute; inset: 0; pointer-events: none; }
+.login-stars {
+  background-image:
+    radial-gradient(1px 1px at 8% 8%, #a0b9c6 99%, transparent),
+    radial-gradient(1px 1px at 23% 67%, #b4c4d3 99%, transparent),
+    radial-gradient(2px 2px at 72% 21%, var(--accent) 99%, transparent),
+    radial-gradient(2px 2px at 86% 51%, #91a1b3 99%, transparent),
+    radial-gradient(1px 1px at 15% 85%, #b4bdc7 99%, transparent);
+  background-size: 380px 390px; opacity: 0.55; animation: login-drift 55s linear infinite;
+}
+.login-stars::before {
+  content: ""; background-image:
+    radial-gradient(1px 1px at 15% 15%, #9ba6b8 99%, transparent),
+    radial-gradient(2px 2px at 70% 50%, var(--accent) 99%, transparent),
+    radial-gradient(1px 1px at 90% 80%, #8b98ab 99%, transparent);
+  background-size: 265px 320px; opacity: 0.6;
+}
+.login-orbit {
+  position: absolute; width: 560px; height: 560px; border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+  top: -245px; right: -390px;
+}
+.login-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 750; }
+.login-brand-icon {
+  display: inline-grid; place-items: center; width: 24px; height: 24px;
+  border: 2px solid var(--accent); border-radius: 100%;
+}
+.login-brand-icon::after { content: ""; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; }
+.login-intro { position: relative; z-index: 1; max-width: 425px; margin-top: 60px; }
+.login-eyebrow { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+.login-intro h1 { font-size: clamp(30px, 3.2vw, 46px); line-height: 1.1; letter-spacing: -1.2px; margin: 18px 0; }
+.login-intro p { font-size: 15px; line-height: 1.7; color: var(--text-dim); }
+.login-vitals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 28px; }
+.login-vital {
+  border: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 85%, transparent);
+  backdrop-filter: blur(7px); padding: 13px 12px; border-radius: 12px;
+}
+.login-vital small { display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 8px; }
+.login-vital strong { color: var(--text); font-size: 17px; }
+.login-vital em { font-size: 10px; color: var(--accent); font-style: normal; }
+.login-scene-foot { position: relative; z-index: 1; color: var(--text-dim); font-size: 11px; max-width: 380px; }
+
+.login-access { display: flex; align-items: center; justify-content: center; padding: 40px 24px; overflow-y: auto; }
+.login-content { width: min(390px, 100%); }
+.login-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+.login-label { font-size: 11px; letter-spacing: 1.6px; font-weight: 700; color: var(--text-dim); }
+.login-status {
+  display: flex; gap: 7px; align-items: center; font-size: 11px; color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--yellow) 40%, var(--border));
+  border-radius: 999px; padding: 7px 10px;
+}
+.login-dot { height: 6px; width: 6px; border-radius: 50%; background: var(--yellow); }
+.login-access h2 { font-size: 30px; line-height: 1.1; margin: 7px 0 5px; letter-spacing: -0.7px; }
+.login-subtitle { font-size: 14px; color: var(--text-dim); margin: 0 0 20px; }
+
+.login-main {
+  background: var(--panel); border: 1.5px solid var(--accent); border-radius: 15px;
+  padding: 20px; box-shadow: 0 0 25px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.login-method { display: flex; gap: 13px; align-items: center; }
+.login-circle {
+  width: 52px; height: 52px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #06201e; font-size: 24px;
+}
+.login-method strong, .login-alt strong { font-size: 14px; }
+.login-method small, .login-alt small { display: block; font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+#login-nfc-status { margin: 14px 0 0; min-height: 1.2em; font-size: 13px; color: var(--accent); }
+/* .pulse-dot (the animated accent-dot prefix) already exists globally above
+   and is reused here unchanged -- auth.js already does classList.add("pulse-dot"). */
+
+.login-alt {
+  border: 1px solid var(--border); background: var(--panel); border-radius: 13px;
+  margin-top: 13px; padding: 14px 17px;
+}
+.login-alt-row { display: flex; align-items: center; gap: 12px; }
+.login-alt .login-circle { background: var(--panel-raised); color: var(--accent); width: 44px; height: 44px; font-size: 20px; }
+.login-alt-desc { flex: 1; }
+.login-alt-btn {
+  background: var(--panel-raised); border: 1px solid var(--border); color: var(--text);
+  border-radius: 7px; padding: 9px 11px; font-size: 12px; white-space: nowrap; cursor: pointer;
+}
+.login-alt-btn:hover { border-color: var(--accent); }
+.login-alt-body { display: none; padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--border); }
+.login-alt.open .login-alt-body { display: block; }
+
+.login-form-fields { padding-top: 13px; }
+.login-field { display: block; color: var(--text-dim); font-size: 12px; margin: 0 0 5px; }
+.login-text-field {
+  width: 100%; height: 39px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); padding: 0 12px; outline: none; font-size: 13px; margin-bottom: 13px;
+}
+.login-text-field:focus { border-color: var(--accent); }
+.login-notice { min-height: 14px; color: var(--yellow); font-size: 11px; margin-top: 9px; line-height: 1.5; }
+
+.login-video-wrap { position: relative; border-radius: 10px; overflow: hidden; background: var(--bg); margin-bottom: 10px; }
+.login-video-wrap video { width: 100%; max-height: 220px; object-fit: cover; display: block; transform: scaleX(-1); }
+
+.login-emergency {
+  margin-top: 13px; width: 100%; padding: 12px; border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--red) 45%, var(--border)); background: color-mix(in srgb, var(--red) 10%, var(--panel));
+  color: color-mix(in srgb, var(--red) 70%, white); font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.login-foot-text { font-size: 12px; text-align: center; color: var(--text-dim); margin: 19px 0 10px; }
+.login-foot-text button { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-size: inherit; }
+.login-copyright { text-align: center; font-size: 10px; color: var(--text-dim); }
+
+.login-modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none;
+  align-items: center; justify-content: center; z-index: 120; padding: 20px;
+}
+.login-modal-backdrop.active { display: flex; }
+.login-modal {
+  width: min(480px, 100%); background: var(--panel); border: 1px solid var(--border);
+  border-radius: 17px; padding: 25px; box-shadow: 0 30px 75px rgba(0,0,0,0.6);
+}
+.login-modal h3 { margin: 0 0 10px; font-size: 22px; }
+.login-modal p, .login-modal li { font-size: 13px; color: var(--text-dim); line-height: 1.7; }
+
+@keyframes login-drift { to { background-position: 380px 390px; } }
+
+@media (max-width: 820px) {
+  .login-shell { grid-template-columns: 1fr; }
+  .login-scene { min-height: 320px; padding: 28px; }
+  .login-intro { margin: 30px 0 20px; }
+  .login-scene-foot { display: none; }
+  .login-access { padding: 30px 18px 45px; }
+}
+
+/* ---- Account & Security overlay: same fixed/z-index idiom as
+   #emergency-overlay/#face-overlay, reachable from the header once
+   logged in. Lets an astronaut set up their own username/password and
+   enroll/clear Face ID -- the self-service half of the login-method
+   system; a superuser can do the same reset from /admin, reusing the
+   identical backend routes. */
+#account-overlay {
+  display: none; position: fixed; inset: 0; z-index: 90;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  align-items: center; justify-content: center; padding: 20px; overflow-y: auto;
+}
+#account-overlay.active { display: flex; }
+.account-panel { width: min(460px, 100%); max-height: 90vh; overflow-y: auto; }
+.account-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+}
+.account-row:last-of-type { border-bottom: none; }
+.account-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.account-section h4 { margin: 0 0 10px; font-size: 0.9rem; }

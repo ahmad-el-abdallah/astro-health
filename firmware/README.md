@@ -95,9 +95,9 @@ ESP32-S3 board failed permanently -- not a pins/firmware issue, the physical chi
 
 - The Pico has no WiFi/Bluetooth at all, so an ESP-NOW-style relay to the CYD was never an
   option. Instead `pico_nfc_reader.ino` sends `{"type":"scan","uid":"..."}` lines over its own
-  USB-serial connection to the laptop, and `backend/pico_bridge.py` feeds those into the same
-  `handle_cyd_message()` the CYD's own "scan" messages already go through -- see
-  `backend/pico_bridge.py`'s own docstring and docs/CLAUDE.md for the backend side.
+  USB-serial connection to the laptop, and `backend/hardware/pico_bridge.py` feeds those into the
+  same `handle_cyd_message()` the CYD's own "scan" messages already go through -- see
+  `backend/hardware/pico_bridge.py`'s own docstring and docs/CLAUDE.md for the backend side.
 - `astro_cyd/nfc.ino` (`setupLink()`, `handleLink()`) and `nfc_link.h` are still in the CYD
   sketch, still compile, and are harmless to leave in place, but **nothing sends ESP-NOW frames
   to the CYD anymore** -- the ESP32-S3 board that used to is dead. Don't expect logs from that

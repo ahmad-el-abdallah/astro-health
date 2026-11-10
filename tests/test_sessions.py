@@ -1,4 +1,5 @@
-from backend import db, sessions
+from backend import db
+from backend.logic import sessions
 from tests.conftest import seed_minimal
 
 

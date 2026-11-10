@@ -17,11 +17,14 @@ import time
 from flask import Flask, render_template
 from flask_socketio import SocketIO
 
-from backend import db, seed, sessions, comms, routes, scheduler, admin_routes
+from backend import db, seed
+from backend.logic import sessions
+from backend.jobs import comms, scheduler
+from backend.routes import routes, admin_routes
 from backend.config import DATA_DIR
-from backend.pico_bridge import PicoBridge
-from backend.serial_bridge import SerialBridge, find_port
-from backend.wifi_bridge import (
+from backend.hardware.pico_bridge import PicoBridge
+from backend.hardware.serial_bridge import SerialBridge, find_port
+from backend.hardware.wifi_bridge import (
     WifiBridge, is_reachable as wifi_is_reachable,
     DEFAULT_HOST as WIFI_DEFAULT_HOST, DEFAULT_PORT as WIFI_DEFAULT_PORT,
 )
@@ -117,7 +120,7 @@ def create_app(args):
     bridge.start()
 
     # Optional second NFC reader (Pico + PN532, no WiFi -- see
-    # backend/pico_bridge.py). Feeds scans into the exact same handler the
+    # backend/hardware/pico_bridge.py). Feeds scans into the exact same handler the
     # CYD's own scans go through. No-ops if no Pico is plugged in.
     pico_bridge = PicoBridge(on_message=handle_cyd_message)
     pico_bridge.start()

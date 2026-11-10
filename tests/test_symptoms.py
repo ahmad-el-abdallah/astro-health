@@ -1,6 +1,7 @@
 import json
 
-from backend import db, symptoms
+from backend import db
+from backend.logic import symptoms
 from tests.conftest import seed_minimal
 
 

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 
 from backend import db
 from backend.config import health_rules as load_health_rules, gamification as load_gamification, missions as load_missions
-from backend.health_rules import evaluate, symptom_level, overall_level
+from backend.logic.health_rules import evaluate, symptom_level, overall_level
 
 SEED = 42
 DAYS = 30

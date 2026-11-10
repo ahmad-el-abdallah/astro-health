@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend import db, sessions
+from backend import db
+from backend.logic import sessions
 
 
 @pytest.fixture(autouse=True)

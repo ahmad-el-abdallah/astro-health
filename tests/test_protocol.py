@@ -1,4 +1,4 @@
-from backend import protocol
+from backend.hardware import protocol
 
 
 def test_decode_valid_scan():

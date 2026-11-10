@@ -1,4 +1,4 @@
-from backend import health_rules as hr
+from backend.logic import health_rules as hr
 
 
 def test_heart_rate_green_yellow_red():

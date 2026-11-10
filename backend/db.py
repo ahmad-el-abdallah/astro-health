@@ -24,7 +24,10 @@ CREATE TABLE IF NOT EXISTS astronauts (
     role TEXT NOT NULL,
     color TEXT NOT NULL,
     baseline_reaction_ms INTEGER NOT NULL DEFAULT 350,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    username TEXT,
+    password_hash TEXT,
+    face_descriptor_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tags (
@@ -64,6 +67,15 @@ CREATE TABLE IF NOT EXISTS symptoms (
     items_json TEXT NOT NULL,
     level TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS discomfort (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    astronaut_id INTEGER NOT NULL,
+    region TEXT NOT NULL,
+    intensity INTEGER NOT NULL,
+    ts TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_discomfort_astro_region ON discomfort(astronaut_id, region, ts);
 
 CREATE TABLE IF NOT EXISTS assessments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,6 +131,16 @@ CREATE TABLE IF NOT EXISTS superusers (
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS journal_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    astronaut_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (astronaut_id) REFERENCES astronauts(id)
+);
+CREATE INDEX IF NOT EXISTS idx_journal_astro ON journal_entries(astronaut_id, created_at);
 """
 
 
@@ -130,11 +152,26 @@ def get_conn():
     return conn
 
 
+def _migrate_schema(conn):
+    """CREATE TABLE IF NOT EXISTS (used throughout SCHEMA above) only helps a
+    brand-new table -- it does nothing once astronauts already exists, so the
+    three login-method columns added to astronauts above would never reach
+    the user's real, already-populated table without this. First
+    migration-style code in this file; keep it this same shape
+    (PRAGMA table_info -> ALTER TABLE ADD COLUMN per missing column) if
+    another column is ever added to an existing table later."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(astronauts)")}
+    for col, decl in (("username", "TEXT"), ("password_hash", "TEXT"), ("face_descriptor_json", "TEXT")):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE astronauts ADD COLUMN {col} {decl}")
+
+
 def init_db():
     with WRITE_LOCK:
         conn = get_conn()
         try:
             conn.executescript(SCHEMA)
+            _migrate_schema(conn)
             conn.commit()
         finally:
             conn.close()

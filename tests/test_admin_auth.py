@@ -3,8 +3,9 @@ import argparse
 import pytest
 from werkzeug.security import check_password_hash
 
-from backend import db, sessions
-from backend.create_superuser import create_superuser
+from backend import db
+from backend.logic import sessions
+from backend.auth.create_superuser import create_superuser
 
 
 @pytest.fixture(scope="module")

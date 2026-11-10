@@ -1,8 +1,8 @@
-// Superuser admin page (/admin): its own login (backend/admin_auth.py,
+// Superuser admin page (/admin): its own login (backend/auth/admin_auth.py,
 // session["superuser_id"] -- independent of the main app's astronaut
 // session), the unknown-tag backlog, and the tag registry. Not part of
-// the main SPA's Tabs/Chart.js/main.js, but does load the same
-// static/js/socket.js Bus the main app uses -- without it, a card tapped
+// the main SPA's Tabs/Chart.js/core/main.js, but does load the same
+// static/js/core/socket.js Bus the main app uses -- without it, a card tapped
 // while this page is open would never show up until you refreshed it;
 // the backlog was only ever (re)fetched on page load or after you
 // assign/dismiss something. See docs/CLAUDE.md's "Superuser admin page".
@@ -67,6 +67,7 @@ async function logout() {
 function refreshAll() {
   refreshUnknownTags();
   refreshTagRegistry();
+  refreshAccounts();
 }
 
 function tagKindSelectHtml(idAttr, selected) {
@@ -198,9 +199,64 @@ async function refreshTagRegistry() {
   }));
 }
 
+// ---- crew accounts: password reset / Face ID clear (account recovery) ----
+// Reuses the exact same backend/routes/routes.py routes an astronaut uses
+// to manage their own credentials (set_password/clear_face_id) -- those
+// routes already accept a logged-in superuser as an alternative to "you
+// are this astronaut" (_authorize_self_or_superuser), so no new backend
+// route was needed for this.
+
+async function refreshAccounts() {
+  const astronauts = astronautCache || await api("/admin/astronauts");
+  const list = document.getElementById("admin-accounts-list");
+  list.innerHTML = astronauts.map((a) => `
+    <div style="border-top:1px solid var(--border); padding:10px 0;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <strong>${a.name}</strong>
+        <div style="display:flex; gap:8px;">
+          <button class="btn secondary" data-reset-pw="${a.id}">Reset password</button>
+          <button class="btn secondary" data-clear-face="${a.id}">Clear Face ID</button>
+        </div>
+      </div>
+      <div id="account-reset-form-${a.id}" style="display:none; margin-top:10px; gap:8px; align-items:flex-end;">
+        <div style="flex:1;"><label>Username</label><input id="account-reset-username-${a.id}"></div>
+        <div style="flex:1;"><label>New password</label><input id="account-reset-password-${a.id}" type="password"></div>
+        <button class="btn" data-save-pw="${a.id}">Save</button>
+      </div>
+      <div id="account-reset-notice-${a.id}" class="dim" style="min-height:1.2em; margin-top:4px;"></div>
+    </div>`).join("");
+
+  list.querySelectorAll("[data-reset-pw]").forEach((btn) => btn.addEventListener("click", () => {
+    const form = document.getElementById(`account-reset-form-${btn.dataset.resetPw}`);
+    form.style.display = form.style.display === "none" ? "flex" : "none";
+  }));
+  list.querySelectorAll("[data-save-pw]").forEach((btn) => btn.addEventListener("click", async () => {
+    const id = btn.dataset.savePw;
+    const username = document.getElementById(`account-reset-username-${id}`).value;
+    const password = document.getElementById(`account-reset-password-${id}`).value;
+    const notice = document.getElementById(`account-reset-notice-${id}`);
+    try {
+      await api(`/astronauts/${id}/password`, { method: "POST", body: JSON.stringify({ username, password }) });
+      notice.textContent = "Password set.";
+    } catch (e) {
+      notice.textContent = "Couldn't set password -- check the username isn't taken and the password is long enough.";
+    }
+  }));
+  list.querySelectorAll("[data-clear-face]").forEach((btn) => btn.addEventListener("click", async () => {
+    const id = btn.dataset.clearFace;
+    const notice = document.getElementById(`account-reset-notice-${id}`);
+    try {
+      await api(`/astronauts/${id}/face_id`, { method: "DELETE" });
+      notice.textContent = "Face ID cleared.";
+    } catch (e) {
+      notice.textContent = "Couldn't clear Face ID.";
+    }
+  }));
+}
+
 // Live push for a card tapped while this page is open -- the same "scan"
 // pipeline that already broadcasts "unknown_tag" to the main app
-// (backend/sessions.py's handle_scan). Without this, the backlog only
+// (backend/logic/sessions.py's handle_scan). Without this, the backlog only
 // ever updated on page load or right after an assign/dismiss here.
 Bus.on("unknown_tag", () => { if (adminLoggedIn) refreshUnknownTags(); });
 

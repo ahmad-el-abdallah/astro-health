@@ -46,10 +46,17 @@
     <h3>Tag registry</h3>
     <table style="width:100%; border-collapse:collapse" id="admin-tags-table"></table>
   </div>
+
+  <div class="card" id="admin-accounts-card">
+    <h3>Crew accounts</h3>
+    <p class="dim">Reset a crew member's password or clear a stuck Face ID enrollment --
+      account recovery, same idea as reassigning a lost NFC card.</p>
+    <div id="admin-accounts-list"></div>
+  </div>
 </div>
 
 <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+<script src="{{ url_for('static', filename='js/core/socket.js') }}"></script>
 <script src="{{ url_for('static', filename='js/admin_page.js') }}"></script>
 </body>
 </html>

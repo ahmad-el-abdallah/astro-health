@@ -1,0 +1,124 @@
+// Login gate: nobody sees the app until they're signed in. NFC card is
+// the only working method today -- tap a card on the CYD while this
+// screen is showing (the same "scan" broadcast that opens a session on
+// the CYD itself) and the browser signs itself in as that astronaut.
+// Username/password and Face ID are shown as placeholders for later
+// (README / docs/CLAUDE.md).
+const Auth = { astronautId: null, name: null, role: null };
+
+function isSurgeon() { return Auth.role === "Flight surgeon"; }
+
+// Shared by every tab that lets you pick "which astronaut": the Flight
+// Surgeon still gets the full crew dropdown, but a regular astronaut is
+// locked to themselves -- the backend would reject anyone else's data
+// anyway (backend/auth/auth.py), this just keeps the UI from offering a
+// choice that would only come back as a 403.
+//
+// Several tabs call this again every time a Bus broadcast fires (e.g.
+// trends.js on "assessment"/"cyd_event"), not just on first show -- which
+// can happen before login finishes, while Auth is still empty. An earlier
+// version only ever wrote the <select>'s options once (`if
+// (!select.options.length)`), so that premature call could permanently
+// stick in a single "null" option and silently block every later, correct
+// re-population -- the real crew names would never show up without a
+// hard refresh. Always rebuilding from the current Auth/crew state fixes
+// that; the previously-selected value is restored afterward if it's still
+// a valid choice, so a broadcast mid-session doesn't reset your pick.
+async function populateAstroSelect(select) {
+  if (!Auth.astronautId) return [];  // nobody logged in yet -- nothing real to show
+  const prev = select.value;
+  if (isSurgeon()) {
+    const crew = await api("/crew");
+    select.innerHTML = crew.map((a) => `<option value="${a.id}">${a.name}</option>`).join("");
+    if (crew.some((a) => String(a.id) === prev)) select.value = prev;
+    select.disabled = false;
+    return crew;
+  }
+  select.innerHTML = `<option value="${Auth.astronautId}">${Auth.name}</option>`;
+  select.value = Auth.astronautId;
+  select.disabled = true;
+  return [{ id: Auth.astronautId, name: Auth.name }];
+}
+
+function applyRoleVisibility() {
+  document.querySelectorAll("[data-surgeon-only]").forEach((el) => {
+    el.style.display = isSurgeon() ? "" : "none";
+  });
+  document.getElementById("user-pill").textContent = Auth.name + (isSurgeon() ? " (Flight Surgeon)" : "");
+}
+
+function showApp() {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").style.display = "";
+}
+
+// Brings back whichever tab the URL hash names (showTab() writes it there
+// on every switch) -- e.g. after a refresh -- falling back to Live for an
+// empty/unknown hash or one that names a surgeon-only tab this astronaut
+// can't see.
+function restoreActiveTab() {
+  const name = location.hash.slice(1);
+  const btn = document.querySelector(`#tab-nav button[data-tab="${name}"]`);
+  const blocked = btn && btn.hasAttribute("data-surgeon-only") && !isSurgeon();
+  showTab(btn && !blocked ? name : "live");
+}
+
+function applyLogin(me) {
+  Auth.astronautId = me.astronaut_id;
+  Auth.name = me.name;
+  Auth.role = me.role;
+  if (!isSurgeon()) {
+    window.selectedAstronautId = me.astronaut_id;
+    // Show their own Live data right away -- don't wait for a second,
+    // separate "session_started" tap/event. Being logged in as yourself
+    // is already enough to see your own data (backend/auth/auth.py enforces
+    // that anyway), so there's no reason the Live tab should need its
+    // own card tap on top of the one that just logged you in.
+    LiveTab.viewAstronaut(me.astronaut_id);
+  } else {
+    // Refresh the Live tab's empty-state message now that Auth.role is
+    // set -- it was rendered once already at init() time, before login,
+    // when isSurgeon() was still false.
+    LiveTab.showEmpty();
+  }
+  showApp();
+  applyRoleVisibility();
+  restoreActiveTab();
+}
+
+async function checkAlreadyLoggedIn() {
+  const me = await api("/auth/me");
+  if (me.astronaut_id) { applyLogin(me); return true; }
+  return false;
+}
+
+async function onScanForLogin(d) {
+  if (Auth.astronautId) return;  // already signed in
+  try {
+    const me = await api("/auth/nfc_login", { method: "POST", body: JSON.stringify({ uid: d.uid }) });
+    applyLogin(me);
+  } catch (e) {
+    // Not every card tap is a login attempt (exercise/meal/emergency tags
+    // all broadcast "scan" too) -- just ignore ones that aren't a crew card.
+  }
+}
+
+async function logout() {
+  await api("/auth/logout", { method: "POST" });
+  location.reload();  // simplest clean reset of every tab's in-memory state
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  document.getElementById("logout-btn").addEventListener("click", logout);
+  // Pressing "Done" on the CYD (backend/routes/routes.py's "end_session" handling)
+  // signs this browser out too, if it's the one logged in as that
+  // astronaut -- unlike a re-tap or idle timeout, which only end the CYD
+  // session and deliberately leave the web login alone.
+  Bus.on("logout_requested", (d) => { if (d.astronaut_id === Auth.astronautId) logout(); });
+  const loggedIn = await checkAlreadyLoggedIn();
+  if (!loggedIn) {
+    document.getElementById("login-nfc-status").textContent = "Waiting for a card tap…";
+    document.getElementById("login-nfc-status").classList.add("pulse-dot");
+    Bus.on("scan", onScanForLogin);
+  }
+});

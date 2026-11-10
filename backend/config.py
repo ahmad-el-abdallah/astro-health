@@ -14,6 +14,27 @@ DB_PATH = os.path.join(DATA_DIR, "astro.db")
 # 1 = real time. 60 = one simulated hour passes per real minute.
 TIME_SCALE = float(os.environ.get("ASTRO_TIME_SCALE", "60"))
 
+NVIDIA_API_KEY_PATH = os.path.join(DATA_DIR, "nvidia_api_key")
+# Consultation chat's multi-turn memory: generous-but-bounded, not a cost-
+# optimization problem for a demo -- see docs/CLAUDE.md.
+MAX_CONSULT_HISTORY_TURNS = 10
+MAX_CONSULT_HISTORY_MSG_CHARS = 500
+
+
+def nvidia_api_key():
+    """env var wins (for anyone who prefers that), else the local gitignored
+    file, else None -- no key means backend/services/consult.py's AI consultation
+    feature is simply unavailable and the Body tab falls back to its own
+    keyword-matching reply."""
+    env_key = os.environ.get("NVIDIA_API_KEY")
+    if env_key:
+        return env_key.strip()
+    if os.path.exists(NVIDIA_API_KEY_PATH):
+        with open(NVIDIA_API_KEY_PATH, "r", encoding="utf-8") as f:
+            key = f.read().strip()
+        return key or None
+    return None
+
 
 def _load(name):
     path = os.path.join(CONFIG_DIR, f"{name}.json")

@@ -52,7 +52,7 @@ the NFC/astronaut login above (log into both at once in the same browser if you 
 the first superuser account:
 
 ```bash
-.venv/bin/python -m backend.create_superuser
+.venv/bin/python -m backend.auth.create_superuser
 ```
 
 It prompts for a username and password (hidden) and creates one row in the `superusers` table.
