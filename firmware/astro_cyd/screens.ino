@@ -189,6 +189,16 @@ void sessionTouch(int x, int y) {
 
 void endSessionLocally(const char* reason) {
   sendEndSession(curUid, reason);
+  // An explicit "done" clears the stored pairing (docs/CLAUDE.md "stale
+  // pairing after Done" follow-up) -- otherwise the very next hello (any
+  // reconnect, a restart, a brief Wi-Fi drop) still carries the same UID
+  // and the backend auto-resumes the session right back, making Done not
+  // actually sign you off. An idle timeout does NOT clear it -- same
+  // asymmetry this project already uses for the web login (idle never
+  // logs the browser out, only Done/Log out does): a device that just
+  // went quiet for a while should still pick back up as you when it
+  // reconnects, same as the original "USB to power bank" ask needs.
+  if (strcmp(reason, "done") == 0) prefs.remove("pairedUid");
   curUid = ""; curName = ""; curLevel = "GRAY"; curRole = "Crew member";
   vHr = ""; vHrL = "GRAY"; vBp = ""; vBpL = "GRAY"; vMood = ""; vMoodL = "GRAY"; vSleep = ""; vSleepL = "GRAY";
   crewCount = 0; alertsCount = 0; selectedAlert = -1; inboxHasItem = false; viewingCrewId = -1;

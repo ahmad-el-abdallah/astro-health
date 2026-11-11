@@ -2150,6 +2150,38 @@ but was mostly still tappable, which is why only "a"/"s" were reported as comple
   "ask before flashing, verify on real hardware" caveat applies doubly here since the actual root
   cause was only found by re-deriving stale global state, not by reproducing it live.
 
+### Follow-up: "Done" didn't actually sign you off -- pairing was never cleared (same day, 2026-11-12)
+
+User reported three symptoms that turned out to be the same bug: sometimes auto-logged in as
+Ahmad on restart, sometimes right after pressing SOS, and -- the one that nailed it down --
+**even after pressing Done**, the device would log back in as Ahmad again shortly after.
+
+- **Root cause**: `screens.ino`'s `endSessionLocally(reason)` (called with `"done"` from the
+  Done tile, `"idle"` from the idle-timeout check) never touched the stored `pairedUid`
+  (docs/CLAUDE.md "CYD pairing") -- it only cleared the in-memory session globals (`curUid` etc.)
+  and told the laptop the session ended. The persisted pairing survived untouched, so the very
+  next `hello` -- from a restart, a fresh Wi-Fi reconnect, or any brief drop a real STA link can
+  have -- still carried the same UID, and `resume_paired_session()` on the backend auto-resumed
+  it the instant `active_sessions` was empty (which it always was, right after Done). Pressing
+  Done looked like it worked (the laptop and CYD both genuinely went idle for a moment), but
+  "signed off" never actually meant "stop remembering me" -- just "end the session that happens
+  to be open right now." The SOS-button symptom was most likely the same mechanism via a
+  coincidental Wi-Fi reconnect blip during/after the 3-second hold, not SOS itself doing anything
+  session-related (traced through `start_emergency()` -- it never touches `active_sessions` or
+  pairing at all).
+- **Fixed**: `endSessionLocally()` now clears `pairedUid` (`prefs.remove("pairedUid")`) **only**
+  when `reason == "done"` -- an idle timeout still leaves pairing intact on purpose, mirroring
+  this project's own existing asymmetry for the *web* login (an idle CYD timeout never logs the
+  browser out, only an explicit Done/Log out does, see "Login / access control" above) -- a
+  device that simply went quiet for a while and reconnects later should still pick back up as you
+  (the original "USB to power bank" ask this whole feature was built for), but an explicit
+  sign-off should actually mean it.
+- Backend-side `resume_paired_session()` needed no change -- `sendHello()` already omits
+  `paired_uid` entirely once the stored value is empty (`if (pairedUid.length())`), so clearing it
+  at the source is sufficient; nothing downstream had to be taught a new "ignore this" case.
+- `arduino-cli compile` clean (35%/15%, unchanged). Flashed; not yet reconfirmed live that a real
+  Done press followed by a reconnect/restart stays logged out.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 235 tests (rules engine, protocol, sessions, REST API, symptoms,
