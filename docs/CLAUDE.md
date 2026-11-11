@@ -2182,6 +2182,36 @@ Ahmad on restart, sometimes right after pressing SOS, and -- the one that nailed
 - `arduino-cli compile` clean (35%/15%, unchanged). Flashed; not yet reconfirmed live that a real
   Done press followed by a reconnect/restart stays logged out.
 
+### Follow-up: replugging the CYD logged you out even without pressing Done (same day, 2026-11-12)
+
+User reported the opposite-looking symptom right after the fix above: now a tap-in followed by
+unplugging and replugging the board (no Done press at all) came back logged out, when it should
+have resumed. A genuinely different bug from the last two, not a regression of them.
+
+- **Root cause**: `sendHello()` only ever fires once at cold boot, plus once per *new Wi-Fi
+  client* (`wifi_bridge.ino`'s `handleTcpClient()`, added for the original pairing feature) --
+  but a USB replug has no equivalent "new client" event on the firmware side to hook. The one-shot
+  boot-time hello can easily be sent before the laptop's own `SerialBridge` has even reopened the
+  port yet (its reconnect loop only polls every `RECONNECT_S` seconds) -- those bytes are simply
+  gone, `paired_uid` never reaches the backend, and the session never resumes. Not a logout; a
+  resume that silently never happened, which looks identical from the outside.
+- **Fixed** by hooking the *already-existing* `onLaptopBack()` (`screens.ino`, protocol.ino's
+  `laptopOnline` tracking -- fires whenever a two-way connection is confirmed again, i.e. the
+  laptop's own periodic `ping` gets through, regardless of transport or how long the gap was) to
+  also call `sendHello()`. This closes the race properly instead of guessing a fixed delay: it
+  fires exactly when the connection is *proven* working again, for a USB replug exactly as well as
+  a Wi-Fi reconnect.
+- **Verified live end-to-end on the real board**, not just reasoned through: simulated a real tap
+  for Ahmad (`/api/simulate/scan`, which drives the exact same code path a physical tap does,
+  including sending a real `session` message to the connected board), killed the running server
+  process (standing in for "the laptop went away" -- indistinguishable from the CYD's own point of
+  view from a literal replug, since both just mean its ping stream stops), waited past the board's
+  own 10s `LAPTOP_OFFLINE_MS` threshold, restarted the server, and confirmed the session had
+  already resumed with no fresh tap at all (re-tapping the same card produced only a `scan` event,
+  no `session_started` -- proof a session was already active, not that one had just started).
+  Logged out afterward via an explicit `end_session` (reason `"done"`) to leave the board clean.
+- `arduino-cli compile` clean (35%/15%, unchanged).
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 235 tests (rules engine, protocol, sessions, REST API, symptoms,

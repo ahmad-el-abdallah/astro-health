@@ -929,6 +929,17 @@ void onInboxListMsg() {
 }
 void onCrewDetailMsg() { if (screen == SCR_CREW_DETAIL) drawCrewDetailScreen(); }
 void onLaptopBack() {
+  // sendHello() otherwise only ever fires once at cold boot (or once per new
+  // Wi-Fi client, see wifi_bridge.ino's handleTcpClient()) -- a USB replug
+  // has no equivalent "new client" event to hook on the firmware side, so
+  // the one-shot boot-time hello can easily be sent before the laptop's own
+  // serial bridge has even reopened the port yet (its reconnect loop polls
+  // every few seconds), losing the paired_uid that hello carries and
+  // silently never resuming the session. This fires reliably the moment a
+  // two-way connection is actually confirmed (the laptop's next periodic
+  // ping gets through), regardless of transport or how long the gap was --
+  // closing that race instead of guessing a fixed delay.
+  sendHello();
   if (screen == SCR_IDLE) drawIdleScreen();
 }
 void onLaptopOffline() {
