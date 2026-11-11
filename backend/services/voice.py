@@ -9,7 +9,7 @@ edge-tts's own streaming API was checked directly before building this: it
 only ever yields "audio" and "SentenceBoundary" chunks, no word/viseme
 timing -- so there is no data here to drive frame-accurate lip-sync from.
 The Face to Face avatar's mouth animation is driven by the played-back
-audio's own amplitude instead (static/js/3d/face_avatar.js), not by anything
+audio's own amplitude instead (frontend/src/three/faceAvatar/simple.js), not by anything
 this module returns.
 """
 import asyncio
@@ -20,7 +20,8 @@ import edge_tts
 # Same override pattern as backend/services/consult.py's NVIDIA_CHAT_MODEL -- a
 # one-line env var change, not a real design decision baked into code.
 # en-US-JennyNeural (female) -- matches the Face to Face avatar itself
-# (static/avatars/brunette.glb, loaded with body: 'F' in face_avatar_rpm.js),
+# (frontend/public/avatars/brunette.glb, loaded with body: 'F' in
+# frontend/src/three/faceAvatar/realistic.js),
 # and verified directly to synthesize just as fast as the previous default
 # (en-US-AndrewNeural, male) on this account, so switching voices isn't
 # trading speed for the requested gender.

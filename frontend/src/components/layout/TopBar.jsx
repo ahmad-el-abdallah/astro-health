@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAstronautPicker, useAuth } from "../../auth/AuthProvider.jsx";
 import { useAlerts, useMission } from "../../lib/queries.js";
 import { Icon } from "../ui/Icon.jsx";
+import { DoctorTools } from "./DoctorTools.jsx";
 
 export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = null }) {
   const { isSurgeon, signOut } = useAuth();
@@ -82,6 +83,8 @@ export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = 
           )}
         </Link>
       )}
+
+      {isSurgeon && <DoctorTools />}
 
       <button
         onClick={onAccount}

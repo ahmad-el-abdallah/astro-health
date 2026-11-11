@@ -48,6 +48,8 @@ export const EVENT_INVALIDATIONS = {
   session_ended: [["summary"], ["crew"]],
   alert: [["alerts"], ["crew"], ["messages"], ["thread"]],
   alert_acknowledged: [["alerts"], ["crew"]],
+  crew_updated: [["crew"], ["summary"], ["tags"], ["admin-astronauts"]],
+  tags_changed: [["tags"], ["admin-astronauts"], ["crew"]],
   message_delivered: [["messages"], ["thread"]],
   message_sent: [["messages"], ["thread"]],
   mission_changed: [["mission"]],

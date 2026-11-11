@@ -766,3 +766,28 @@ def test_message_thread_respects_the_comms_delay(client, monkeypatch):
 
     login_as(client, SAMEER_UID)
     assert client.get("/api/astronauts/1/messages").status_code == 403
+
+
+def test_rename_validates_and_404s(client):
+    login_as(client, _surgeon_uid())
+    assert client.put("/api/astronauts/2", json={"name": "   "}).status_code == 400
+    assert client.put("/api/astronauts/2", json={"name": 42}).status_code == 400
+    assert client.put("/api/astronauts/999", json={"name": "Nobody"}).status_code == 404
+    res = client.put("/api/astronauts/2", json={"name": "  Sameer  "})
+    assert res.status_code == 200 and res.get_json()["name"] == "Sameer"
+
+
+def test_admin_roster_and_tag_validation(client):
+    create_superuser("roster-admin", "roster-password")
+    client.post("/api/admin/login", json={"username": "roster-admin", "password": "roster-password"})
+    roster = {a["id"]: a for a in client.get("/api/admin/astronauts").get_json()}
+    assert roster[1]["card_uid"] == AHMAD_UID
+    assert set(roster[1]) >= {"has_password", "has_face_id", "username"}
+    assert "password_hash" not in roster[1] and "face_descriptor_json" not in roster[1]
+    assert client.post("/api/tags", json={"uid": "", "type": "meal"}).status_code == 400
+    assert client.post("/api/tags", json={"uid": "X1", "type": "rocket"}).status_code == 400
+    assert client.post("/api/tags", json={"uid": "X1", "type": "astronaut", "astronaut_id": 999}).status_code == 400
+    assert client.post("/api/tags", json={"uid": " X1 ", "type": "meal", "label": "Snack"}).status_code == 200
+    assert any(t["uid"] == "X1" for t in client.get("/api/tags").get_json())
+    assert client.delete("/api/tags/X1").status_code == 200
+    client.post("/api/admin/logout")

@@ -41,49 +41,50 @@ general reference ranges, not real NASA figures. Never treat them as real, and k
 ## Layout
 
 ```
-app.py                      entry point: Flask + Socket.IO, picks a bridge, seeds the DB
+app.py                      entry point: Flask + Socket.IO, picks a bridge, seeds the DB, serves
+                             the React build as an SPA (no Flask static folder, no templates)
 backend/                    grouped by concern (see "Backend reorganized into folders" below) —
   config.py, db.py, seed.py   stay at this top level: nearly every other module imports these
-  routes/                     the Flask blueprints — routes.py (/api/*), admin_routes.py (/admin)
+  routes/                     the Flask blueprints — routes.py (/api/*), admin_routes.py (/api/admin/*)
   auth/                       web login — auth.py (astronaut/surgeon), admin_auth.py (superuser),
                                create_superuser.py (CLI)
   hardware/                   talks to physical boards — protocol.py (wire format) plus
                                serial_bridge.py/wifi_bridge.py/pico_bridge.py (the 3 bridges)
   services/                   external AI integrations — consult.py (NVIDIA chat), voice.py (edge-tts)
-  logic/                      core domain rules — sessions.py, health_rules.py, symptoms.py,
-                               gamification.py
-  jobs/                       background/time-based work — scheduler.py, comms.py
-config/*.json               every PLACEHOLDER value (thresholds, text, missions, schedule, points)
+  logic/                      core domain rules — sessions.py, health_rules.py, symptoms.py
+  jobs/                       background/time-based work — scheduler.py (mission clock, reminders,
+                               Schedule statuses), comms.py (delayed messages)
+config/*.json               every PLACEHOLDER value (thresholds, text, missions, schedule, symptoms)
 data/astro.db               created at runtime by backend/seed.py, git-ignored
-static/, templates/         the 9-tab web app (vanilla JS, no build step, no CDN at runtime),
-                             plus the separate /admin page (templates/admin.html,
-                             static/js/admin_page.js) -- not part of that SPA, its own login
-  static/js/core/              app-wide infra loaded by every page: main.js, socket.js, auth.js,
-                                strings.js
-  static/js/tabs/               one file per SPA tab (live/body/trends/crew/surgeon/mission/
-                                learn/rewards/schedule) plus simulator.js
-  static/js/3d/                 3D scene modules a tab invokes directly: face_avatar.js,
-                                face_avatar_rpm.js, planet3d.js
-  static/js/admin_page.js      stays at this top level -- the /admin page's own entry point,
-                                not part of the main SPA at all
-  static/vendor/                third-party libraries, left flat/as-is -- see "Backend
-                                reorganized into folders" below for why
+frontend/                   the React app (Vite + React 19 + Tailwind v4 + motion) -- see
+                             "React frontend" below. dist/ (the build) IS committed.
+  src/pages/crew/              Overview, Body (+ body/), Trends (+ trends/stats.js), Mind, Sleep,
+                                Mission, Schedule, Learn
+  src/pages/doctor/            CrewOverview, Alerts, CrewProfile, feed.js (the alert feed)
+  src/pages/admin/Admin.jsx    /admin (its own superuser login)
+  src/components/              shared UI (ui/, charts/, layout/ incl. Sidebar + DoctorTools,
+                                overlays/, Thread.jsx, VitalTile, TrendCard, RiskMeter…)
+  src/three/                   anatomy/ (3D twin), faceAvatar/ (Face to Face), planet3d.js
+  src/lib/                     api.js, socket.js (+ EVENT_INVALIDATIONS), queries.js, format.js,
+                                levels.js, reportText.js, faceId.js
+  scripts/build-anatomy.mjs    one-off pipeline that produced public/models/anatomy.glb
+  public/                      anatomy.glb, the TalkingHead avatar, face-api.js + its models
 firmware/astro_cyd/         the CYD sketch (TFT_eSPI + XPT2046, not LovyanGFX like Lifeline)
 firmware/esp32s3_nfc_reader/ dead hardware, kept for reference only -- see "Pico NFC reader
                              replaces the dead ESP32-S3" below, do not try to revive this board
-firmware/pico_nfc_reader/   the live NFC reader now: Pico + PN532, USB-straight-to-laptop, new
-                             2026-11-05 -- see that section below
+firmware/pico_nfc_reader/   the live NFC reader: Pico + PN532, USB-straight-to-laptop
 firmware/existing/          reference-only copies of Lifeline's lock sketch + nfc_link.h
-tests/                      pytest — rules engine, protocol, sessions, REST API, symptoms, auth
-                             (140 tests) -- stays flat, one test_<module>.py per backend module,
-                             regardless of which backend/ subfolder that module now lives in
+tests/                      pytest (196) -- flat, one test_<module>.py per backend module, plus
+                             test_spa.py (SPA serving), test_cyd_logout.py, test_scheduler.py
 docs/build-prompt.md        the original 16-section spec
 docs/CLAUDE.md              these notes (root CLAUDE.md only imports this)
-docs/README.md              not present — the root README.md is the user guide here (unlike
-                             Lifeline, which keeps its guide under docs/)
 docs/*.mp4, *.pdf           delivered demo video(s) and the guide PDF — see "Deliverables" below
 video3-src/, video3b-src/   disposable build scratch for the trailer video — see "Deliverables"
 ```
+
+**`static/` and `templates/` are gone (2026-11-11).** Older dated entries below describe the
+vanilla app that lived there (`static/js/tabs/*.js`, `templates/index.html`…); they're history.
+The React files say in their header comment which old file they were ported from.
 
 ## How it works (keep these invariants)
 
@@ -182,15 +183,16 @@ video3-src/, video3b-src/   disposable build scratch for the trailer video — s
 - Pin map (reused from Lifeline's proven CYD pin-out, different graphics library though):
   TFT SCLK/MOSI/MISO/DC/CS = 14/13/12/2/15; backlight 21; touch SCLK/MOSI/MISO/CS/IRQ =
   25/32/39/33/36; RGB LED (active low) R/G/B = 4/16/17; speaker 26.
-- **Not yet verified on real hardware** (no boards attached during this build): screen rotation
+- **Flashed and running since 2026-11-11** (boot + `hello` confirmed; the user uses its Done
+  button daily). Still never formally checked one by one: screen rotation
   (set to `1`; Lifeline's LovyanGFX sketch uses `3` if this looks wrong), touch calibration
   (`TS_MINX/MAXX/MINY/MAXY`), the microSD `SD_CS_PIN=5` guess in `protocol.ino`, and LED/speaker
   physical behavior. Check these on the actual boards before relying on them.
 - Compile-check: `arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app firmware/astro_cyd`
   (32% flash / 14% RAM — unchanged from the initial 2026-10-29 build even after everything
   since, including `screens.ino`'s `drawWrapped()`, re-confirmed 2026-11-04). **Ask before
-  flashing any board** — same rule as Lifeline, and doubly so here since nothing's been run on
-  real `astro_cyd` hardware yet (unlike the ESP32-S3 reader below, which has).
+  flashing any board** — same rule as Lifeline. To flash, the laptop's `app.py` must let go of
+  the port first (the user stops it with Ctrl+C; never kill their server yourself).
 - **`arduino-cli` is now installed on this machine (since 2026-11-04)** — `/usr/local/bin/arduino-cli`,
   with the `esp32:esp32` core (3.3.12) and `TFT_eSPI`/`XPT2046_Touchscreen`/`ArduinoJson`/
   `Adafruit_PN532` all installed via `arduino-cli lib install`. It was missing for the whole
@@ -1426,68 +1428,84 @@ formatted "8h 0m".
   test data left in the user's real `data/astro.db` (never touched — only the scratch copy ran
   this request).
 
+## React frontend replaces the vanilla app (2026-11-11, branch `ui-redesign`)
+
+Rebuilt from the user's `~/Downloads/AstroHealth-Redesign` mockups (screens/, DESIGN-SPEC.md,
+design-system/), then extended at the user's request: "use react.js… smooth motions,
+specifically for charts and dashboards… make the body page look like this [x-ray skeleton
+dashboard] and realistic". Every old feature was kept (decided with the user); the old
+vanilla app was deleted once the last page was ported.
+
+- **Stack**: Vite 8, React 19 (JS, not TS — user's choice), react-router, TanStack Query,
+  socket.io-client, `motion`, Tailwind v4 (`@theme inline` tokens from CSS variables), d3
+  scales for hand-built SVG charts, three + react-three-fiber/drei for 3D. No CDN at runtime.
+- **The build is committed** (`frontend/dist/`, user's choice) so `python app.py` works on a
+  laptop with no Node. `app.py`'s catch-all serves real files from dist as-is, everything
+  else gets index.html, and `/api/*` stays a JSON 404 (tests/test_spa.py). **Rebuild and
+  commit dist after any frontend change**, or the running app won't show it.
+- **Live updates, no polling**: `src/lib/socket.js`'s `EVENT_INVALIDATIONS` maps each server
+  broadcast to the TanStack Query keys it makes stale; `liveUpdates.js` wires it. New backend
+  events added for this: `alert_acknowledged`, `message_sent`, `crew_updated`, `tags_changed`.
+- **Roles**: `<html data-role="crew|doctor">` (set by `AuthProvider`) switches the whole
+  palette (crew blue / doctor teal). Doctor routes are wrapped in `DoctorOnly`; the backend
+  enforces access anyway. `/admin` sits outside the sign-in gate (own superuser login).
+- **Performance rules** (the old login screen lagged badly; these fixed it — keep them):
+  only the active route is mounted; heavy pages/3D/face-api are lazy chunks; animate only
+  transform/opacity; never animate `background-position`, blurred or SVG-filtered elements;
+  no `backdrop-filter` over content that animates (the 3D twin's overlays and the login card
+  use `.ah-glass-flat`); R3F dpr capped at 1.5.
+- **Glass theme** (user chose "full frosted blur everywhere"): `.ah-glass` / `-strong` /
+  `-flat` in `src/styles/index.css` — tint + blur + saturate, frost grain (SVG noise data
+  URI), a masked 1px specular rim (`::before`), over a **static** `SpaceBackdrop`. Glass is
+  never nested in glass (inner tiles use `bg-raised`). Account → "Reduce glass effects"
+  (`localStorage ah-glass=lite`) drops the blur; scroll containers that carry a rim scroll an
+  inner div so the rim stays put.
+- **Body page anatomy**: real meshes from **BodyParts3D 4.0** (© The Database Center for Life
+  Science, **CC BY 4.0 — the on-screen attribution is required, keep it**), converted once by
+  `scripts/build-anatomy.mjs` (meshoptimizer + gltf-transform; mm Z-up → m Y-up, feet at y=0)
+  into `public/models/anatomy.glb` (~2.4 MB: skeleton, wire, muscles, skin, brain, eyes, heart,
+  lungs→immune, stomach). Loaded with `useGLTF(url, false, true)` (draco off, meshopt on).
+  No WebGL → `three/webgl.jsx`'s fallback instead of a crash.
+- **Face to Face**: TalkingHead bundled from `src/vendor/talkinghead/` with
+  `lipsyncModules: []` and `head.lipsync.en = new LipsyncEn()` set directly — this avoids the
+  dynamic-import 404 trap from 2026-11-05. The AudioContext is still created synchronously in
+  the click handler.
+- **Sessions**: web login lasts 1 h (`session.permanent`, `LOGIN_LIFETIME` in app.py). CYD
+  idle time comes from the laptop (`SESSION_IDLE_S`, default 600 s) and only "Done" signs the
+  browser out (see the CYD entries in "How it works").
+- **Doctor screens** use only real data: `/crew` carries each member's 24 h snapshot
+  (`_today_snapshot()`, shared with `/summary`); the alert feed (`pages/doctor/feed.js`)
+  merges open alerts with today's out-of-range readings, symptoms and no-data, worst first.
+- **Messages**: `GET /astronauts/<id>/messages` is delay-aware on the server — an incoming
+  crew report still in transit shows the surgeon only that it's coming (body `null`), and a
+  surgeon reply in transit doesn't exist yet for the crew. Before this, replies were stored
+  but never shown to the crew anywhere; now they pop up on arrival and sit on the Overview.
+  Report wording is prettified at display time (`lib/reportText.js`).
+- **Removed at the user's request**: Rewards/points/badges, everywhere (see "How it works").
+- **Testing pattern used for every page**: an isolated `rsync` copy of the repo in the
+  scratchpad with its own `data/` on `--web-port 5057` (never the live `data/astro.db`), driven
+  by headless Chromium (`playwright-core` + the cached chromium with
+  `--use-angle=swiftshader --enable-unsafe-swiftshader`). The sandbox has no GPU, so FPS there
+  means nothing — the user judges smoothness on their laptop.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 164 tests (rules engine, protocol, sessions, REST API, symptoms,
-  login/access control incl. password + Face ID, consult, voice).
+- `.venv/bin/python -m pytest` — 196 tests (rules engine, protocol, sessions, REST API, symptoms,
+  login/access control, consult, voice, scheduler, SPA serving, CYD logout).
+- `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
+  `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
-  (Simulator panel drives every CYD event through the same code path a real tap would).
-- Kill any backgrounded dev server you start for screenshots/recording afterward
-  (`pkill -f "app.py --simulate"`), don't leave it running between tasks.
+  (the Simulator drives every CYD event through the same code path a real tap would).
+- Kill any backgrounded dev server you start for screenshots/recording afterward, don't leave
+  it running between tasks. Never point tests at the user's live `data/astro.db`.
 - Ask before flashing firmware to a real board, same as Lifeline.
 
-## Status (2026-11-06)
+## Status (2026-11-11)
 
-- As of today, also uncommitted: the backend/static reorganization into folders (see "Backend
-  reorganized into folders" above) and the Consultation AI's new vitals/alert/symptom/breathing/
-  emergency abilities (see "Consultation AI gains real tool-calling" above) -- `backend/services/
-  consult.py`'s new schema/prompt, the new `POST /astronauts/<id>/alert` route, `backend/logic/
-  gamification.py`'s new `rewards_summary()`, `backend/routes/routes.py`'s new
-  `_recent_trend_summary()`, `static/js/tabs/body.js`'s extended `aiReply()`, `escapeHtml()` moved
-  into `static/js/core/main.js` and used by `static/js/tabs/surgeon.js`, the new `.breathing-pacer`
-  CSS, and 38 new tests across `tests/test_consult.py`/`tests/test_api.py`. 140/140 passing.
-- Git has a remote (`origin`, a GitHub repo under the user's account); check `git status`/
-  `git log` before assuming anything past the last commit is saved anywhere but disk — this
-  file gets edited ahead of commits, not after, and as of this pass `firmware/pico_nfc_reader/`,
-  `backend/pico_bridge.py`, `app.py`'s two-line hookup of it, and the Body tab's full rework
-  (`static/js/body.js`, `static/css/style.css`, `templates/index.html`, the vendored
-  `static/vendor/three.min.js`/`OrbitControls.js`, plus the new `discomfort` table/routes in
-  `backend/db.py`/`backend/routes.py` and 6 new tests in `tests/test_api.py` from the same-day
-  follow-up pass, and the NVIDIA-hosted Consultation chat (`backend/consult.py` new,
-  `backend/config.py`'s `nvidia_api_key()`, the `/consult` route, `static/js/body.js`'s chat
-  rework, `.gitignore`'s new `data/nvidia_api_key` line, `tests/test_consult.py` new — see "Body
-  tab: 3D digital-twin viewer", its "Follow-up: full-fidelity rework", and "Consultation chat:
-  real NVIDIA-hosted AI" (plus its own same-day "Follow-up: making the agent smarter" --
-  multi-turn history, richer system-prompt grounding, retry-once, and the `DEFAULT_MODEL` bump to
-  `nemotron-3-ultra-550b-a55b`, and "Face to Face: a voice conversation with an animated avatar" --
-  `backend/voice.py` new, the `/speak` route, `static/js/face_avatar.js` new, `edge-tts==7.3.1` in
-  `requirements.txt`, `tests/test_voice.py` new) above) are all uncommitted working-tree changes.
-  `data/nvidia_api_key` itself holds a real key and is gitignored, not tracked at all.
-- **NFC is working again as of today**, just on different hardware than planned: the ESP32-S3
-  reader board died permanently this session (see "Pico NFC reader replaces the dead ESP32-S3"
-  above for the full diagnosis), and a Raspberry Pi Pico + the same PN532 module replaces it,
-  verified end-to-end with a real crew card over the running backend. The CYD itself is
-  untouched by any of this — same firmware, same invariants as before.
-- Previously (2026-11-04): persisting the session secret key so restarting the dev server
-  doesn't force everyone to re-log in, the Live tab following login instead of a one-time
-  CYD-session broadcast, explicit sign-off syncing both ways between the web login and the CYD
-  session, the superuser admin page, and the Mission Health tab (`3wrf-edits` branch, merged).
-- Initial 2026-10-29 build (backend, full 10-tab web app, firmware) passed its own checks that
-  session (pytest, a headless full-page click-through, `arduino-cli compile`) but was never run
-  on real CYD/S3 hardware. Since then (2026-11-03): auto-simulated vitals, a USB serial
-  reliability fix (cable/signal issue still outstanding, see above), the CYD status-note fix,
-  symptom reporting + guidance-on-tap (a voice/NVIDIA version of this was tried and deliberately
-  dropped), full login/access control (NFC-card login, Flight-Surgeon-sees-everyone /
-  everyone-else-sees-only-themselves), and (2026-11-04) persisting the session secret key so
-  restarting the dev server doesn't force everyone to re-log in, the Live tab following login
-  instead of a one-time CYD-session broadcast, explicit sign-off syncing both ways between the
-  web login and the CYD session ("Done" logs the browser out, "Log out" ends the CYD session --
-  passive endings like idle timeout or a re-tap still don't), and a brand-new
-  `firmware/esp32s3_nfc_reader/` sketch (see above), ported from the user's own real, working
-  GitHub project after a first from-scratch attempt guessed wrong, aimed at its slow/short-range
-  card detection. `pytest` is current (62 tests, all passing). **`arduino-cli` is now installed
-  on this machine** (it wasn't for the whole 2026-11-03 session) and both firmware sketches
-  compile clean -- but the corrected ESP32-S3 reader sketch (real pins, ported fixes) hasn't
-  been flashed/confirmed on the real board yet, and `astro_cyd` has never been flashed to real
-  hardware at all. Compile passing is not the same as hardware-verified -- check both before
-  trusting either.
+- Branch `ui-redesign` holds the whole React rebuild (crew pages, Flight Surgeon screens,
+  /admin, glass theme, sidebar, Schedule, Trends analytics, rewards removal, session fixes),
+  committed but **not pushed** and **not merged into master** yet — check `git log` /
+  `git status` before assuming more.
+- `firmware/astro_cyd` was flashed twice on 2026-11-11 (end_session reason; then idle_s from
+  the laptop + "active" pings + no points header); boot + `hello` confirmed both times.
+- `data/nvidia_api_key` holds a real key and is gitignored, not tracked at all.

@@ -45,7 +45,7 @@ export function Drawer({ open, onClose, title, width = 460, children, className 
   );
 }
 
-export function Modal({ open, onClose, title, children }) {
+export function Modal({ open, onClose, title, children, size = "md" }) {
   useEscape(open, onClose);
   return (
     <AnimatePresence>
@@ -60,7 +60,7 @@ export function Modal({ open, onClose, title, children }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 360, damping: 30 }}
-            className="relative w-full max-w-md ah-glass-strong rounded-card-l p-6 shadow-[0_30px_75px_rgba(0,0,0,.6)]"
+            className={`relative max-h-[calc(100vh-40px)] w-full overflow-y-auto ah-glass-strong rounded-card-l p-6 shadow-[0_30px_75px_rgba(0,0,0,.6)] ${size === "lg" ? "max-w-2xl" : "max-w-md"}`}
           >
             <h3 className="m-0 mb-2.5 font-display text-[22px] font-semibold">{title}</h3>
             {children}

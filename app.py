@@ -15,7 +15,7 @@ import threading
 import time
 from datetime import timedelta
 
-from flask import Flask, jsonify, render_template, send_from_directory
+from flask import Flask, jsonify, send_from_directory
 from flask_socketio import SocketIO
 
 from backend import db, seed
@@ -92,7 +92,8 @@ def choose_bridge(args, on_message, on_status, on_send):
 
 
 def create_app(args):
-    app = Flask(__name__)
+    # No Flask static folder: everything the browser loads comes from the React build.
+    app = Flask(__name__, static_folder=None)
     # Persisted across restarts (see _load_or_create_secret_key) so signed-in
     # sessions survive both an ordinary page refresh and a dev-server restart.
     app.secret_key = _load_or_create_secret_key()
@@ -130,12 +131,6 @@ def create_app(args):
     # CYD's own scans go through. No-ops if no Pico is plugged in.
     pico_bridge = PicoBridge(on_message=handle_cyd_message)
     pico_bridge.start()
-
-    # The old vanilla HTML/JS app, kept reachable only while its pages are being
-    # ported to React (frontend/) one at a time -- removed once the port is done.
-    @app.get("/legacy")
-    def legacy_index():
-        return render_template("index.html")
 
     # The React app (frontend/dist, built by `npm run build`). Real files (JS/CSS
     # bundles, fonts, 3D models) are served as-is; any other path gets index.html so

@@ -1,12 +1,13 @@
 """Flask routes for the superuser admin page (/admin): its own login/
 session (backend/auth/admin_auth.py), the unknown-tag backlog (populated by
 backend/logic/sessions.py's handle_scan), a roster endpoint for the astronaut
-picker, and serving the page itself. Kept out of backend/routes/routes.py's `api`
+picker. The page itself is the React app's /admin route (frontend/src/pages/admin/),
+served by app.py's SPA catch-all like every other page. Kept out of backend/routes/routes.py's `api`
 blueprint because this is an entirely separate access-control domain with
 no astronaut/Flight-Surgeon session involved -- see docs/CLAUDE.md's
 "Superuser admin page".
 """
-from flask import Blueprint, jsonify, request, render_template
+from flask import Blueprint, jsonify, request
 
 from backend import db
 from backend.auth import admin_auth
@@ -15,10 +16,6 @@ from backend.logic import sessions
 
 def create_admin_routes(app):
     bp = Blueprint("admin", __name__, url_prefix="/api/admin")
-
-    @app.get("/admin")
-    def admin_page():
-        return render_template("admin.html")
 
     @bp.post("/login")
     def admin_login():
@@ -47,8 +44,14 @@ def create_admin_routes(app):
             _, err = admin_auth.authorize_superuser(conn)
             if err:
                 return jsonify(err[0]), err[1]
-            data = conn.execute("SELECT id, name, role, color FROM astronauts ORDER BY id").fetchall()
-        return jsonify([dict(r) for r in data])
+            # Sign-in status for the Crew accounts card (never the secrets themselves).
+            data = conn.execute(
+                "SELECT a.id, a.name, a.role, a.color, a.username, "
+                "a.password_hash IS NOT NULL AS has_password, a.face_descriptor_json IS NOT NULL AS has_face_id, "
+                "(SELECT uid FROM tags t WHERE t.astronaut_id = a.id AND t.type IN ('astronaut','surgeon') LIMIT 1) AS card_uid "
+                "FROM astronauts a ORDER BY a.id"
+            ).fetchall()
+        return jsonify([{**dict(r), "has_password": bool(r["has_password"]), "has_face_id": bool(r["has_face_id"])} for r in data])
 
     @bp.get("/unknown-tags")
     def admin_unknown_tags():

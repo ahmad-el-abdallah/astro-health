@@ -31,7 +31,7 @@ def monkeypatch_module():
     mp.undo()
 
 
-@pytest.mark.parametrize("path", ["/", "/body", "/doctor/alerts", "/crew/overview"])
+@pytest.mark.parametrize("path", ["/", "/body", "/doctor/alerts", "/doctor/crew/2", "/admin", "/crew/overview"])
 def test_deep_links_serve_the_app(app_and_dist, path):
     client, _ = app_and_dist
     res = client.get(path)
@@ -66,3 +66,11 @@ def test_missing_build_says_how_to_build_it(app_and_dist, monkeypatch, tmp_path)
     res = client.get("/body")
     assert res.status_code == 503
     assert b"npm run build" in res.data
+
+
+def test_old_vanilla_app_is_gone(app_and_dist):
+    # /legacy and /static used to serve the pre-React app; now they're just SPA paths.
+    client, _ = app_and_dist
+    for path in ("/legacy", "/static/js/core/main.js"):
+        res = client.get(path)
+        assert res.status_code == 200 and b"id='root'" in res.data

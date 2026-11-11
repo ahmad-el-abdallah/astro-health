@@ -194,11 +194,13 @@ then release, and re-run the same command.
 it always did, but **do not flash it** -- see "The ESP32-S3 reader sketch" above, that board is
 dead hardware.)
 
-**This firmware has only been compile-checked** (`arduino-cli compile`, 32% flash / 14% RAM --
-re-confirmed 2026-11-04, including `screens.ino`'s `onStatusMsg()`/`drawWrapped()` word-wrap
-addition, which compiles clean), not flashed or run on the real `astro_cyd` board. Please
-verify on hardware: rotation, touch calibration, the SD CS pin if you use a card, and the
-overall screen layout.
+**This firmware is flashed and running on the real CYD** (since 2026-11-11: boot and the
+`hello` handshake confirmed; 32% flash / 14% RAM). It now gets its idle time from the laptop
+(`idle_s` in the `session` message, default 10 minutes), tells the laptop whether a session
+ended by **Done** or by that idle timeout (`end_session` `reason`), and sends a quiet
+`{"type":"active"}` at most once a minute while the screen is being used. Never formally
+checked one by one: rotation, touch calibration, the SD CS pin if you use a card, and the
+LED/speaker.
 
 ## Files
 

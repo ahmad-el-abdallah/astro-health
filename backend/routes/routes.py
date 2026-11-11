@@ -421,9 +421,15 @@ def create_routes(app, socketio, bridge):
             _, err = auth.authorize_surgeon(conn)
             if err:
                 return jsonify(err[0]), err[1]
+            if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
+                return jsonify({"error": "not found"}), 404
             if "name" in body:
-                conn.execute("UPDATE astronauts SET name = ? WHERE id = ?", (body["name"], astro_id))
+                name = body["name"].strip() if isinstance(body["name"], str) else ""
+                if not name or len(name) > 60:
+                    return jsonify({"error": "name must be 1-60 characters"}), 400
+                conn.execute("UPDATE astronauts SET name = ? WHERE id = ?", (name, astro_id))
             r = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
+        emit_fn("crew_updated", {"astronaut_id": astro_id})
         return jsonify(row(r))
 
     # Creating a new astronaut record, and changing an existing one's role,
@@ -905,19 +911,30 @@ def create_routes(app, socketio, bridge):
             data = rows(conn.execute("SELECT * FROM tags ORDER BY uid").fetchall())
         return jsonify([_parse_json_fields(d, "data_json") for d in data])
 
+    TAG_TYPES = {"astronaut", "surgeon", "exercise", "sleep", "meal", "medicine", "bp_guide", "emergency"}
+
     @bp.post("/tags")
     def upsert_tag():
         body = request.get_json(force=True) or {}
+        uid = body.get("uid").strip() if isinstance(body.get("uid"), str) else ""
+        if not uid or body.get("type") not in TAG_TYPES:
+            return jsonify({"error": "uid and a valid type are required"}), 400
+        body["uid"] = uid
         with db.write_conn() as conn:
             _, err = admin_auth.authorize_superuser(conn)
             if err:
                 return jsonify(err[0]), err[1]
+            if body["type"] in ("astronaut", "surgeon") and not conn.execute(
+                "SELECT 1 FROM astronauts WHERE id = ?", (body.get("astronaut_id"),)
+            ).fetchone():
+                return jsonify({"error": "a person card needs an existing astronaut_id"}), 400
             conn.execute(
                 "INSERT OR REPLACE INTO tags (uid, type, label, astronaut_id, data_json) VALUES (?, ?, ?, ?, ?)",
                 (body["uid"], body["type"], body.get("label", body["uid"]), body.get("astronaut_id"),
                  json.dumps(body.get("data", {}))),
             )
         sessions.clear_unknown_tag(body["uid"])
+        emit_fn("tags_changed", {"uid": body["uid"]})
         return jsonify({"ok": True})
 
     @bp.delete("/tags/<uid>")
@@ -927,6 +944,7 @@ def create_routes(app, socketio, bridge):
             if err:
                 return jsonify(err[0]), err[1]
             conn.execute("DELETE FROM tags WHERE uid = ?", (uid,))
+        emit_fn("tags_changed", {"uid": uid})
         return jsonify({"ok": True})
 
     # ---- alerts (flight surgeon) ----

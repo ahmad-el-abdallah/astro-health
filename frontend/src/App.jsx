@@ -1,6 +1,6 @@
 // Top-level wiring: data cache, motion settings, router, auth gate, and the overlays that
 // must work signed in or not (simulator, emergency, toasts).
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
 import { MotionConfig, motion } from "motion/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
@@ -26,6 +26,7 @@ const Schedule = lazy(() => import("./pages/crew/Schedule.jsx"));
 const CrewOverview = lazy(() => import("./pages/doctor/CrewOverview.jsx"));
 const Alerts = lazy(() => import("./pages/doctor/Alerts.jsx"));
 const CrewProfile = lazy(() => import("./pages/doctor/CrewProfile.jsx"));
+const Admin = lazy(() => import("./pages/admin/Admin.jsx"));
 
 function Splash() {
   return (
@@ -75,7 +76,11 @@ export default function App() {
         <BrowserRouter>
           <AuthProvider>
             <ToastProvider>
-              <Gate />
+              {/* /admin has its own superuser login, so it sits outside the crew/doctor gate. */}
+              <Routes>
+                <Route path="/admin" element={<Suspense fallback={<Splash />}><Admin /></Suspense>} />
+                <Route path="*" element={<Gate />} />
+              </Routes>
               <SimulatorDock />
               <EmergencyOverlay />
             </ToastProvider>
