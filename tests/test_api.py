@@ -117,7 +117,17 @@ def test_scan_starts_a_session_and_summary_reflects_it(client):
     summary = client.get("/api/astronauts/2/summary").get_json()
     assert summary["astronaut"]["name"] == "Sameer"
     assert summary["session_active"] is True
-    client.post("/api/simulate/scan", json={"uid": "2B:ED:20:54"})  # end it, so later tests start clean
+
+
+def test_web_only_scan_logs_in_without_starting_a_cyd_session(client):
+    """The login page's "this browser only" choice (docs/CLAUDE.md
+    "web-only login")."""
+    res = client.post("/api/simulate/scan", json={"uid": SAMEER_UID, "web_only": True})
+    assert res.status_code == 200
+    assert sessions.active_sessions == {}
+    login_as(client, SAMEER_UID)
+    summary = client.get("/api/astronauts/2/summary").get_json()
+    assert summary["session_active"] is False
 
 
 def test_assess_computes_overall_level(client):
@@ -128,7 +138,6 @@ def test_assess_computes_overall_level(client):
     body = res.get_json()
     assert body["overall_level"] in ("GREEN", "YELLOW", "RED")
     assert "heart_rate" in body["details"]
-    client.post("/api/simulate/scan", json={"uid": "9B:25:0F:54"})
 
 
 def test_unknown_tag_is_reported(client):

@@ -1990,9 +1990,41 @@ pairing alone didn't fix -- pairing only covers surviving a transport switch, no
   relying on a second scan to do it. 2 new tests (`test_retapping_the_same_card_never_logs_you_out`,
   `test_tapping_a_different_card_ends_the_first_and_switches`). 226/226 total passing.
 
+## Follow-up: a login-page choice for web-only sign-in (2026-11-12)
+
+User clarified the earlier "login with CYD or web page only" ask, after being shown two concrete
+readings of it: on the login page, a choice for whether tapping a card from the web (the
+Simulator's NFC buttons) should *also* sign in the physical CYD, or just this browser. A real
+physical tap on actual hardware always affects its own CYD regardless -- there's no way for real
+hardware to know a browser's preference at the moment of the tap, so this choice can only ever
+govern a web-triggered scan.
+
+- **Frontend**: a tiny persisted store, `loginScanModeStore` (`frontend/src/lib/socket.js`,
+  `localStorage` key `ah-login-scan-mode`, defaults to `"cyd"` to match existing behavior for
+  anyone who hasn't opted in yet). `Login.jsx`'s NFC block gained a two-radio choice ("Also sign
+  in my CYD" / "This browser only") right under "Waiting for a card tap…". `SimulatorDock.jsx`'s
+  `scan()` reads the current mode and sends it along as `web_only` on every simulated tap.
+- **Backend**: `sessions.handle_scan()` gained a `web_only=False` parameter -- still emits the
+  `"scan"` broadcast the web login listens for either way, but when `True` it returns before
+  reaching `_handle_astronaut_tag()`/`_handle_surgeon_tag()`, so no CYD session starts, ends, or
+  gets disturbed. Wired through `POST /simulate/scan`'s new `web_only` body field and
+  `handle_cyd_message`'s `scan` branch (`msg.get("web_only")` -- real hardware never sends this
+  field, so existing taps are unaffected).
+- Two existing `test_api.py` cases (`test_scan_starts_a_session_and_summary_reflects_it`,
+  `test_assess_computes_overall_level`) had a trailing "tap again to end it, so later tests start
+  clean" scan -- already redundant before this change (the autouse `reset_sessions_state` fixture
+  already clears `active_sessions` before every test) and now a no-op under the no-retap-logout
+  rule above, so removed rather than fixed.
+- 3 new tests (`test_sessions.py`'s web-only-signs-in-without-touching-the-CYD and
+  web-only-does-not-disturb-an-active-session cases, `test_api.py`'s route-level case), 229/229
+  total passing. Verified live against an isolated copy: a real headless-Chromium pass selecting
+  "This browser only" then tapping a card confirmed `/api/auth/me` showed a real login while a
+  real Socket.IO client watching the same moment saw no outgoing `session`/`led` message and no
+  `session_started` event.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 226 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 229 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, consult, voice, scheduler, SPA serving, CYD logout).
 - `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.

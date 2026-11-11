@@ -462,9 +462,17 @@ def clear_unknown_tag(uid):
     unknown_tag_backlog.pop(uid, None)
 
 
-def handle_scan(uid, send_fn, emit_fn):
+def handle_scan(uid, send_fn, emit_fn, web_only=False):
     """The single entry point for a 'scan' message, whether it came from a
-    real CYD over serial or the Simulator panel."""
+    real CYD over serial or the Simulator panel.
+
+    `web_only=True` (docs/CLAUDE.md "web-only login") is the login page's own
+    choice to sign into just this browser without touching the physical
+    CYD's own session -- only ever set by a web-triggered simulate/scan
+    call, never by a real physical tap (hardware has no way to know a
+    browser's preference). The "scan" broadcast below still fires either
+    way, since that's what the web login listens for; web_only just skips
+    the part that would start/end a physical CYD session."""
     with db.write_conn() as conn:
         tag = _get_tag(conn, uid)
         if tag is None:
@@ -473,6 +481,8 @@ def handle_scan(uid, send_fn, emit_fn):
             emit_fn("unknown_tag", {"uid": uid})
             return
         emit_fn("scan", {"uid": uid, "type": tag["type"], "label": tag["label"]})
+        if web_only:
+            return
         # A "surgeon" tag predates real login (docs/CLAUDE.md's "Login /
         # access control") -- it used to be a timed PIN-replacement unlock,
         # not an account. seed.py still registers the Flight Surgeon's own

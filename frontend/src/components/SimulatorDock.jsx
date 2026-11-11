@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { post } from "../lib/api.js";
 import { useTags } from "../lib/queries.js";
-import { serialLogStore, useStore } from "../lib/socket.js";
+import { loginScanModeStore, serialLogStore, useStore } from "../lib/socket.js";
 import { Icon } from "./ui/Icon.jsx";
 import { cx } from "./ui/index.jsx";
 
@@ -47,7 +47,9 @@ export function SimulatorDock() {
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [log, open]);
 
-  const scan = (u) => post("/simulate/scan", { uid: u });
+  // The login page's own choice (see socket.js) -- "web" means this tap must only ever
+  // sign into the browser, never touch the physical CYD's own session.
+  const scan = (u) => post("/simulate/scan", { uid: u, web_only: loginScanModeStore.get() === "web" });
   const send = (build) => uid && post("/simulate/event", build(uid));
 
   return (

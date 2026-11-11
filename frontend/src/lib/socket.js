@@ -32,6 +32,21 @@ export const serialStatusStore = createStore("connecting");
 export const serialLogStore = createStore([]);
 export const emergencyStore = createStore({ active: false, text: "" });
 
+// The login page's own choice (docs/CLAUDE.md "web-only login"): does tapping a card
+// from the web (the Simulator's NFC buttons -- a real physical tap on actual hardware
+// has no way to know this) also sign in the physical CYD, or just this browser? Persisted
+// per-browser so it doesn't reset on every reload; defaults to "cyd" to match the
+// long-standing behavior nobody's opted out of yet.
+const LOGIN_SCAN_MODE_KEY = "ah-login-scan-mode";
+function loadScanMode() {
+  try { return localStorage.getItem(LOGIN_SCAN_MODE_KEY) === "web" ? "web" : "cyd"; } catch { return "cyd"; }
+}
+export const loginScanModeStore = createStore(loadScanMode());
+export function setLoginScanMode(mode) {
+  loginScanModeStore.set(mode);
+  try { localStorage.setItem(LOGIN_SCAN_MODE_KEY, mode); } catch { /* private window etc. -- in-memory store still works */ }
+}
+
 socket.on("serial_status", (d) => serialStatusStore.set(d?.status || "connecting"));
 socket.on("serial_log", (d) => serialLogStore.set((log) => [...log.slice(-79), { ...d, at: Date.now() }]));
 socket.on("emergency", (d) => emergencyStore.set({ active: !!d?.active, text: d?.text || "" }));

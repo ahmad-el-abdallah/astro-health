@@ -10,6 +10,7 @@ import { post } from "../lib/api.js";
 import { captureDescriptor, startCamera, stopCamera } from "../lib/faceId.js";
 import { useMission } from "../lib/queries.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
+import { loginScanModeStore, setLoginScanMode, useStore } from "../lib/socket.js";
 import { Icon } from "../components/ui/Icon.jsx";
 import { cx } from "../components/ui/index.jsx";
 import { EASE_ENTER } from "../components/ui/motion.js";
@@ -78,6 +79,7 @@ const submitCls =
 export function Login() {
   const { signIn } = useAuth();
   const mission = useMission();
+  const scanMode = useStore(loginScanModeStore); // "cyd" | "web" -- see socket.js
   const [method, setMethod] = useState(null); // null | "password" | "face"
   const [contactOpen, setContactOpen] = useState(false);
 
@@ -207,6 +209,19 @@ export function Login() {
               <span className="h-2 w-2 rounded-full bg-accent-text animate-[ah-pulse-dot_1.2s_ease-in-out_infinite]" />
               Waiting for a card tap…
             </p>
+            {/* Only affects a tap made from the web (the Simulator's NFC buttons) -- a
+                real physical tap on actual hardware always signs in its own CYD too,
+                since there's no way for real hardware to know this browser's choice. */}
+            <div className="mt-1 flex flex-col gap-1.5 border-t border-[rgba(74,104,236,.18)] pt-2.5 text-[12px] text-ink-2">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="radio" name="scan-mode" checked={scanMode === "cyd"} onChange={() => setLoginScanMode("cyd")} />
+                Also sign in my CYD
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="radio" name="scan-mode" checked={scanMode === "web"} onChange={() => setLoginScanMode("web")} />
+                This browser only
+              </label>
+            </div>
           </motion.div>
 
           <AltMethod

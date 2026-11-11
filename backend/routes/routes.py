@@ -1129,8 +1129,8 @@ def create_routes(app, socketio, bridge):
     # ---- simulator ----
     @bp.post("/simulate/scan")
     def simulate_scan():
-        uid = (request.get_json(force=True) or {}).get("uid")
-        bridge.inject({"type": "scan", "uid": uid})
+        body = request.get_json(force=True) or {}
+        bridge.inject({"type": "scan", "uid": body.get("uid"), "web_only": bool(body.get("web_only"))})
         return jsonify({"ok": True})
 
     @bp.post("/simulate/event")
@@ -1195,7 +1195,7 @@ def create_routes(app, socketio, bridge):
             if touched is not None:
                 sessions.note_cyd_contact(touched)
         if mtype == "scan":
-            sessions.handle_scan(msg.get("uid", ""), send_fn, emit_fn)
+            sessions.handle_scan(msg.get("uid", ""), send_fn, emit_fn, web_only=bool(msg.get("web_only")))
         elif mtype == "mood":
             _record_cyd_value(msg, "mood", msg.get("value"))
         elif mtype == "symptoms":

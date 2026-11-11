@@ -32,6 +32,44 @@ def test_astronaut_tap_starts_a_session(fresh_db):
     assert any(e[0] == "session_started" for e in emitted)
 
 
+def test_web_only_scan_signs_in_but_never_touches_the_cyd(fresh_db):
+    """The login page's "this browser only" choice (docs/CLAUDE.md
+    "web-only login") -- the scan broadcast the web login needs still
+    fires, but no CYD session starts."""
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    sessions.handle_scan("A0000001", send_fn, emit_fn, web_only=True)
+
+    assert astro_id not in sessions.active_sessions
+    assert emitted == [("scan", {"uid": "A0000001", "type": "astronaut", "label": "Test Astro"})]
+    assert sent == []
+
+
+def test_web_only_scan_does_not_disturb_an_already_active_cyd_session(fresh_db):
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+        now = datetime.now(timezone.utc).isoformat()
+        other_id = conn.execute(
+            "INSERT INTO astronauts (name, role, color, baseline_reaction_ms, created_at) VALUES (?, ?, ?, ?, ?)",
+            ("Other Astro", "Crew member", "#ffffff", 340, now),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO tags (uid, type, label, astronaut_id, data_json) VALUES ('A0000002', 'astronaut', 'Other Astro', ?, '{}')",
+            (other_id,),
+        )
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    sessions.handle_scan("A0000001", send_fn, emit_fn)  # a real tap -- genuinely on the CYD
+    sent.clear(); emitted.clear()
+
+    sessions.handle_scan("A0000002", send_fn, emit_fn, web_only=True)  # someone else logging into the web only
+
+    assert astro_id in sessions.active_sessions  # untouched
+    assert other_id not in sessions.active_sessions  # not started on the CYD
+
+
 def test_retapping_the_same_card_never_logs_you_out(fresh_db):
     """The CYD is a personal watch (docs/CLAUDE.md "CYD pairing"), not a shared
     kiosk toggled by re-tapping -- only an explicit end_session ("Done" on the
