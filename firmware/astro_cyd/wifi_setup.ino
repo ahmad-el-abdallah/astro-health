@@ -25,6 +25,8 @@ void drawWifiMenuScreen() {
            "Connect to your own Wi-Fi network", "");
   colRow(3, 2, y, h);
   drawTile(U_PAD, y, U_COL_W, h, U_SLATE, iconBack, "Back", "", "");
+  int sx = U_PAD + U_COL_W + U_PAD;
+  drawSosTile(sx, y, SCRW - U_PAD - sx, h);  // SOS must stay reachable from every screen
   drawFooter(laptopOnline);
 }
 
@@ -71,13 +73,17 @@ void pollWifiScan() {
 
 void wifiScanRowRect(int i, int& x, int& y, int& w, int& h) {
   x = U_PAD; w = SCRW - 2 * U_PAD;
-  y = U_HEAD_H + U_PAD + i * 32;
-  h = 28;
+  y = U_HEAD_H + U_PAD + i * 30;
+  h = 26;  // tight enough that even 5 rows stay clear of the SOS corner below
 }
 
 static const int WIFI_SCAN_BACK_W = 70, WIFI_SCAN_BACK_H = 26;
 void wifiScanBackRect(int& x, int& y, int& w, int& h) {
-  x = U_PAD; y = SCRH - U_FOOT_H - WIFI_SCAN_BACK_H - U_PAD; w = WIFI_SCAN_BACK_W; h = WIFI_SCAN_BACK_H;
+  // On the right, not the left -- the bottom-left corner is drawSosButton()'s
+  // fixed spot on every screen, and this row's y does reach down into that
+  // same band (only its x clears it).
+  x = SCRW - WIFI_SCAN_BACK_W - U_PAD; y = SCRH - U_FOOT_H - WIFI_SCAN_BACK_H - U_PAD;
+  w = WIFI_SCAN_BACK_W; h = WIFI_SCAN_BACK_H;
 }
 
 void drawWifiScanScreen() {
@@ -105,6 +111,7 @@ void drawWifiScanScreen() {
   int bx, by, bw, bh;
   wifiScanBackRect(bx, by, bw, bh);
   drawKey(bx, by, bw, bh, "Back", U_SLATE, 1);
+  drawSosButton();
   drawFooter(laptopOnline);
 }
 
@@ -135,8 +142,16 @@ static const char* KB_ROW0_SYM = "1234567890";
 static const char* KB_ROW1_SYM = "-_@#$%&*()";
 static const char* KB_ROW2_SYM = ".,!?/:;";
 
-static const int KB_TOP = U_HEAD_H + 40;
-static const int KB_ROW_H = 38;
+// Rows must end above y=180 -- drawSosButton()'s fixed corner (every screen
+// in this firmware keeps SOS reachable, see that function's own comment)
+// occupies x:[4,50] y:[180,224], and used to go unnoticed here because this
+// screen never drew one at all -- pointInSos() was then testing against
+// whatever screen's SOS rect was drawn *last* (Idle's own SOS tile), which
+// happened to land squarely on top of this row's first two keys and ate
+// those taps silently before they ever reached this screen's own touch
+// handler. (See docs/CLAUDE.md "stale SOS rect" follow-up.)
+static const int KB_TOP = U_HEAD_H + 22;
+static const int KB_ROW_H = 30;
 static const int KB_GAP = 2;
 
 void kbKeyRect(int row, int col, int colSpan, int& x, int& y, int& w, int& h) {
@@ -159,12 +174,10 @@ void drawWifiKeyboardScreen() {
   clearScreen();
   drawHeader("JOIN WI-FI", wifiSelectedSsid, false, "", 0);
   tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(U_DIM, U_BG);
-  tft.drawString("Password:", U_PAD, U_HEAD_H + 4, 1);
   String shown = String(wifiPwBuf);
-  tft.setTextColor(U_TEXT, U_BG);
-  tft.drawString(shown.length() ? shown : "(tap keys below, or Connect for an open network)",
-                 U_PAD, U_HEAD_H + 16, shown.length() ? 2 : 1);
+  tft.setTextColor(shown.length() ? U_TEXT : U_DIM, U_BG);
+  tft.drawString(shown.length() ? shown : "(tap keys, or Connect for an open network)",
+                 U_PAD, U_HEAD_H + 4, shown.length() ? 2 : 1);
 
   const char* row0 = wifiKbPage2 ? KB_ROW0_SYM : KB_ROW0;
   const char* row1 = wifiKbPage2 ? KB_ROW1_SYM : KB_ROW1;
@@ -206,6 +219,8 @@ void drawWifiKeyboardScreen() {
   drawKey(x, y, w, h, "Cancel", U_SLATE, 1);
   kbKeyRect(3, 8, 2, x, y, w, h);
   drawKey(x, y, w, h, "Connect", U_CREW, 1);
+  drawSosButton();
+  drawFooter(laptopOnline);
 }
 
 void wifiKeyboardTouch(int x, int y) {
@@ -334,6 +349,8 @@ void drawWifiConnectingScreen() {
     drawKey(bx, by, bw, bh, "Try again", U_SLATE, 1);
     drawKey(bx + 140, by, bw, bh, "Other network", U_SLATE, 1);
   }
+  drawSosButton();
+  drawFooter(laptopOnline);
 }
 
 void wifiConnectingTouch(int x, int y) {

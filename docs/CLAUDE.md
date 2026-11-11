@@ -2110,6 +2110,46 @@ hardcoding and WiFiManager).
   sizing on a 320x240 screen in particular should be expected to need iteration once flashed. Ask
   before flashing, same standing rule as always.
 
+### Follow-up: "a" and "s" didn't register on the real keyboard -- a stale SOS rect, not a touch problem (same day, 2026-11-12)
+
+First real hardware test, right after flashing: two specific keys silently did nothing.
+Reasoned through rather than guessed, since no physical board access here: `handleTouch()`
+unconditionally checks `pointInSos(x, y)` and returns early for ANY screen, *before* reaching that
+screen's own touch handler -- `sosX/Y/W/H` are shared globals, last set by whichever screen most
+recently called `drawSosButton()`/`drawSosTile()` (see that function's own comment: "every screen
+in this firmware" does, precisely so this check always matches wherever SOS is *actually* drawn).
+All four new Wi-Fi setup screens were the first screens ever written in this firmware that didn't
+draw an SOS indicator at all -- so navigating Idle -> Wi-Fi menu left `sosX/Y/W/H` stuck at Idle's
+own SOS *tile* position (`colRow(3,1,...)`, computed as x:[4,68] y:[92,154]). On the keyboard
+screen specifically, that stale rectangle landed squarely on top of row 1's first two keys ("a" at
+x:[4,33], "s" at x:[35,64], both inside y:[102,140]) -- "d" partially overlapped too (up to x=68)
+but was mostly still tappable, which is why only "a"/"s" were reported as completely dead.
+
+- **Real fix, not a workaround**: added a genuine `drawSosButton()`/`drawSosTile()` call to all
+  four screens, matching the invariant every other screen already upholds, rather than just
+  special-casing this one failure mode away (e.g. clearing the stale rect on entry would have
+  silently made SOS *unreachable* from these screens instead -- a real safety regression for a
+  button whose whole point is working "with or without a session open").
+- This meant re-laying out three of the four screens to actually leave room for it:
+  - **Menu**: the bottom row's "Back" tile now shares its row with a proper SOS tile filling the
+    rest of the width (the exact idiom `drawSessionScreen()`/`drawSurgeonHomeScreen()` already use
+    for their own Done+SOS split), instead of being the row's sole content.
+  - **Scan**: row spacing tightened (32px -> 30px, 28px -> 26px tall) so even 5 result rows end
+    above y=180; "Back" moved from the bottom-left (exactly where `drawSosButton()`'s fixed corner
+    lives) to the bottom-right, clear of it.
+  - **Keyboard**: the password line compressed from two lines to one (dropped the separate
+    "Password:" label -- context is already clear from this being the only input screen), and
+    `KB_TOP`/`KB_ROW_H` shrunk (62->44, 38->30) so all four keyboard rows end at y=170, safely
+    clear of the y:[180,224] SOS band. `drawFooter()` was also missing from this screen entirely
+    (an oversight, not intentional) -- added, matching every other screen.
+  - **Connecting**: needed no layout change (its content already sat above y=180) -- just the
+    missing `drawSosButton()`/`drawFooter()` calls.
+- `arduino-cli compile` still clean (35%/15%, unchanged). Flashed; **still not confirmed on the
+  real board that "a"/"s" (and SOS itself, from each of these four screens) now work** -- this
+  reasoning is solid and the geometry was re-verified by hand for every screen, but the standing
+  "ask before flashing, verify on real hardware" caveat applies doubly here since the actual root
+  cause was only found by re-deriving stale global state, not by reproducing it live.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 235 tests (rules engine, protocol, sessions, REST API, symptoms,
