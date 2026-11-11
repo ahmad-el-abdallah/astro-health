@@ -43,6 +43,23 @@ emergency = {"active": False, "text": ""}
 UNKNOWN_BACKLOG_MAX = 50
 unknown_tag_backlog = {}
 
+# The login page's "Also sign in my CYD" / "This browser only" choice
+# (docs/CLAUDE.md "web-only login"), as a *global* current mode rather than
+# a per-tap flag -- a real physical tap (the Pico, the only NFC reader this
+# whole system actually has) can't carry a browser's preference the way a
+# Simulator-originated scan can (it's just a bare {"type":"scan","uid":...}
+# line with no way for the hardware to know what any browser has selected).
+# set_scan_mode() is called whenever the login page's choice changes, so a
+# real tap right after flipping it is covered too, not just software taps.
+# In-memory only, same live-demo-not-history philosophy as active_sessions
+# above -- resets to "cyd" (today's long-standing default) on every restart.
+current_scan_mode = "cyd"
+
+
+def set_scan_mode(mode):
+    global current_scan_mode
+    current_scan_mode = "web" if mode == "web" else "cyd"
+
 
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -462,17 +479,22 @@ def clear_unknown_tag(uid):
     unknown_tag_backlog.pop(uid, None)
 
 
-def handle_scan(uid, send_fn, emit_fn, web_only=False):
+def handle_scan(uid, send_fn, emit_fn, web_only=None):
     """The single entry point for a 'scan' message, whether it came from a
-    real CYD over serial or the Simulator panel.
+    real CYD/Pico tap or the Simulator panel.
 
-    `web_only=True` (docs/CLAUDE.md "web-only login") is the login page's own
-    choice to sign into just this browser without touching the physical
-    CYD's own session -- only ever set by a web-triggered simulate/scan
-    call, never by a real physical tap (hardware has no way to know a
-    browser's preference). The "scan" broadcast below still fires either
-    way, since that's what the web login listens for; web_only just skips
-    the part that would start/end a physical CYD session."""
+    `web_only` (docs/CLAUDE.md "web-only login"): sign into just this
+    browser without touching the physical CYD's own session. Left as
+    `None` (the default for every real hardware tap -- bare JSON with no
+    such field), it falls back to `current_scan_mode`, the login page's
+    current global choice, so a real Pico tap right after picking "This
+    browser only" is covered exactly like a Simulator tap already was. An
+    explicit `True`/`False` (the Simulator's own per-call value) still
+    overrides that fallback. The "scan" broadcast below always fires
+    either way, since that's what the web login listens for; web_only
+    just skips the part that would start/end a physical CYD session."""
+    if web_only is None:
+        web_only = current_scan_mode == "web"
     with db.write_conn() as conn:
         tag = _get_tag(conn, uid)
         if tag is None:

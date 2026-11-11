@@ -15,6 +15,7 @@ def reset_sessions_state():
     sessions.emergency["active"] = False
     sessions.emergency["text"] = ""
     sessions.unknown_tag_backlog.clear()
+    sessions.current_scan_mode = "cyd"
     yield
 
 

@@ -1126,6 +1126,19 @@ def create_routes(app, socketio, bridge):
         return Response(buf.getvalue(), mimetype="text/csv",
                          headers={"Content-Disposition": f"attachment; filename=astronaut_{astro_id}.csv"})
 
+    # ---- the login page's "Also sign in my CYD" / "This browser only"
+    # choice (docs/CLAUDE.md "web-only login") -- a global mode, not a
+    # per-tap flag, so it also covers a real hardware tap (the Pico), which
+    # has no way to carry a browser's preference itself. Deliberately
+    # unauthenticated, same as every other pre-login route (nfc_login,
+    # tags reads, etc.) -- this is set from the login screen, before
+    # anyone's signed in. ----
+    @bp.post("/scan-mode")
+    def set_scan_mode():
+        body = request.get_json(force=True) or {}
+        sessions.set_scan_mode(body.get("mode"))
+        return jsonify({"ok": True, "mode": sessions.current_scan_mode})
+
     # ---- simulator ----
     @bp.post("/simulate/scan")
     def simulate_scan():
@@ -1195,7 +1208,12 @@ def create_routes(app, socketio, bridge):
             if touched is not None:
                 sessions.note_cyd_contact(touched)
         if mtype == "scan":
-            sessions.handle_scan(msg.get("uid", ""), send_fn, emit_fn, web_only=bool(msg.get("web_only")))
+            # A real hardware tap never sends "web_only" at all (None here) --
+            # handle_scan() falls back to the login page's current global
+            # choice (sessions.current_scan_mode) in that case. Only an
+            # explicit True/False (the Simulator's own per-call value)
+            # overrides it, so don't coerce a missing key to False here.
+            sessions.handle_scan(msg.get("uid", ""), send_fn, emit_fn, web_only=msg.get("web_only"))
         elif mtype == "mood":
             _record_cyd_value(msg, "mood", msg.get("value"))
         elif mtype == "symptoms":

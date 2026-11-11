@@ -2022,6 +2022,39 @@ govern a web-triggered scan.
   real Socket.IO client watching the same moment saw no outgoing `session`/`led` message and no
   `session_started` event.
 
+### Follow-up: the choice didn't apply to a real tap (same day, 2026-11-12)
+
+User reported "This browser only" still logged them into the CYD, and guessed the Pico needed
+reflashing. The actual cause: the choice above only ever covered a **Simulator**-originated tap
+(the one path that could carry an explicit `web_only` flag) -- but the Pico is the *only* physical
+NFC reader this whole system has (the CYD has no reader of its own), and a real tap is just a bare
+`{"type":"scan","uid":...}` line with no way for hardware to carry a browser's preference at all.
+No firmware involved; the fix is backend-side.
+
+- **`sessions.py`**: `current_scan_mode` (module-level, in-memory, defaults to `"cyd"`) replaces
+  `web_only`'s old hardcoded `False` default with `None` -- `handle_scan(uid, send_fn, emit_fn,
+  web_only=None)` falls back to `current_scan_mode == "web"` whenever `web_only` is left `None`
+  (every real hardware tap), while an **explicit** `True`/`False` (still how the Simulator calls
+  it) overrides that fallback. New `set_scan_mode(mode)` sets it; `handle_cyd_message`'s `scan`
+  branch now passes `msg.get("web_only")` through as-is (not coerced to a bool) so a real tap's
+  missing key stays `None` instead of becoming `False`.
+- New unauthenticated `POST /api/scan-mode` (same pre-login-route precedent as `nfc_login`/tag
+  reads) -- `frontend/src/lib/socket.js`'s `setLoginScanMode()` now also posts here on every
+  change, and once more at module load (reconciles a server restart, which resets the backend's
+  in-memory copy to `"cyd"`, against this browser's own `localStorage`-persisted choice, which
+  doesn't reset).
+- `tests/conftest.py`'s autouse `reset_sessions_state` now also resets `current_scan_mode` to
+  `"cyd"` between tests -- missed this the first time while writing it, would have let one test's
+  `set_scan_mode("web")` leak into whichever test ran next.
+- 3 new tests (`test_sessions.py`'s real-tap-honors-the-global-mode and
+  explicit-flag-still-overrides-it cases, `test_api.py`'s route-level case using
+  `/simulate/event`'s raw shape specifically -- not `/simulate/scan`, which always sends an
+  explicit flag and so could never have caught this gap), 235/235 total passing. Verified live
+  against an isolated copy: clicking "This browser only" on the real login page, confirmed via a
+  direct API call that the backend's mode actually changed, then a bare `{"type":"scan",...}"}`
+  injected the same way a real Pico tap arrives (watched with a real Socket.IO client) produced no
+  `session_started` -- and switching back to "Also sign in my CYD" immediately restored it.
+
 ## On-device Wi-Fi mode setup: Access Point or Join Wi-Fi, with a real touch keyboard (2026-11-12)
 
 User wanted the CYD's AP-only Wi-Fi to become a real on-device choice instead: open a menu on the
@@ -2079,7 +2112,7 @@ hardcoding and WiFiManager).
 
 ## Testing
 
-- `.venv/bin/python -m pytest` — 232 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 235 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, consult, voice, scheduler, SPA serving, CYD logout, bridge auto-detect).
 - `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.

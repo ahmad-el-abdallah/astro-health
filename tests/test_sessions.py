@@ -70,6 +70,35 @@ def test_web_only_scan_does_not_disturb_an_already_active_cyd_session(fresh_db):
     assert other_id not in sessions.active_sessions  # not started on the CYD
 
 
+def test_a_real_tap_honors_the_current_global_scan_mode(fresh_db):
+    """A real hardware tap (the Pico, the only NFC reader this system has)
+    never sends an explicit web_only flag -- it must fall back to whatever
+    the login page last set globally (docs/CLAUDE.md "web-only login"),
+    not always default to affecting the CYD."""
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    sessions.set_scan_mode("web")
+    sessions.handle_scan("A0000001", send_fn, emit_fn)  # no web_only passed at all
+
+    assert astro_id not in sessions.active_sessions
+    assert sent == []
+
+
+def test_global_scan_mode_defaults_to_cyd_and_an_explicit_flag_still_overrides(fresh_db):
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    assert sessions.current_scan_mode == "cyd"  # the long-standing default
+    sessions.set_scan_mode("web")
+    # An explicit False (e.g. a Simulator call made with "Also sign in my
+    # CYD" selected) still wins over the global mode.
+    sessions.handle_scan("A0000001", send_fn, emit_fn, web_only=False)
+    assert astro_id in sessions.active_sessions
+
+
 def test_retapping_the_same_card_never_logs_you_out(fresh_db):
     """The CYD is a personal watch (docs/CLAUDE.md "CYD pairing"), not a shared
     kiosk toggled by re-tapping -- only an explicit end_session ("Done" on the

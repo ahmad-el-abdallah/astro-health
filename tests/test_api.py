@@ -130,6 +130,26 @@ def test_web_only_scan_logs_in_without_starting_a_cyd_session(client):
     assert summary["session_active"] is False
 
 
+def test_scan_mode_route_makes_a_real_tap_honor_the_choice(client):
+    """A real hardware tap (bare {"type":"scan","uid":...}, no web_only
+    field at all -- this is exactly what the Pico/a real CYD send) must
+    honor whatever POST /api/scan-mode last set, not just a Simulator tap
+    that explicitly passes the flag (see test_web_only_scan_logs_in...
+    above for that case)."""
+    res = client.post("/api/scan-mode", json={"mode": "web"})
+    assert res.status_code == 200
+    assert res.get_json()["mode"] == "web"
+
+    res = client.post("/api/simulate/event", json={"type": "scan", "uid": SAMEER_UID})
+    assert res.status_code == 200
+    assert sessions.active_sessions == {}
+
+    client.post("/api/scan-mode", json={"mode": "cyd"})
+    res = client.post("/api/simulate/event", json={"type": "scan", "uid": SAMEER_UID})
+    assert res.status_code == 200
+    assert 2 in sessions.active_sessions
+
+
 def test_assess_computes_overall_level(client):
     login_as(client, AHMAD_UID)
     client.post("/api/simulate/scan", json={"uid": "9B:25:0F:54"})
