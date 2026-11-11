@@ -34,10 +34,39 @@ def test_encode_roundtrips_through_decode():
     assert msg == {"type": "session", "name": "Omar Saleh", "uid": "A1000002", "level": "YELLOW"}
 
 
+def test_session_role_and_today_are_optional_and_additive():
+    # Older firmware ignores fields it doesn't know about, so adding
+    # role/today here must never break the bare 3-field call above.
+    bare = protocol.decode(protocol.session("Omar Saleh", "A1000002", "YELLOW"))
+    assert "role" not in bare and "today" not in bare
+
+    today = {"heart_rate": {"v": "72", "l": "GREEN"}}
+    full = protocol.decode(protocol.session("Omar Saleh", "A1000002", "YELLOW", 600, "Crew member", today))
+    assert full["role"] == "Crew member"
+    assert full["today"] == today
+
+
 def test_each_builder_produces_its_type():
     assert protocol.decode(protocol.status("Omar", "YELLOW", "Short sleep"))["type"] == "status"
     assert protocol.decode(protocol.toast("Meal logged"))["type"] == "toast"
     assert protocol.decode(protocol.unknown_tag("Z1234567"))["type"] == "unknown_tag"
+
+
+def test_surgeon_cyd_builders_roundtrip():
+    crew = protocol.decode(protocol.crew_list([{"id": 2, "n": "Sameer", "l": "YELLOW", "al": 1}]))
+    assert crew == {"type": "crew_list", "items": [{"id": 2, "n": "Sameer", "l": "YELLOW", "al": 1}]}
+
+    alerts = protocol.decode(protocol.alerts_list([{"id": 5, "who": "Sameer", "t": "Flagged: heart rate", "ts": "02:58"}]))
+    assert alerts["type"] == "alerts_list"
+    assert alerts["items"][0]["who"] == "Sameer"
+
+    inbox = protocol.decode(protocol.inbox_list([]))
+    assert inbox == {"type": "inbox_list", "items": []}
+
+    detail = protocol.decode(protocol.crew_detail({"id": 2, "n": "Sameer", "l": "YELLOW", "v": {}, "ts": "02:54", "on": False}))
+    assert detail["type"] == "crew_detail"
+    assert detail["n"] == "Sameer"
+    assert detail["on"] is False
     assert protocol.decode(protocol.exercise("start", 0))["type"] == "exercise"
     assert protocol.decode(protocol.sleep("stop", 6.5))["type"] == "sleep"
     assert protocol.decode(protocol.reminder("Time for vitals"))["type"] == "reminder"

@@ -12,11 +12,14 @@ LEVELS = {"GREEN", "YELLOW", "RED"}
 CYD_TO_LAPTOP_TYPES = {
     "hello", "scan", "mood", "symptoms", "reaction", "breathing_done",
     "emergency", "cancel_emergency", "end_session", "pong", "log", "active",
+    # Flight Surgeon on-device screens (phase 2 of the CYD redesign):
+    "view_crew", "ack_alert", "quick_reply",
 }
 # Messages the laptop sends to the CYD.
 LAPTOP_TO_CYD_TYPES = {
     "session", "status", "toast", "unknown_tag", "exercise", "sleep",
     "reminder", "alert", "emergency", "led", "idle", "ping",
+    "crew_list", "alerts_list", "inbox_list", "crew_detail",
 }
 
 
@@ -51,11 +54,21 @@ def encode(msg_type, **fields):
 
 # ---- convenience builders for each laptop -> CYD message type ----
 
-def session(name, uid, level, idle_s=None):
-    """idle_s: how long the CYD keeps this session open untouched (older firmware ignores it)."""
-    if idle_s is None:
-        return encode("session", name=name, uid=uid, level=level)
-    return encode("session", name=name, uid=uid, level=level, idle_s=int(idle_s))
+def session(name, uid, level, idle_s=None, role=None, today=None):
+    """idle_s: how long the CYD keeps this session open untouched. role: the
+    astronaut's role string, for the CYD header's role dot. today: a
+    compact {indicator: {"v": display string, "l": level}} snapshot for the
+    crew-home vitals tiles (backend/logic/sessions.py's
+    _today_vitals_for_cyd()). All three are optional and additive --
+    firmware from before 2026-11-11 simply ignores fields it doesn't know."""
+    fields = {"name": name, "uid": uid, "level": level}
+    if idle_s is not None:
+        fields["idle_s"] = int(idle_s)
+    if role is not None:
+        fields["role"] = role
+    if today is not None:
+        fields["today"] = today
+    return encode("session", **fields)
 
 
 def status(name, level, note):
@@ -100,3 +113,24 @@ def idle():
 
 def ping():
     return encode("ping")
+
+
+# ---- Flight Surgeon on-device screens (phase 2 of the CYD redesign) ----
+# items/vitals shapes match backend/logic/sessions.py's crew_list_for_cyd()/
+# alerts_list_for_cyd()/inbox_for_cyd()/crew_detail_for_cyd() exactly -- this
+# module only wraps them in a {"type":...} envelope, it never builds them.
+
+def crew_list(items):
+    return encode("crew_list", items=items)
+
+
+def alerts_list(items):
+    return encode("alerts_list", items=items)
+
+
+def inbox_list(items):
+    return encode("inbox_list", items=items)
+
+
+def crew_detail(detail):
+    return encode("crew_detail", **detail)

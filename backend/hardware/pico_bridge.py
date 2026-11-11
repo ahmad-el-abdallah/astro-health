@@ -29,14 +29,22 @@ def find_port():
 
 class PicoBridge:
     def __init__(self, on_message, port=None, baud=115200):
-        self.port = port or find_port()
+        # An explicit port (nothing passes one today, but the option stays for
+        # parity with SerialBridge/tests) is never re-detected. Otherwise
+        # self.port starts unset -- _read_loop() below calls find_port() on
+        # every connection attempt, not just once here, specifically so a Pico
+        # plugged in *after* the server started (e.g. unplugged to rewire on a
+        # breadboard, then replugged) is picked up within RECONNECT_S seconds
+        # instead of needing a server restart.
+        self._forced_port = port
+        self.port = port
         self.baud = baud
         self.on_message = on_message
         self._stop = threading.Event()
 
     def start(self):
-        if not self.port:
-            return
+        # Always starts the thread, even with no Pico detected yet -- see the
+        # comment above on why detection can't happen just once here.
         threading.Thread(target=self._read_loop, daemon=True).start()
 
     def stop(self):
@@ -44,8 +52,13 @@ class PicoBridge:
 
     def _read_loop(self):
         while not self._stop.is_set():
+            port = self._forced_port or find_port()
+            if not port:
+                time.sleep(RECONNECT_S)
+                continue
+            self.port = port
             try:
-                ser = serial.Serial(self.port, self.baud, timeout=1)
+                ser = serial.Serial(port, self.baud, timeout=1)
             except Exception:
                 time.sleep(RECONNECT_S)
                 continue

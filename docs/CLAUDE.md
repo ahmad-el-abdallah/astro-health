@@ -1488,9 +1488,413 @@ vanilla app was deleted once the last page was ported.
   `--use-angle=swiftshader --enable-unsafe-swiftshader`). The sandbox has no GPU, so FPS there
   means nothing — the user judges smoothness on their laptop.
 
+## CYD redesign, phase 1: visual facelift of the crew screens (2026-11-11, branch `cyd-redesign`)
+
+Mirroring the React rebuild's look onto the physical touchscreen. The user supplied (in an
+earlier, now-untracked pass) `firmware/tools/cyd_preview.html` -- a browser design reference, one
+`<div>` per screen at real 320x240 size, same palette/icons the firmware now uses. **Open that
+file directly in a browser before touching any of this** -- it's the spec. It covers 16 screens;
+this pass ports the 10 a *crew* member actually sees. The other 6 (a new on-device Flight Surgeon
+workflow: crew list, alerts with hold-to-acknowledge, inbox with quick-reply) need their own new
+protocol messages and backend wiring, not just a restyle -- deliberately scoped out, confirmed
+with the user ("start with 1 [facelift], 2 [surgeon workflow] should be next").
+
+- **New `firmware/astro_cyd/ui_kit.ino`**: the shared chrome every crew screen now uses --
+  `drawHeader()`/`drawFooter()` (role dot, title/sub, a level chip, a laptop-online chip, uptime),
+  `drawTile()` (the icon+label+sub+badge button every column uses), `drawPanel()`/`drawVital()`,
+  and ~14 small icons (heart, bp, mood, sleep, target, wind, alert, nfc, card, logout, tick,
+  exercise, symptoms) drawn with TFT_eSPI primitives (`drawArc`/`drawWedgeLine`/`fillTriangle`/
+  `drawSmoothCircle`) on a 24-unit grid matching the mockup's own SVG icons -- no bitmaps, no
+  custom font, same "TFT_eSPI's built-in fonts only" rule `screens.ino` always had.
+- **A real cross-tab gotcha, caught by the compiler not guessed**: `screens.ino`'s own header
+  comment already explained that Arduino auto-generates function prototypes near the top of the
+  merged sketch, so a function in any tab can call one in another regardless of file order. That
+  does **not** extend to `#define`s or `typedef`s -- they're plain textual substitution/aliasing,
+  not functions, so they only exist from their own line onward in whatever order the tabs happen
+  to concatenate in (alphabetical, after the primary file). The first compile failed with `U_BG`
+  etc. "not declared" in `screens.ino` because `ui_kit.ino` (where they were first written) sorts
+  after it. Fixed by moving every `#define U_*` color/layout constant and the `IconFn` typedef
+  into `astro_cyd.ino` (the primary file, always first) -- same place `screens.ino`'s own comment
+  already says shared *variables* have to live, for the identical reason, just a gap that comment
+  didn't call out for macros/typedefs specifically. Keep this in mind adding any new shared
+  `#define`/`typedef` here later.
+- **Crew home now shows real per-indicator vitals, not just the overall level** -- the mockup's
+  biggest visual payoff needed one small, additive backend change: `protocol.session()` gained
+  two new optional fields, `role` and `today` (a compact
+  `{indicator: {"v": "<display string>", "l": "<level>"}}` snapshot for heart_rate/
+  blood_pressure/mood/sleep, whichever have a reading in the last 24h). Built by
+  `sessions.py`'s new `_today_vitals_for_cyd()` -- not imported from `routes.py`'s own
+  `_today_snapshot()` to avoid a circular import, so it's a small, deliberate duplication of that
+  same last-24h/first-row-wins query, scoped to just these 4 indicators and pre-formatted into
+  display strings (the firmware does zero value-shape parsing itself) -- same dual-shape handling
+  (`sleep`/`mood` as a bare number from a physical tag/CYD tap, or a richer object from the web
+  tabs' own POST routes) the frontend already had to add for the same reason, see this file's
+  "sleep/mood readings showed raw JSON" entry. Both fields are optional/additive -- older firmware
+  (or a test that doesn't pass them) still gets a valid message, see
+  `test_protocol.py::test_session_role_and_today_are_optional_and_additive`.
+- **SOS stays exactly where it's always been, functionally** -- a real safety control doesn't get
+  to move around for a facelift. On the two "hub" screens (Idle, crew home) it's now a proper
+  column tile (`drawSosTile()`), but on every single-task screen (mood/symptoms/reaction/breathe/
+  workout) it's still the exact same small bottom-left corner button at the same rect
+  (`drawSosButton()`), just restyled. Both set shared `sosX/Y/W/H` globals so `pointInSos()`/
+  `checkSosButton()` -- unchanged logic -- always hit-test wherever it was actually drawn last,
+  instead of one hardcoded position. The emergency screen's 3-second cancel-hold also gained a
+  real-time filling progress bar (`drawCancelBar()`) -- it had *zero* visual feedback that holding
+  was registering before this pass, a genuine pre-existing gap, not a regression.
+- **Two real layout bugs caught by re-reading the code, not by running it** (no real board
+  attached this session -- see "still unverified" below): the center vitals panel's width
+  (`SESS_CW`) only subtracted the *left* column's width, not the right (Done/SOS) column's too --
+  its second vitals column would have rendered directly under those tiles. And the Idle screen
+  kept its old font-7 giant clock and a 33-character sentence sized for the *old* full-320px-wide
+  layout, both of which now massively overflow the narrower content band left by the new NFC/SOS
+  column -- shrunk the clock to font 4 and wrapped the sentence (`drawWrapped()`, already existed
+  for the status screen's note). Also fixed a real labeling bug while in there: the crew-home
+  header hardcoded "Crew" as the role subtitle regardless of who actually tapped in -- now shows
+  `curRole` (the astronaut's real `role` column, newly carried by the session message above), so
+  if the Flight Surgeon's card is tapped it reads "Flight surgeon", not "Crew" -- she still lands
+  on this exact same generic screen in phase 1, a distinct surgeon home is phase 2's job.
+- **Honest limit of this pass**: `arduino-cli compile` passes clean (33% flash / 15% RAM,
+  unchanged from before this rewrite) and the full pytest suite passes (199/199, 3 new tests) --
+  but nothing here has been flashed or seen on the real board yet. Some label widths (e.g. a
+  32px-wide "Symptoms" tile label, or a vital tile's value string on a long reading) are sized by
+  eye against the mockup's own pixel grid, not measured with `tft.textWidth()` the way the header
+  chip already is -- plausible but not proven to fit without clipping on real hardware. Check this
+  on the actual board (and ask before flashing it, per this file's own standing rule) before
+  trusting the layout pixel-for-pixel.
+- **Phase 2, not yet started**: the Flight Surgeon's own on-device screens (crew roster, alerts
+  with hold-to-acknowledge, inbox with quick-reply) from the same `cyd_preview.html` reference.
+  Needs new protocol messages (crew summaries and alerts/messages pushed to the CYD when a
+  surgeon's session is active, an acknowledge-alert message and a send-quick-reply message back),
+  new backend wiring in `sessions.py`/`comms.py`, and a real on-device list/scroll UI the current
+  touch model doesn't have yet (today's screens are all fixed, non-scrolling layouts). Scoped,
+  confirmed with the user, not yet built.
+
+## Follow-up: Pico NFC taps "did nothing" (2026-11-11)
+
+User reported scanning a real crew card on the Pico/PN532 reader produced no visible result.
+Diagnosed in stages, each one ruling something real out before finding the actual bug:
+
+- **The Pico/PN532 hardware itself was never the problem.** Listened directly to
+  `/dev/ttyACM0`'s raw serial output (bypassing the backend entirely) while the user tapped --
+  got a clean `{"type":"scan","uid":"2B:ED:20:54"}` instantly. Confirmed via `udevadm` that this
+  port really is the Pico (`idVendor=2e8a`, `product=Pico`), and via `groups`/`ls -la` that file
+  permissions (`uucp` group) weren't blocking it either.
+- **`app.py` wasn't running at all at first** -- a real, simple cause: nothing was listening on
+  either serial port, so of course nothing happened on tap. Started it.
+- **The actual bug, found after that**: `app.py`'s `create_app()` wires the CYD's own bridge
+  through an `on_message(msg)` closure that does two things -- `socketio.emit("serial_log", ...)`
+  (what the Simulator panel's live log in the frontend displays, `SimulatorDock.jsx` via
+  `frontend/src/lib/socket.js`'s `serialLogStore`) **and then** calls `handle_cyd_message(msg)` --
+  but `PicoBridge` was wired straight to `handle_cyd_message` directly, skipping that wrapper
+  entirely: `pico_bridge = PicoBridge(on_message=handle_cyd_message)`. A Pico tap was very likely
+  **silently working all along** -- starting a real session, updating the CYD, broadcasting
+  `session_started` -- just never echoed to `serial_log`, which is almost certainly the live feed
+  the user was actually watching to confirm it did something. **Fixed**: `pico_bridge =
+  PicoBridge(on_message=on_message)` -- same wrapper the CYD bridge already uses, so a Pico scan
+  now shows up in that log exactly like a CYD-originated one does.
+- **Verified live, twice** (before and after the fix) with a real `python-socketio` client
+  watching the actual running server's events while the user tapped a real card: before the fix,
+  a tap produced zero `serial_log`/`scan`/`session_started` events even though the session really
+  was active; after the fix, the same tap produced the full expected sequence --
+  `serial_log` (in: scan) -> `scan` -> `serial_log` (out: session, now carrying the phase-1
+  `role`/`today` fields above) -> `session_started` -- and a second tap correctly ended it
+  (`end_session` -> `session_ended` -> `logout_requested`). 199/199 tests still passing (no test
+  covers `app.py`'s own wiring, which is how this shipped unnoticed in the first place).
+
+## Follow-up: Pico stopped working after moving it to a breadboard (2026-11-11)
+
+Same day, same reader, new symptom: after the fix above, the user moved the PN532 wiring onto a
+breadboard (unplugging/replugging the Pico to do it) and the reader "stopped working" again.
+
+- **The hardware was fine again** -- confirmed the same way as the first pass, listening to
+  `/dev/ttyACM0` directly: a real tap produced a clean scan twice in a row on the new breadboard
+  wiring. Not a wiring regression.
+- **The actual bug**: `backend/hardware/pico_bridge.py`'s `PicoBridge.__init__` only ever called
+  `find_port()` **once**, at construction. `start()` then bailed out immediately (`if not
+  self.port: return`) without starting the read thread at all if no Pico was present at that exact
+  moment -- so a board that appears *after* the server has already started (exactly what
+  unplugging it to rewire on a breadboard does) is never found for that process's entire
+  lifetime, no matter how long it keeps running. The already-running server the user was testing
+  against had started before the breadboard move, so this was a structurally different bug from
+  the wiring-callback one above, not the same bug resurfacing.
+- **Fixed**: `start()` now always launches the read thread, and `_read_loop()` calls `find_port()`
+  on every reconnect attempt (every `RECONNECT_S`, currently 3s) rather than once -- so plugging a
+  Pico in at any point after the server starts is picked up within a few seconds, no restart
+  needed. An explicitly-forced `port=` (nothing passes one today, kept for parity with
+  `SerialBridge`/tests) still skips auto-detection entirely, same as before.
+- 2 new tests in `tests/test_pico_bridge.py`: one proves a port that only becomes available after
+  `start()` is still found (mocks `find_port`/`serial.Serial`, no real hardware or sleep-waiting
+  needed since `RECONNECT_S` is monkeypatched down); the other proves an explicit `port=` is never
+  overridden by `find_port()` (which asserts it's never even called). 201/201 total passing.
+  Restarted the user's real server with the fix; confirmed via `/proc/<pid>/fd` that it now holds
+  both `/dev/ttyUSB0` (CYD) and `/dev/ttyACM0` (Pico) open, where before the fix it only had the
+  CYD's.
+
+## CYD redesign, phase 2: the Flight Surgeon's own on-device screens (2026-11-11)
+
+The deferred half of the facelift above -- confirmed with the user to start right after phase 1
+("2 should be next"). Covers `cyd_preview.html`'s remaining 6 screens: surgeon home (crew roster +
+Alerts/Inbox tiles), crew detail, alerts with hold-to-acknowledge, and inbox with quick-reply. Her
+card still starts a session exactly like any crew member's -- `screens.ino`'s new `homeScreenEnum()`/
+`goHome()` are the one place that now decides crew-home vs. surgeon-home (by `curRole`), replacing
+every hand-written `curUid.length() ? SCR_SESSION : SCR_IDLE` ternary that used to be scattered
+across `onExerciseMsg`/`onEmergencyMsg`/`checkSosButton`'s cancel-hold/etc.
+
+- **New protocol messages** (`backend/hardware/protocol.py` / `firmware/astro_cyd/protocol.ino`):
+  laptop -> CYD `crew_list`/`alerts_list`/`inbox_list` (pushed together right after her `session`
+  message, and again every background tick -- see `sessions.refresh_surgeon_cyd()`, hooked into
+  `app.py`'s existing `background_loop()` right alongside `check_timeouts()`) and `crew_detail`
+  (a request/response reply to a new CYD -> laptop `view_crew`); CYD -> laptop `ack_alert` and
+  `quick_reply`. All four laptop -> CYD lists/detail are built by new functions in
+  `backend/logic/sessions.py` (`crew_list_for_cyd`/`alerts_list_for_cyd`/`inbox_for_cyd`/
+  `crew_detail_for_cyd`), each capped (4 crew, 3 alerts, 1 inbox item) so the encoded line can
+  never grow past the firmware's 512-byte buffer regardless of how large the crew/alert backlog
+  gets -- a hackathon crew is a handful of people, not hundreds, so simple caps beat pagination
+  here. `_today_vitals_for_cyd()` (phase 1) gained a fifth indicator, `temperature`, reused by
+  `crew_detail_for_cyd` for the Crew Detail screen's 4 vital tiles (HR/BP/Temp/Sleep, vs. crew
+  home's own HR/BP/Mood/Sleep -- different sets, same underlying helper).
+- **`ack_alert`/`quick_reply` reuse the exact same DB writes and Socket.IO events the existing
+  HTTP routes already use** (`POST /alerts/<id>/ack`, `POST /messages`) -- confirmed by reading
+  those routes first, not reimplemented: `routes.py`'s new `_ack_alert_from_cyd()`/
+  `_quick_reply_from_cyd()` are thin wrappers in the same `handle_cyd_message()` closure, so a
+  surgeon's physical gesture and a browser click land in identical rows/broadcasts either way.
+  One correctness quirk confirmed by reading `comms.py` directly before assuming: the `messages`
+  table's `read` column doesn't mean "surgeon has seen this" at all -- it means "delivered" (the
+  background sweep flips it once `deliver_at` has passed), so there's no existing concept of
+  marking a crew report "handled." `inbox_for_cyd()` therefore just shows the single latest
+  *delivered* crew report regardless of whether it's been replied to, matching the mockup's own
+  one-report-at-a-time Inbox screen -- a scrollable history is future scope, not this pass's.
+- **A real correctness fix, caught by reasoning about the periodic refresh, not by running it**:
+  the Alerts screen's hold-to-acknowledge gesture originally read *which* alert to acknowledge
+  from `selectedAlert`'s array index only once the 2-second hold completed -- but
+  `refresh_surgeon_cyd()`'s own background tick could land mid-hold and shift the array (e.g. if
+  someone else acknowledges a different alert from the web UI in those 2 seconds), making that
+  index point at a different alert by the time the hold finishes. Fixed by capturing the alert's
+  real id (`holdingAlertId`) the moment the hold *starts*, and looking it back up by id (not by
+  index) for the optimistic local removal once it completes.
+- **Every new on-device list is a fixed-size C array** (`CREW_MAX=4`, `ALERTS_MAX=3`, one inbox
+  item), matching this firmware's existing style (`reactionTimes[REACTION_TRIALS]` etc.) --
+  no dynamic allocation, no scrolling touch model needed since everything fits on screen at once.
+  The Alerts screen reserves all `ALERTS_MAX` row slots even when fewer are open, so the
+  acknowledge-hold bar below them never shifts position between redraws.
+- **New icons** (`ui_kit.ino`): `iconCrew` (two small head-and-shoulders), `iconMessage` (a chat
+  bubble, used for the Inbox tile and report card), `iconBack` (a chevron, every sub-screen's
+  Back tile), `iconSend` (a paper plane, the quick-reply buttons), `iconTemp` (a thermometer, the
+  Crew Detail screen's 4th vital tile) -- same 24-unit-grid/TFT-primitive style as phase 1's set,
+  no bitmaps. `drawCancelBar()` (the emergency screen's cancel-hold) was generalized into a
+  reusable `drawHoldBar(x,y,w,h,frac,label)` so the Alerts screen's acknowledge-hold could reuse
+  the exact same fill/flip-text-color logic instead of a second copy.
+- **Honest limit of this pass, same as phase 1**: `arduino-cli compile` passes clean (33% flash,
+  unchanged from phase 1 / 15% RAM) and the full pytest suite passes (213/213, 20 new backend
+  tests across `test_sessions.py`/`test_protocol.py`/`test_api.py`) -- but none of these four new
+  screens have been seen on the real board yet, only reasoned through carefully (including the
+  race-condition fix above, found by re-reading the periodic-refresh interaction, not by
+  reproducing it live). Check this on the actual board (and ask before flashing, per this file's
+  own standing rule) before trusting the layout/touch targets pixel-for-pixel -- same caveat
+  phase 1 had on its first pass, which did turn up two real layout bugs once reasoned through
+  carefully a second time.
+
+## Follow-up: the surgeon home screen was blinking (2026-11-11)
+
+User tapped the Flight Surgeon's card right after phase 2 was flashed and reported the screen
+blinking. Confirmed directly by watching the live server's outgoing serial traffic (a real
+Socket.IO client, same pattern as every other live-verify pass in this file): `crew_list`/
+`alerts_list`/`inbox_list` were going out **every single background tick (2s), with byte-for-byte
+identical content each time** -- `refresh_surgeon_cyd()` resent unconditionally by design (a
+deliberate "simplicity over diffing" call made when phase 2 was built, see that entry above --
+this is the one place that call turned out to be a real, user-visible bug, not just a
+micro-optimization skipped).
+
+- **Two compounding causes, both fixed**: (1) the backend resent the same three messages every
+  tick regardless of whether anything had changed, and (2) each of those three messages
+  independently triggered a *full* `drawSurgeonHomeScreen()` redraw on the firmware side --
+  together, the home screen was fully clearing and repainting itself **three times every two
+  seconds**, which is exactly what "blinking" looks like.
+- **Fixed (1)**: `sessions.py`'s `send_surgeon_payload()` gained a `force` parameter and now
+  diffs against a new `_last_surgeon_payload_sent` cache -- `refresh_surgeon_cyd()`'s periodic
+  call (`force=False`, the default) is a no-op unless the crew roster, alerts, or inbox actually
+  changed since the last send; `_start_session()`'s call (`force=True`) still always sends,
+  since the CYD's screen was just wiped to a fresh session and needs the data again even if it's
+  identical to whatever was last pushed. New tests prove both halves:
+  `test_refresh_surgeon_cyd_skips_unchanged_payload` (unchanged -> nothing sent; a real new alert
+  -> sent again) and `test_surgeon_payload_is_resent_on_a_fresh_session_even_if_unchanged`
+  (tap out, tap back in with identical data -> still sent).
+- **Fixed (2)**: `crew_list`/`alerts_list`/`inbox_list` always arrive together, in that order
+  (`send_surgeon_payload()`'s own send sequence) -- `screens.ino`'s `onCrewListMsg()` and
+  `onAlertsListMsg()` no longer redraw the home screen at all; only `onInboxListMsg()` (the last
+  of the three) does, so one update now means exactly one redraw instead of three. Each message
+  still redraws its own standalone sub-screen when she's actually on it (Alerts/Inbox), unaffected
+  by this change.
+- `reset_sessions_state` (the autouse test fixture in `tests/conftest.py`) now also resets
+  `sessions._last_surgeon_payload_sent` between tests, same as every other piece of this module's
+  in-memory state -- missing this would have let one test's cached payload silently suppress
+  another test's assertions. `arduino-cli compile` still clean (33%/15%, unchanged), 215/215
+  tests passing (2 new). Flashed and the server restarted with this fix; not yet re-confirmed
+  visually on the real board that the blinking actually stopped -- ask the user to check next.
+
+## Follow-up: the surgeon home screen said "No crew assigned yet" (2026-11-11)
+
+Right after the blinking fix above, the user tapped the Flight Surgeon's real card and the CYD
+showed an empty roster, despite the backend clearly having two real crew members. Diagnosed by
+simulating her exact tap from the backend (`POST /api/simulate/scan {"uid":"D1000001"}`) and
+watching the real outgoing serial traffic -- **nothing went out at all**, not even a `session`
+message. So this was never a phase 1/2 bug, crew_list parsing bug, or redraw-timing bug (all of
+which were ruled out first, including writing a standalone g++ program against the real
+ArduinoJson library to confirm the array-of-objects parsing logic itself was correct).
+
+- **Root cause, pre-existing, just never hit until now**: `backend/seed.py` registers the Flight
+  Surgeon's own NFC card as tag **`type="surgeon"`** (`SURGEON = {... "uid": "D1000001" ...}`,
+  `_insert_tag(conn, SURGEON["uid"], "surgeon", ...)`) -- a holdover from *before* real login
+  existed, when tapping it just unlocked a timed PIN-replacement window
+  (`surgeon_unlocked_until`), not a session. `handle_scan()`'s dispatch still special-cases
+  `tag["type"] == "surgeon"` into `_handle_surgeon_tag()`, which -- confirmed by reading it --
+  sets that legacy timer and emits one vestigial web-only event, **and calls `send_fn` zero
+  times**. So tapping her card has *never* been able to start a real CYD session at all, in any
+  phase of this redesign or before it -- it just silently did nothing on the board, which is
+  also exactly why this went unnoticed until phase 2 made her tap actually matter for the first
+  time (nothing on-screen ever depended on her having a session before this).
+  `POST /api/auth/nfc_login` (the *web* login) was unaffected the whole time -- it does its own
+  separate tag lookup, keyed only on having a linked `astronaut_id`, never branching on tag type.
+- **Fixed** in `handle_scan()`: a `surgeon`-type tag that *does* have a real `astronaut_id` now
+  also routes to `_handle_astronaut_tag()` (the real session toggle), exactly like an
+  `astronaut`-type tag -- only a `surgeon` tag with no linked astronaut (the legacy, account-less
+  unlock-only case, which is all `tests/conftest.py`'s `seed_minimal()` fixture ever seeds) still
+  falls through to the old vestigial path. No `seed.py`/DB migration needed -- her tag can stay
+  exactly as seeded; the dispatch logic is what changed.
+- **A real gap in this session's own test coverage, not just the app's**: every phase-2 test's
+  own `_seed_surgeon_and_crew()` fixture (`tests/test_sessions.py`) had seeded its test surgeon's
+  tag as `type="astronaut"` instead of matching real `seed.py`'s `type="surgeon"` -- which is
+  exactly why 20+ passing tests never caught this. Fixed the fixture to use `"surgeon"` (matching
+  production exactly), and all those same tests still pass -- proving the dispatch fix, not just
+  asserting it.
+- **Verified live end-to-end twice**: once showing zero output (reproducing the bug against the
+  then-current code), once after the fix and a server restart showing the complete, correct
+  sequence over the real serial port to the real board -- `session` (role "Flight surgeon") ->
+  `led` -> `crew_list` (Ahmad + Sameer, not empty) -> `alerts_list` -> `inbox_list`. Backend-only
+  fix, no firmware changes, no reflash needed -- just the server restart. 215/215 tests passing.
+
+## Follow-up: crew still missing on login, fixed by narrowing what the earlier fixes assumed (2026-11-11)
+
+Even after the previous two follow-ups, the user reported the surgeon home screen still showed
+"No crew assigned yet" right after tapping in -- but pressing Alerts, then Back, correctly showed
+the real roster. That gap (automatic update wrong, manual redraw right) pointed at the redraw
+*trigger*, not the data.
+
+- **Root cause**: the earlier anti-blink fix (see above) made the home screen's redraw fire from
+  exactly one message, `inbox_list` (the last of the three `send_surgeon_payload()` sends), on the
+  reasoning that crew_list/alerts_list/inbox_list always arrive together. That's true -- but this
+  project's USB-serial link is *documented* (see "USB serial reliability" above) to sometimes
+  corrupt or drop a line in a fast back-to-back burst, and a burst of three messages sent with no
+  delay between them (`send_surgeon_payload()`) is exactly the shape that triggers it. If
+  `inbox_list` specifically was the one dropped, `crew_list`'s own data still landed and populated
+  `crewCount` correctly -- but nothing was left to trigger the screen to actually show it, so it
+  sat there correct-but-invisible until a manual navigation (which redraws directly from whatever
+  state is currently in memory, not from a specific message having arrived) finally displayed it.
+- **Fixed, firmware side**: `screens.ino`'s `onCrewListMsg()`/`onAlertsListMsg()`/
+  `onInboxListMsg()` now *all* call a new `redrawSurgeonHomeThrottled()` when on the surgeon home
+  screen -- whichever of the three happens to arrive (and survive the link) triggers the redraw,
+  with a 150ms throttle so a clean, undropped batch still only repaints once, not three times
+  (preserving the anti-blink fix's actual goal without re-depending on one specific message).
+- **Fixed, backend side -- reverting the previous fix, not layering on it**: the diff-cache added
+  by the blinking follow-up (skip resending `crew_list`/`alerts_list`/`inbox_list` if identical to
+  last time) is now a strictly worse tradeoff than it looked at the time: it tracks what was
+  *sent*, not what was actually *received*, so a dropped line during a send that then looked
+  "unchanged" to the cache would never get retried -- the CYD could stay stuck on stale/incomplete
+  data indefinitely. Now that the firmware throttle above solves the actual blinking
+  independently, `send_surgeon_payload()` went back to always sending unconditionally every tick
+  (`force` parameter and `_last_surgeon_payload_sent` cache both removed) -- which makes the
+  periodic refresh **self-healing**: any single dropped line gets corrected automatically on the
+  very next tick, a couple of seconds later, with no cache to invalidate first. Net effect: the
+  anti-blink fix now lives entirely on the firmware side (where the actual redraw happens),
+  and the backend is simpler than either earlier pass, not just reverted to it.
+- **A real gap in the previous follow-up's own tests, caught while fixing this one**: the earlier
+  diff-cache tests (`test_refresh_surgeon_cyd_skips_unchanged_payload`,
+  `test_surgeon_payload_is_resent_on_a_fresh_session_even_if_unchanged`) asserted the *caching*
+  behavior directly, so they had to be replaced, not just left passing accidentally -- updated to
+  `test_refresh_surgeon_cyd_resends_every_tick_even_if_unchanged`, which now asserts the opposite
+  (and correct) contract. 215/215 total passing. Flashed (firmware changed this time, unlike the
+  previous follow-up) and the server restarted; verify on the real board next.
+
+## Follow-up: still blinking, and alert/inbox badge counts stayed stale (2026-11-11)
+
+The previous follow-up's fix (any of the three messages can trigger the redraw, throttled to one
+per ~150ms) turned out to be wrong in a different way, caught from the user's own next report:
+the screen kept blinking, *and* the Alerts/Inbox tile badge counts on the surgeon-home screen
+stayed stale until navigating into Alerts and back -- the exact same symptom shape as the "no
+crew" bug, just for a different pair of fields.
+
+- **Why the throttle-based fix was still wrong**: letting *whichever* message arrives *first*
+  trigger an immediate redraw means that redraw uses fresh data for the message that triggered it,
+  but stale data for whichever of the other two hadn't arrived *yet* (they're still a few
+  milliseconds away on the wire) -- e.g. `crew_list` lands, triggers the redraw instantly with the
+  correct roster, but `alerts_list`/`inbox_list` haven't been parsed yet, so the badges on that
+  same redraw show old counts. The later two messages' own redraws were then suppressed by the
+  150ms throttle, so nothing ever corrected it until a manual navigation forced a fresh paint from
+  whatever had *since* arrived.
+- **Why it was still blinking**: separately, now that `send_surgeon_payload()` always resends
+  unconditionally every ~2s (the previous follow-up's fix, for self-healing against a dropped
+  line), *some* redraw was firing every single tick regardless of whether the content had actually
+  changed -- and any full-screen redraw starts with `clearScreen()` (a full black fill), which
+  looks like a blink even when it only happens once per cycle, not three times.
+- **Fixed properly this time -- debounce *and* diff, not either alone**: each message
+  (`onCrewListMsg`/`onAlertsListMsg`/`onInboxListMsg`) now just calls `markSurgeonHomeDirty()`,
+  which sets a dirty flag and (re-)arms an 80ms timer -- it does **not** draw anything itself. A
+  new `checkSurgeonHomeRedraw()`, polled every `loop()` alongside `checkSosButton()`/
+  `checkAckHold()`, only fires once the burst has gone quiet for those 80ms, guaranteeing whichever
+  of the three messages actually arrived by then are *all* reflected in the one resulting redraw --
+  fixing the stale-badge bug. It then also skips the redraw entirely unless the content is actually
+  different from what's already on screen, via a new `surgeonHomeSignature()` (a compact string of
+  crew roster + alert ids + inbox state) compared against `lastDrawnSurgeonHomeSignature` (set at
+  the end of `drawSurgeonHomeScreen()` itself, so every real draw -- automatic or a manual
+  Back-navigation -- keeps the cache honest) -- fixing the blinking, independent of how often the
+  backend resends. The backend keeps resending unconditionally every tick (self-healing against a
+  dropped line, per the previous follow-up); the firmware is now what decides whether that's
+  actually worth a visible repaint.
+- Each message still redraws its own standalone sub-screen immediately when she's actually on it
+  (Alerts/Inbox), unaffected by any of this -- only the surgeon*-home* screen's redraw went through
+  three different designs this session before landing on the right one. `arduino-cli compile`
+  still clean (34%/15%, +1 sketch-size percentage point from the new signature-diff code), 215/215
+  backend tests unaffected (this pass is firmware-only). Flashed; verify on the real board next.
+
+## Follow-up: a replied-to inbox report kept reappearing, and the Alerts/Inbox screens themselves still blinked (2026-11-11)
+
+First real end-to-end walkthrough of all three surgeon sub-screens on the real board (Crew Detail,
+Alerts hold-to-acknowledge, Inbox quick-reply) turned up two more bugs, both different from every
+earlier follow-up in this run -- these two are about the Alerts/Inbox screens *themselves*, not the
+home screen.
+
+- **Bug 1 -- a report the surgeon just replied to from the CYD disappeared, then came back.**
+  Root cause: `messages.read` doesn't mean "handled" (see the phase-2 entry's own note on this) --
+  there's no column anywhere recording "a reply was sent for this report", so `inbox_for_cyd()`
+  kept returning the *same* crew report as "the latest crew message" even after a reply went out
+  (the reply itself is a separate `from_role='surgeon'` row, filtered out of this function's own
+  query). The CYD's optimistic local clear (`inboxTouch()`, phase 2) made it vanish for a moment;
+  the very next periodic refresh (`refresh_surgeon_cyd()`, ~2s later) then resent the unchanged
+  original report and brought it right back. **Fixed**: `inbox_for_cyd()` now also checks whether
+  a surgeon-origin message to the same astronaut exists with a *later* `sent_at` than the crew
+  report -- if so, it's considered replied-to and excluded, no schema change needed. This also
+  means a web-UI reply (`POST /messages`) now correctly clears the CYD's Inbox too, not just a
+  CYD-originated quick-reply -- one consistent "handled" rule regardless of which interface
+  replied. New test: `test_inbox_for_cyd_hides_a_report_already_replied_to` (replied -> hidden; a
+  *later* new report after the reply -> still shown).
+- **Bug 2 -- the Alerts and Inbox screens themselves still blinked.** The debounce-and-diff fix a
+  few follow-ups up only ever covered the surgeon-*home* screen's own redraw
+  (`checkSurgeonHomeRedraw()`) -- `onAlertsListMsg()`/`onInboxListMsg()` still redrew their own
+  sub-screen *unconditionally* every single time a message arrived, i.e. every ~2s the surgeon
+  sat on either screen, regardless of whether anything had actually changed. **Fixed**: two new,
+  simpler signatures (`alertsSignature()`/`inboxSignature()` -- no debounce needed here, since
+  `alerts_list` is the only message affecting the first and `inbox_list` the only one affecting
+  the second, unlike the home screen's three-way dependency) gate `onAlertsListMsg()`/
+  `onInboxListMsg()`'s redraws the same way `checkSurgeonHomeRedraw()` already gates the home
+  screen's -- cached at the end of `drawAlertsScreen()`/`drawInboxScreen()` themselves, same
+  pattern, so a manual navigation (selecting a row, the ack-hold's own redraw) keeps the cache
+  honest too.
+  216/216 tests passing (`arduino-cli compile` 34%/15%, unchanged). Flashed; verify on the real
+  board next.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 196 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 216 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, consult, voice, scheduler, SPA serving, CYD logout).
 - `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
@@ -1502,6 +1906,15 @@ vanilla app was deleted once the last page was ported.
 
 ## Status (2026-11-11)
 
+- Branch `cyd-redesign` (currently checked out, branched from `ui-redesign`'s tip, identical
+  history otherwise) holds both CYD redesign phases above -- `firmware/astro_cyd/ui_kit.ino` new,
+  `screens.ino`/`astro_cyd.ino`/`protocol.ino` edited, `backend/hardware/protocol.py`,
+  `backend/logic/sessions.py`, `backend/routes/routes.py`'s `handle_cyd_message`, `app.py`'s
+  background loop, `backend/hardware/pico_bridge.py` (the two Pico-reconnect-detection fixes
+  below), plus `tests/test_protocol.py`/`tests/test_sessions.py`/`tests/test_api.py`/
+  `tests/test_pico_bridge.py` (new) -- all **uncommitted**. `firmware/tools/cyd_preview.html`
+  (the design reference) is untracked. Phase 2's four new screens are compile-checked and
+  pytest-covered but **not yet flashed/seen on real hardware** -- see that section's own note.
 - Branch `ui-redesign` holds the whole React rebuild (crew pages, Flight Surgeon screens,
   /admin, glass theme, sidebar, Schedule, Trends analytics, rewards removal, session fixes),
   committed but **not pushed** and **not merged into master** yet — check `git log` /

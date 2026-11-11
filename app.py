@@ -127,9 +127,12 @@ def create_app(args):
     bridge.start()
 
     # Optional second NFC reader (Pico + PN532, no WiFi -- see
-    # backend/hardware/pico_bridge.py). Feeds scans into the exact same handler the
-    # CYD's own scans go through. No-ops if no Pico is plugged in.
-    pico_bridge = PicoBridge(on_message=handle_cyd_message)
+    # backend/hardware/pico_bridge.py). Wired to the same on_message the CYD's own
+    # bridge uses (not handle_cyd_message directly) so a Pico scan also gets echoed
+    # to the serial_log Socket.IO stream the Simulator panel's live log shows --
+    # without this, a Pico tap silently started a real session but never appeared
+    # there, which read as "nothing happening" even though it was actually working.
+    pico_bridge = PicoBridge(on_message=on_message)
     pico_bridge.start()
 
     # The React app (frontend/dist, built by `npm run build`). Real files (JS/CSS
@@ -159,6 +162,7 @@ def create_app(args):
                 sessions.check_timeouts(bridge.send, socketio.emit)
                 comms.deliver_due_messages(socketio.emit)
                 scheduler.check_and_fire(start_time, bridge.send, socketio.emit)
+                sessions.refresh_surgeon_cyd(bridge.send)
             except Exception as exc:  # the loop must never die mid-demo
                 socketio.emit("serial_log", {"direction": "in", "line": {"type": "log", "msg": f"background loop error: {exc}"}})
 

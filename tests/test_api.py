@@ -791,3 +791,46 @@ def test_admin_roster_and_tag_validation(client):
     assert any(t["uid"] == "X1" for t in client.get("/api/tags").get_json())
     assert client.delete("/api/tags/X1").status_code == 200
     client.post("/api/admin/logout")
+
+
+# ---- Flight Surgeon on-device screens (phase 2 of the CYD redesign):
+# ack_alert/quick_reply/view_crew are CYD -> laptop messages, so they're
+# exercised the same way every other CYD-originated event is in this file
+# (/api/simulate/event, which routes through the exact same
+# handle_cyd_message() a real tap/gesture would) -- no login needed for the
+# route itself, same as a real physical gesture needs none. ----
+
+def test_cyd_ack_alert_marks_it_acknowledged(client):
+    login_as(client, AHMAD_UID)
+    client.post("/api/astronauts/1/alert", json={"text": "ack-alert test case"})
+    with db.write_conn() as conn:
+        alert_id = conn.execute(
+            "SELECT id FROM alerts WHERE text = 'ack-alert test case' ORDER BY id DESC LIMIT 1"
+        ).fetchone()["id"]
+    res = client.post("/api/simulate/event", json={"type": "ack_alert", "id": alert_id})
+    assert res.status_code == 200
+    with db.write_conn() as conn:
+        row = conn.execute("SELECT acknowledged FROM alerts WHERE id = ?", (alert_id,)).fetchone()
+    assert row["acknowledged"] == 1
+
+
+def test_cyd_quick_reply_queues_a_surgeon_message(client):
+    res = client.post("/api/simulate/event", json={"type": "quick_reply", "astro_id": 1, "text": "Rest and re-check in 1 hour"})
+    assert res.status_code == 200
+    with db.write_conn() as conn:
+        msg = conn.execute(
+            "SELECT * FROM messages WHERE astronaut_id = 1 AND from_role = 'surgeon' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert msg["body"] == "Rest and re-check in 1 hour"
+
+
+def test_cyd_quick_reply_ignores_unknown_astronaut(client):
+    res = client.post("/api/simulate/event", json={"type": "quick_reply", "astro_id": 999999, "text": "hi"})
+    assert res.status_code == 200  # a malformed/stale CYD message degrades silently, never 500s
+    with db.write_conn() as conn:
+        assert conn.execute("SELECT 1 FROM messages WHERE astronaut_id = 999999").fetchone() is None
+
+
+def test_cyd_view_crew_does_not_crash(client):
+    res = client.post("/api/simulate/event", json={"type": "view_crew", "id": 1})
+    assert res.status_code == 200

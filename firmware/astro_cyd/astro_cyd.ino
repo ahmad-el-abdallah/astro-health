@@ -22,6 +22,41 @@
 // Every timed thing (toasts, reaction test, breathing, timeouts) uses
 // millis() and is driven from loop().
 
+// ---- shared UI palette + layout constants (ui_kit.ino) ----
+// #defines are plain textual substitution, not functions -- Arduino's
+// auto-prototype mechanism (see screens.ino's header comment) only helps
+// with function declarations, so these have to live in this first tab to
+// be visible by the time later tabs are preprocessed, however those tabs
+// happen to sort alphabetically. RGB565; hex in the comment is the
+// mockup's own token value (firmware/tools/cyd_preview.html).
+#define U_BG      0x08A3  // #0e151f
+#define U_HEAD    0x0883  // #0a1018
+#define U_PANEL   0x1105  // #16212d
+#define U_PANEL2  0x1947  // #1d2b3a
+#define U_LINE    0x21A9  // #26364a
+#define U_TEXT    0xEF7E  // #e8eef6
+#define U_DIM     0x8CD6  // #8a9bb0
+#define U_SUB     0x5B90  // #5e7086
+#define U_CREW    0x4B5D  // #4a68ec
+#define U_DOC     0x2DF5  // #2fbfa8
+#define U_RED     0xE249  // #e5484d
+#define U_SLATE   0x29C9  // #2a3a4c
+#define U_GREEN   0x3EB1  // #3dd68c
+#define U_AMBER   0xF5C7  // #f5b83d
+#define U_GRAY    0x6BD1  // #6b7a8f
+
+#define U_HEAD_H 22
+#define U_FOOT_H 16
+#define U_COL_W  64
+#define U_PAD    4
+
+// A typedef is likewise not a function, so (same reasoning) it has to
+// live here too: ui_kit.ino's drawTile()/drawVital() take one of these as
+// a parameter, and the auto-generated prototype for drawTile() itself
+// (inserted near the top of the merged file, before ui_kit.ino's own code
+// is ever reached) needs this type to already be known.
+typedef void (*IconFn)(int cx, int cy, float s, uint16_t color, uint16_t bg);
+
 // ---- TFT_eSPI config lives in tft_setup.h, not here ----
 // See that file for why: a #define block here would only affect this
 // sketch's own compilation, not TFT_eSPI.cpp's (it's compiled separately,
@@ -97,6 +132,10 @@ int SCRW = 320, SCRH = 240, CX = 160, CY = 120;
 enum Screen {
   SCR_IDLE, SCR_SESSION, SCR_MOOD, SCR_SYMPTOMS, SCR_REACTION, SCR_BREATHE,
   SCR_STATUS, SCR_EXERCISE_TIMER, SCR_ALERT_EMERGENCY, SCR_UNKNOWN_TAG,
+  // Flight Surgeon on-device screens (phase 2 of the CYD redesign) -- her
+  // card still starts a session like any crew member's (sessionTouch()'s
+  // caller branches on curRole to pick SCR_SURGEON_HOME over SCR_SESSION).
+  SCR_SURGEON_HOME, SCR_CREW_DETAIL, SCR_ALERTS, SCR_INBOX,
 };
 Screen screen = SCR_IDLE;
 Screen screenBeforeToast = SCR_IDLE;
@@ -104,9 +143,26 @@ uint32_t toastUntilMs = 0;
 
 // the active session (empty uid = nobody tapped in / laptop hasn't named them yet)
 String curUid = "", curName = "", curLevel = "GRAY";
+String curRole = "Crew member";
 uint32_t lastTouchMs = 0;
 uint32_t sessionIdleMs = DEFAULT_SESSION_IDLE_MS;
 uint32_t lastActivePingMs = 0;
+
+// Today's vitals snapshot for the crew-home screen (ui_kit.ino's drawVital
+// tiles) -- pre-formatted strings from the laptop's "today" field on the
+// session message (backend/logic/sessions.py's _today_vitals_for_cyd()),
+// not parsed/computed here. Empty string = no reading yet today.
+String vHr = "", vHrL = "GRAY";
+String vBp = "", vBpL = "GRAY";
+String vMood = "", vMoodL = "GRAY";
+String vSleep = "", vSleepL = "GRAY";
+
+// The SOS tile/button's current on-screen rect -- set by whichever screen
+// draw function last placed it (ui_kit.ino's drawTile for Idle/crew home,
+// or the small fixed corner button screens.ino's drawSosButton() still
+// draws for every other screen), so checkSosButton() always hit-tests
+// wherever it was actually drawn instead of one hardcoded position.
+int sosX = 0, sosY = 0, sosW = 0, sosH = 0;
 
 // exercise timer
 bool exerciseRunning = false;
@@ -117,6 +173,60 @@ bool emergencyActive = false;
 String emergencyText = "";
 uint32_t sosHoldStartMs = 0;    // holding the corner SOS button
 uint32_t cancelHoldStartMs = 0; // holding Cancel on the emergency screen
+
+// ---- Flight Surgeon on-device screens (phase 2 of the CYD redesign) ----
+// Crew roster (laptop's "crew_list" message, sessions.py's
+// crew_list_for_cyd() -- capped the same way there, CREW_MAX here must
+// match that cap).
+static const int CREW_MAX = 4;
+int crewCount = 0;
+int crewId[CREW_MAX];
+String crewName[CREW_MAX], crewLevel[CREW_MAX];
+bool crewHasAlert[CREW_MAX];
+
+// Open alerts (laptop's "alerts_list" message, alerts_list_for_cyd()).
+static const int ALERTS_MAX = 3;
+int alertsCount = 0;
+int alertId[ALERTS_MAX];
+String alertWho[ALERTS_MAX], alertText[ALERTS_MAX], alertTs[ALERTS_MAX];
+int selectedAlert = -1;         // index into the arrays above, or -1
+uint32_t ackHoldStartMs = 0;     // holding the Alerts screen's acknowledge bar
+static const uint32_t ACK_HOLD_MS = 2000;
+
+// The single latest delivered crew report (laptop's "inbox_list" message,
+// inbox_for_cyd() -- 0 or 1 items, never more, see that function's own
+// comment on why).
+bool inboxHasItem = false;
+int inboxAstroId = 0;
+String inboxWho = "", inboxBody = "", inboxTs = "";
+
+// One crew member's full detail (laptop's "crew_detail" message, a
+// response to this board's own "view_crew" request) -- viewingCrewId is
+// which astronaut we asked about, so a reply that arrives after the
+// surgeon has already navigated elsewhere is harmlessly ignored.
+int viewingCrewId = -1;
+String detailName = "", detailLevel = "GRAY", detailTs = "";
+bool detailOnCyd = false;
+String detailHr = "", detailHrL = "GRAY", detailBp = "", detailBpL = "GRAY";
+String detailTemp = "", detailTempL = "GRAY", detailSleep = "", detailSleepL = "GRAY";
+
+// Surgeon-home redraw debounce/diff (see screens.ino's markSurgeonHomeDirty()/
+// checkSurgeonHomeRedraw()/surgeonHomeSignature()): crew_list/alerts_list/
+// inbox_list arrive as a fast back-to-back burst, so any one of them marks
+// the screen dirty, but the actual (expensive, visibly-flashy) repaint
+// only happens once the burst has gone quiet for a bit, and only if the
+// content actually ended up different from what's already drawn.
+bool surgeonHomeDirty = false;
+uint32_t surgeonHomeRedrawDueMs = 0;
+static const uint32_t SURGEON_HOME_REDRAW_DEBOUNCE_MS = 80;
+String lastDrawnSurgeonHomeSignature = "\x01";  // sentinel no real signature can match -- forces the first real draw
+// Same idea, scoped to the Alerts/Inbox sub-screens -- unlike the home
+// screen these don't need a debounce (alerts_list is the only message
+// that affects alertsSignature(), inbox_list the only one for
+// inboxSignature(), so there's no "wait for the rest of the batch" need),
+// just the diff so an identical resend doesn't flash the screen.
+String lastDrawnAlertsSignature = "\x01";
+String lastDrawnInboxSignature = "\x01";
 
 // reaction test (10 trials; see docs/build-prompt.md section 10, screen 5)
 static const int REACTION_TRIALS = 10;
@@ -208,6 +318,8 @@ void loop() {
   updateLed();           // led_sound.ino
   checkLaptopOffline();  // protocol.ino
   checkSosButton();      // screens.ino
+  checkAckHold();        // screens.ino: Alerts screen's hold-to-acknowledge bar
+  checkSurgeonHomeRedraw();  // screens.ino: debounced/deduped surgeon-home repaint
 
   delay(5);
 }

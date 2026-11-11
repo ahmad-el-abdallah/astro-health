@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CYD screens</title>
+<!--
+  Design reference for the CYD firmware (firmware/astro_cyd/): every screen at the real
+  320x240 size, with the exact palette, fonts and icons the firmware uses. Layout numbers
+  here (header 22 px, side columns 64 px, status bar 16 px, tile gaps 4 px) are the same
+  constants as ui_kit.ino. Open this file directly in a browser.
+-->
+<style>
+  @font-face { font-family: "Inter"; font-weight: 500; src: url("../../frontend/src/assets/fonts/inter-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("../../frontend/src/assets/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700; src: url("../../frontend/src/assets/fonts/inter-latin-700-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Grotesk"; font-weight: 600; src: url("../../frontend/src/assets/fonts/space-grotesk-latin-600-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Grotesk"; font-weight: 700; src: url("../../frontend/src/assets/fonts/space-grotesk-latin-700-normal.woff2") format("woff2"); }
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #05080d; color: #c8d3e0; font: 14px/1.4 system-ui, sans-serif; padding: 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; color: #fff; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .bar button { background: #16212d; color: #e8eef6; border: 1px solid #2a3a4c; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .bar button.on { background: #4a68ec; border-color: #4a68ec; }
+  .grid { display: flex; flex-wrap: wrap; gap: 22px; }
+  figure { margin: 0; }
+  figcaption { font-size: 12px; color: #8a9bb0; margin-top: 6px; }
+  .frame { padding: 10px; background: #1b1f24; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); display: inline-block; }
+  .scr { position: relative; width: 320px; height: 240px; overflow: hidden; background: #0e151f;
+         font-family: "Inter", sans-serif; color: #e8eef6; }
+  .scr * { box-sizing: border-box; }
+  .abs { position: absolute; }
+  .ico { display: block; }
+</style>
+</head>
+<body>
+<h1>Astro Health · CYD screens</h1>
+<div class="bar">
+  <span>Scale:</span>
+  <button data-z="1">1× (real size)</button><button data-z="2" class="on">2×</button><button data-z="3">3×</button>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+// ---------- design tokens (mirrored in firmware/astro_cyd/ui_kit.ino) ----------
+const C = {
+  bg: "#0e151f", head: "#0a1018", panel: "#16212d", panel2: "#1d2b3a", line: "#26364a",
+  text: "#e8eef6", dim: "#8a9bb0", sub: "#5e7086",
+  crew: "#4a68ec", doc: "#2fbfa8", red: "#e5484d", redDark: "#5c1a20", slate: "#2a3a4c",
+  green: "#3dd68c", amber: "#f5b83d", gray: "#6b7a8f",
+};
+const LV = { GREEN: C.green, YELLOW: C.amber, RED: C.red, GRAY: C.gray };
+const LV_WORD = { GREEN: "Good", YELLOW: "Check", RED: "Alert", GRAY: "No data" };
+const HEAD = 22, FOOT = 16, COL = 64, PAD = 4;
+
+// Icons: the web app's line icons + a few CYD-only ones (same 24-unit grid, 2px stroke).
+const I = {
+  heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21.2l8.8-8.8a5.5 5.5 0 0 0 0-7.8z"/>',
+  mood: '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+  sleep: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  alert: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/>',
+  schedule: '<path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM16 2v4M8 2v4M3 10h18"/>',
+  bp: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+  temp: '<path d="M14 14.8V4a2 2 0 0 0-4 0v10.8a4 4 0 1 0 4 0z"/>',
+  crew: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  tick: '<path d="M20 6L9 17l-5-5"/>',
+  clock: '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 3"/>',
+  exercise: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
+  symptoms: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 7v6M9 10h6"/>',
+  target: '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01"/>',
+  wind: '<path d="M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2M17.5 8a2.5 2.5 0 1 1 2 4H2"/>',
+  message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  nfc: '<path d="M6 8.5a5 5 0 0 1 0 7M9.5 6a9 9 0 0 1 0 12M13 3.5a13 13 0 0 1 0 17M17 1.5a17 17 0 0 1 0 21"/>',
+  card: '<path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM2 10h20M6 15h4"/>',
+  back: '<path d="M15 18l-6-6 6-6"/>',
+  send: '<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+};
+const svg = (name, size, color = "#fff", sw = 2) =>
+  `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${I[name]}</svg>`;
+
+// ---------- primitives (each matches a ui_kit.ino function) ----------
+const el = (x, y, w, h, style = "", inner = "") =>
+  `<div class="abs" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;${style}">${inner}</div>`;
+const text = (x, y, s, { size = 10, weight = 600, color = C.text, font = "Inter", align = "left", w = null, ls = 0 } = {}) =>
+  `<div class="abs" style="left:${x}px;top:${y}px;${w ? `width:${w}px;` : ""}font:${weight} ${size}px/1.15 ${font};color:${color};text-align:${align};letter-spacing:${ls}px;white-space:nowrap">${s}</div>`;
+const dot = (x, y, r, color) => el(x - r, y - r, r * 2, r * 2, `border-radius:50%;background:${color}`);
+
+function header({ title, sub = "Lunar base", role = "crew", time = "14:32", chip = null }) {
+  const acc = role === "doctor" ? C.doc : C.crew;
+  return el(0, 0, 320, HEAD, `background:${C.head};border-bottom:1px solid ${C.line}`) +
+    dot(11, 11, 4, acc) +
+    text(20, 5, title, { size: 10, weight: 700, ls: 0.6 }) +
+    (sub ? text(20 + title.length * 6.6 + 8, 6, sub, { size: 9, weight: 500, color: C.dim }) : "") +
+    (chip ? el(236 - chip.w, 4, chip.w, 14, `border-radius:7px;background:${chip.bg}`, text(0, 2, chip.t, { size: 8, weight: 700, color: chip.fg || "#0b0f16", align: "center", w: chip.w })) : "") +
+    text(246, 4, time, { size: 12, weight: 600, font: "Grotesk" }) +
+    el(282, 5, 34, 12, `border-radius:6px;background:#12321f;border:1px solid #1f6b43`, text(0, 1, "LINK", { size: 7, weight: 700, color: C.green, align: "center", w: 34, ls: 0.5 }));
+}
+
+function statusBar({ left = "USB 115200 · AP 192.168.4.1 · FW 2.0 · up 01:23" } = {}) {
+  const chipS = (x, t, ok = true) => el(x, 2, 40, 12, `border-radius:3px;background:${ok ? "#1d7a4a" : "#7a1f25"}`, text(0, 1.5, t, { size: 7, weight: 700, align: "center", w: 40, ls: 0.5 }));
+  return el(0, 240 - FOOT, 320, FOOT, `background:${C.head};border-top:1px solid ${C.line}`,
+    text(6, 3.5, left, { size: 7.5, weight: 500, color: C.sub }) + chipS(232, "LAPTOP") + chipS(276, "NFC"));
+}
+
+// Tile grid: n rows in the content band, column x.
+function rowsY(n) {
+  const top = HEAD + PAD, h = (240 - HEAD - FOOT - PAD * 2 - (n - 1) * PAD) / n;
+  return Array.from({ length: n }, (_, i) => ({ y: top + i * (h + PAD), h }));
+}
+function tile(x, y, w, h, { color, icon, label, badge = null, sub = null, iconSize = 20, dim = false }) {
+  const iy = sub ? h / 2 - iconSize / 2 - 10 : h / 2 - iconSize / 2 - 6;
+  return el(x, y, w, h, `border-radius:6px;background:${color};${dim ? "opacity:.55" : ""};box-shadow:inset 0 1px 0 rgba(255,255,255,.12)`,
+    el(w / 2 - iconSize / 2, iy, iconSize, iconSize, "", svg(icon, iconSize)) +
+    text(0, iy + iconSize + 4, label, { size: 9, weight: 700, align: "center", w }) +
+    (sub ? text(0, iy + iconSize + 15, sub, { size: 7.5, weight: 500, color: "rgba(255,255,255,.8)", align: "center", w }) : "") +
+    (badge ? el(w - 17, 3, 14, 14, `border-radius:7px;background:${C.red};border:1.5px solid ${C.bg}`, text(0, 1.5, badge, { size: 8, weight: 700, align: "center", w: 11 })) : ""));
+}
+const LX = PAD, RX = 320 - PAD - COL, CX0 = LX + COL + PAD, CW = RX - PAD - CX0;
+
+function panel(x, y, w, h, inner, { edge = null, bg = C.panel } = {}) {
+  return el(x, y, w, h, `border-radius:6px;background:${bg};border:1px solid ${C.line};overflow:hidden`,
+    (edge ? el(0, 0, 3, h, `background:${edge}`) : "") + inner);
+}
+function vital(x, y, w, h, label, value, level, icon) {
+  return panel(x, y, w, h,
+    el(6, 6, 12, 12, "", svg(icon, 12, C.dim)) + text(21, 7, label, { size: 8, weight: 600, color: C.dim }) +
+    text(7, 21, value, { size: 15, weight: 700, font: "Grotesk" }) + dot(w - 9, h - 9, 3.5, LV[level]));
+}
+
+// ---------- screens ----------
+const S = [];
+const add = (name, html) => S.push({ name, html });
+
+// 1. Idle
+(() => {
+  const r = rowsY(2);
+  let h = header({ title: "ASTRO HEALTH", sub: "Lunar base", time: "14:32" });
+  h += tile(LX, r[0].y, COL, r[0].h, { color: C.red, icon: "alert", label: "SOS", sub: "hold 2 s", iconSize: 24 });
+  h += tile(LX, r[1].y, COL, r[1].h, { color: C.crew, icon: "nfc", label: "Tap card", sub: "to sign in", iconSize: 24 });
+  const x = CX0, w = 320 - PAD - CX0;
+  h += text(x, 56, "14:32<span style='color:#8a9bb0'>:07</span>", { size: 46, weight: 700, font: "Grotesk", align: "center", w, ls: -1 });
+  h += text(x, 110, "Wednesday · 11 November", { size: 12, weight: 600, color: C.dim, align: "center", w });
+  h += el(x + w / 2 - 92, 138, 184, 26, `border-radius:13px;background:${C.panel};border:1px solid ${C.line}`,
+    el(8, 6, 14, 14, "", svg("moon", 14, C.crew)) + text(27, 7.5, "Lunar base · day 2 · 09:41 MT", { size: 9, weight: 600, color: C.text }));
+  h += text(x, 182, "Tap your crew card on the reader", { size: 9, weight: 500, color: C.sub, align: "center", w });
+  h += statusBar();
+  add("1 · Idle (nobody signed in)", h);
+})();
+
+// 2. Crew home
+(() => {
+  const L = rowsY(4), R = rowsY(3);
+  let h = header({ title: "AHMAD", sub: "Crew", time: "14:32", chip: { t: "CHECK", bg: C.amber, w: 42 } });
+  [["Mood", "mood"], ["Symptoms", "symptoms"], ["Reaction", "target"], ["Breathe", "wind"]].forEach(([l, i], k) =>
+    h += tile(LX, L[k].y, COL, L[k].h, { color: C.crew, icon: i, label: l }));
+  h += tile(RX, R[0].y, COL, R[0].h, { color: C.slate, icon: "message", label: "Inbox", badge: "2" });
+  h += tile(RX, R[1].y, COL, R[1].h, { color: C.red, icon: "alert", label: "SOS", sub: "hold 2 s" });
+  h += tile(RX, R[2].y, COL, R[2].h, { color: C.slate, icon: "logout", label: "Done" });
+  const x = CX0, y = HEAD + PAD, w = CW;
+  h += panel(x, y, w, 48,
+    text(10, 7, "TODAY", { size: 7.5, weight: 700, color: C.dim, ls: 1 }) +
+    text(10, 18, "Check", { size: 18, weight: 700, font: "Grotesk", color: C.amber }) +
+    text(64, 23, "Heart rate 110 bpm", { size: 9, weight: 500, color: C.dim }), { edge: C.amber });
+  const vw = (w - PAD) / 2, vy = y + 48 + PAD, vh = 44;
+  h += vital(x, vy, vw, vh, "Heart rate", "110", "YELLOW", "heart");
+  h += vital(x + vw + PAD, vy, vw, vh, "Blood pressure", "118/76", "GREEN", "bp");
+  h += vital(x, vy + vh + PAD, vw, vh, "Mood", "Good", "GREEN", "mood");
+  h += vital(x + vw + PAD, vy + vh + PAD, vw, vh, "Sleep", "8h 24m", "GREEN", "sleep");
+  const ny = vy + 2 * (vh + PAD);
+  h += panel(x, ny, w, 240 - FOOT - PAD - ny,
+    el(8, 9, 14, 14, "", svg("schedule", 14, C.crew)) + text(27, 6, "UP NEXT · 19:00", { size: 7, weight: 700, color: C.crew, ls: 0.6 }) +
+    text(27, 15, "Evening mood check", { size: 9.5, weight: 600 }) + text(w - 42, 11, "in 2 h", { size: 9, weight: 700, color: C.dim }));
+  h += statusBar();
+  add("2 · Crew home", h);
+})();
+
+// 3. Surgeon home
+(() => {
+  const L = rowsY(3), R = rowsY(2);
+  let h = header({ title: "DR. SARA NASSER", sub: "", role: "doctor", time: "14:32", chip: { t: "SURGEON", bg: C.doc, w: 48 } });
+  h += tile(LX, L[0].y, COL, L[0].h, { color: C.doc, icon: "crew", label: "Crew" });
+  h += tile(LX, L[1].y, COL, L[1].h, { color: C.red, icon: "alert", label: "Alerts", badge: "3" });
+  h += tile(LX, L[2].y, COL, L[2].h, { color: C.slate, icon: "message", label: "Inbox", badge: "1" });
+  h += tile(RX, R[0].y, COL, R[0].h, { color: C.red, icon: "alert", label: "SOS", sub: "hold 2 s" });
+  h += tile(RX, R[1].y, COL, R[1].h, { color: C.slate, icon: "logout", label: "Done" });
+  const x = CX0, w = CW;
+  h += text(x + 2, HEAD + 7, "CREW · 2 ON BOARD", { size: 7.5, weight: 700, color: C.dim, ls: 0.8 });
+  h += text(x + w - 64, HEAD + 6, "3 open alerts", { size: 8.5, weight: 700, color: C.red });
+  const row = (y, init, color, name, lvl, hr, last) => panel(x, y, w, 40,
+    el(6, 8, 24, 24, `border-radius:12px;background:${color};box-shadow:0 0 0 2px ${LV[lvl]}`, text(0, 5.5, init, { size: 11, weight: 700, color: "#0b0f16", align: "center", w: 24 })) +
+    text(38, 7, name, { size: 11, weight: 700 }) + text(38, 22, `HR ${hr} · ${last}`, { size: 8.5, weight: 500, color: C.dim }) +
+    el(w - 46, 13, 40, 14, `border-radius:7px;background:${LV[lvl]}`, text(0, 2, LV_WORD[lvl].toUpperCase(), { size: 7, weight: 700, color: "#0b0f16", align: "center", w: 40 })));
+  h += row(HEAD + 22, "A", "#4fd1c5", "Ahmad", "RED", "72", "02:26");
+  h += row(HEAD + 66, "S", "#f4c430", "Sameer", "YELLOW", "112", "02:54");
+  h += panel(x, HEAD + 110, w, 66,
+    el(8, 8, 14, 14, "", svg("alert", 14, C.red)) + text(27, 7, "LATEST ALERT · 02:58", { size: 7, weight: 700, color: C.red, ls: 0.6 }) +
+    text(27, 18, "Sameer · Flagged: heart rate", { size: 9.5, weight: 600 }) +
+    text(27, 32, "Red result in an assessment", { size: 8.5, weight: 500, color: C.dim }) +
+    text(27, 46, "Tap Alerts to acknowledge", { size: 8, weight: 600, color: C.doc }), { edge: C.red });
+  h += statusBar();
+  add("3 · Flight Surgeon home", h);
+})();
+
+// 4. Crew detail (surgeon)
+(() => {
+  let h = header({ title: "SAMEER", sub: "Crew", role: "doctor", time: "14:33", chip: { t: "CHECK", bg: C.amber, w: 42 } });
+  h += tile(LX, HEAD + PAD, COL, 240 - HEAD - FOOT - PAD * 2, { color: C.slate, icon: "back", label: "Back" });
+  const x = CX0, w = 320 - PAD - CX0, vw = (w - PAD) / 2, vh = 46;
+  h += panel(x, HEAD + PAD, w, 42, text(10, 7, "LAST 24 H · LAST READING 02:54", { size: 7.5, weight: 700, color: C.dim, ls: 0.6 }) +
+    text(10, 19, "Check · heart rate 112 bpm", { size: 12, weight: 700, color: C.amber }), { edge: C.amber });
+  const y0 = HEAD + PAD + 42 + PAD;
+  h += vital(x, y0, vw, vh, "Heart rate", "112", "YELLOW", "heart");
+  h += vital(x + vw + PAD, y0, vw, vh, "Blood pressure", "121/79", "GREEN", "bp");
+  h += vital(x, y0 + vh + PAD, vw, vh, "Temperature", "39.6°", "RED", "temp");
+  h += vital(x + vw + PAD, y0 + vh + PAD, vw, vh, "Sleep", "–", "GRAY", "sleep");
+  h += text(x, y0 + 2 * (vh + PAD) + 6, "On the CYD now: no", { size: 8.5, weight: 500, color: C.sub });
+  h += statusBar();
+  add("4 · Crew detail (surgeon)", h);
+})();
+
+// 5. Alerts (surgeon) + acknowledge
+(() => {
+  let h = header({ title: "ALERTS", sub: "3 open", role: "doctor", time: "14:33" });
+  h += tile(LX, HEAD + PAD, COL, 240 - HEAD - FOOT - PAD * 2, { color: C.slate, icon: "back", label: "Back" });
+  const x = CX0, w = 320 - PAD - CX0;
+  const a = (y, who, t, when, sel) => panel(x, y, w, 36,
+    el(7, 9, 18, 18, "", svg("alert", 18, C.red)) + text(32, 6, t, { size: 10, weight: 700 }) + text(32, 20, `${who} · ${when}`, { size: 8.5, weight: 500, color: C.dim }),
+    { edge: C.red, bg: sel ? C.panel2 : C.panel });
+  h += a(HEAD + PAD, "Sameer", "Flagged: heart rate", "02:58", true);
+  h += a(HEAD + PAD + 40, "Sameer", "Temperature 39.6 °C", "02:58");
+  h += a(HEAD + PAD + 80, "Ahmad", "Symptom: short of breath", "01:19");
+  const by = HEAD + PAD + 124;
+  h += el(x, by, w, 74, `border-radius:6px;background:${C.panel2};border:1px solid ${C.doc}`,
+    text(10, 8, "Flagged: heart rate · Sameer", { size: 10, weight: 700 }) +
+    el(10, 28, w - 20, 34, `border-radius:6px;background:${C.doc};overflow:hidden`,
+      el(0, 0, (w - 20) * 0.62, 34, "background:rgba(255,255,255,.22)") +
+      el((w - 20) / 2 - 58, 9, 16, 16, "", svg("tick", 16, "#0b0f16", 2.5)) +
+      text(0, 10, "Hold to acknowledge", { size: 10, weight: 700, color: "#0b0f16", align: "center", w: w - 10 })));
+  h += statusBar();
+  add("5 · Alerts → hold to acknowledge", h);
+})();
+
+// 6. Inbox + quick replies (surgeon reading a crew report)
+(() => {
+  let h = header({ title: "INBOX", sub: "1 unread", role: "doctor", time: "14:34" });
+  h += tile(LX, HEAD + PAD, COL, 240 - HEAD - FOOT - PAD * 2, { color: C.slate, icon: "back", label: "Back" });
+  const x = CX0, w = 320 - PAD - CX0;
+  h += panel(x, HEAD + PAD, w, 76,
+    text(10, 7, "REPORT FROM AHMAD · ARRIVED 14:31", { size: 7.5, weight: 700, color: C.doc, ls: 0.5 }) +
+    `<div class="abs" style="left:10px;top:20px;width:${w - 20}px;font:500 9.5px/1.35 Inter;color:${C.text};white-space:normal">Reported red-flag symptoms: shortness of breath. Heart rate 110 bpm at 02:26.</div>`);
+  h += text(x + 2, HEAD + PAD + 84, "QUICK REPLY · ARRIVES AFTER THE COMMS DELAY", { size: 7, weight: 700, color: C.dim, ls: 0.4 });
+  ["Received, monitoring you", "Rest and re-check in 1 hour", "Contact me now"].forEach((t, i) =>
+    h += el(x, HEAD + PAD + 96 + i * 34, w, 30, `border-radius:6px;background:${i === 2 ? C.red : C.doc}`,
+      el(8, 7, 16, 16, "", svg("send", 15, "#0b0f16")) + text(30, 8.5, t, { size: 10, weight: 700, color: "#0b0f16" })));
+  h += statusBar();
+  add("6 · Inbox → crew report + quick replies", h);
+})();
+
+// 7. Mood
+(() => {
+  let h = header({ title: "HOW DO YOU FEEL?", sub: "", time: "14:35" });
+  const faces = [["Rough", C.red, "M8 16s1.5-2 4-2 4 2 4 2"], ["Low", "#f08a3c", "M8.5 15.5s1.5-1 3.5-1 3.5 1 3.5 1"], ["Okay", C.amber, "M8 15h8"], ["Good", "#8fd16a", "M8.5 14.5s1.5 1 3.5 1 3.5-1 3.5-1"], ["Great", C.green, "M8 14s1.5 2.5 4 2.5 4-2.5 4-2.5"]];
+  const w = (320 - PAD * 6) / 5, y = HEAD + 30, th = 120;
+  faces.forEach(([l, c, m], i) => {
+    const x = PAD + i * (w + PAD);
+    h += el(x, y, w, th, `border-radius:8px;background:${C.panel};border:1px solid ${i === 3 ? c : C.line}`,
+      el(w / 2 - 20, 22, 40, 40, "", `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9 9.5h.01M15 9.5h.01" stroke-width="2.6"/><path d="${m}"/></svg>`) +
+      text(0, 76, l, { size: 11, weight: 700, align: "center", w }) + dot(w / 2, 100, 4, c));
+  });
+  h += el(PAD, 186, 70, 30, `border-radius:6px;background:${C.slate}`, el(8, 7, 16, 16, "", svg("back", 16)) + text(26, 9, "Back", { size: 10, weight: 700 }));
+  h += text(84, 194, "Tap the face that matches how you feel", { size: 9, weight: 500, color: C.sub });
+  h += statusBar();
+  add("7 · Mood", h);
+})();
+
+// 8. Symptoms
+(() => {
+  let h = header({ title: "ANY SYMPTOMS?", sub: "tap all that apply", time: "14:35" });
+  const items = ["Headache", "Nausea", "Back pain", "Blurry vision", "Congestion", "Fatigue", "Chest pain", "Short of breath"];
+  const on = new Set([0, 7]), w = (320 - PAD * 3) / 2, ch = 30;
+  items.forEach((t, i) => {
+    const x = PAD + (i % 2) * (w + PAD), y = HEAD + PAD + Math.floor(i / 2) * (ch + PAD);
+    const sel = on.has(i);
+    h += el(x, y, w, ch, `border-radius:6px;background:${sel ? C.amber : C.panel};border:1px solid ${sel ? C.amber : C.line}`,
+      el(8, 7, 16, 16, `border-radius:4px;${sel ? "background:#0b0f16" : `border:1.5px solid ${C.sub}`}`, sel ? el(2, 2, 12, 12, "", svg("tick", 12, C.amber, 3)) : "") +
+      text(31, 9, t, { size: 10, weight: 700, color: sel ? "#0b0f16" : C.text }));
+  });
+  const by = HEAD + PAD + 4 * (ch + PAD) + 2;
+  h += el(PAD, by, 70, 38, `border-radius:6px;background:${C.slate}`, el(8, 11, 16, 16, "", svg("back", 16)) + text(26, 13, "Back", { size: 10, weight: 700 }));
+  h += el(PAD + 74, by, 320 - PAD * 2 - 74, 38, `border-radius:6px;background:${C.crew}`, el(80, 11, 16, 16, "", svg("send", 15)) + text(102, 12, "Send 2 symptoms", { size: 11, weight: 700 }));
+  h += statusBar();
+  add("8 · Symptoms", h);
+})();
+
+// 9. Reaction test
+(() => {
+  let h = header({ title: "REACTION TEST", sub: "tap the circle fast", time: "14:36" });
+  h += el(0, HEAD, 320, 240 - HEAD - FOOT, `background:#0a1018`);
+  for (let i = 0; i < 10; i++) h += dot(115 + i * 10, HEAD + 14, 3, i < 4 ? C.crew : i === 4 ? "#fff" : C.slate);
+  h += text(0, HEAD + 24, "Trial 5 of 10", { size: 9, weight: 600, color: C.dim, align: "center", w: 320 });
+  h += el(160 - 44, 116 - 44, 88, 88, `border-radius:50%;background:${C.green};box-shadow:0 0 0 6px rgba(61,214,140,.25)`);
+  h += text(0, 176, "Last: 312 ms · lapses 0", { size: 9, weight: 600, color: C.sub, align: "center", w: 320 });
+  h += statusBar();
+  add("9 · Reaction test", h);
+})();
+
+// 10. Breathe
+(() => {
+  let h = header({ title: "BREATHE", sub: "4 · 4 · 4 · 4", time: "14:37" });
+  const cx = 160, cy = 118;
+  h += `<svg class="abs" style="left:${cx - 62}px;top:${cy - 62}px" width="124" height="124"><circle cx="62" cy="62" r="56" fill="none" stroke="${C.slate}" stroke-width="5"/><circle cx="62" cy="62" r="56" fill="none" stroke="${C.crew}" stroke-width="5" stroke-linecap="round" stroke-dasharray="${2 * Math.PI * 56 * 0.42} 999" transform="rotate(-90 62 62)"/></svg>`;
+  h += el(cx - 40, cy - 40, 80, 80, `border-radius:50%;background:radial-gradient(circle at 40% 35%, #7f96f5, ${C.crew} 70%)`);
+  h += text(0, cy - 9, "In", { size: 16, weight: 700, font: "Grotesk", align: "center", w: 320 });
+  h += text(0, 192, "Breathe in · 35 s left", { size: 10, weight: 600, color: C.dim, align: "center", w: 320 });
+  h += statusBar();
+  add("10 · Breathe", h);
+})();
+
+// 11. Status result
+(() => {
+  let h = `<div class="abs" style="inset:0;background:${C.amber}"></div>`;
+  h += el(160 - 22, 34, 44, 44, "", svg("alert", 44, "#0b0f16", 2.2));
+  h += text(0, 86, "CHECK", { size: 30, weight: 700, font: "Grotesk", color: "#0b0f16", align: "center", w: 320, ls: 1 });
+  h += text(0, 124, "Ahmad", { size: 12, weight: 700, color: "#0b0f16", align: "center", w: 320 });
+  h += text(0, 144, "YELLOW: heart rate, blood pressure", { size: 10, weight: 600, color: "#3b2a05", align: "center", w: 320 });
+  h += text(0, 214, "Demo with placeholder data. Not medical advice.", { size: 7.5, weight: 600, color: "#5a430f", align: "center", w: 320 });
+  add("11 · Status result (after Assess)", h);
+})();
+
+// 12. Workout
+(() => {
+  let h = header({ title: "WORKOUT", sub: "Treadmill", time: "14:40" });
+  h += `<svg class="abs" style="left:${160 - 70}px;top:${120 - 70}px" width="140" height="140"><circle cx="70" cy="70" r="62" fill="none" stroke="${C.slate}" stroke-width="4"/><circle cx="70" cy="70" r="62" fill="none" stroke="${C.green}" stroke-width="4" stroke-linecap="round" stroke-dasharray="70 999" transform="rotate(120 70 70)"/></svg>`;
+  h += el(160 - 11, 72, 22, 22, "", svg("exercise", 22, C.green));
+  h += text(0, 98, "12:47", { size: 34, weight: 700, font: "Grotesk", align: "center", w: 320 });
+  h += text(0, 140, "elapsed", { size: 9, weight: 600, color: C.dim, align: "center", w: 320 });
+  h += text(0, 198, "Tap the treadmill tag again to stop", { size: 9.5, weight: 600, color: C.sub, align: "center", w: 320 });
+  h += statusBar();
+  add("12 · Workout timer", h);
+})();
+
+// 13. Emergency
+(() => {
+  let h = `<div class="abs" style="inset:0;background:${C.red}"></div>`;
+  h += el(160 - 26, 26, 52, 52, "", svg("alert", 52, "#fff", 2.2));
+  h += text(0, 86, "EMERGENCY", { size: 28, weight: 700, font: "Grotesk", align: "center", w: 320, ls: 1.5 });
+  h += text(0, 124, "Help is coming", { size: 13, weight: 700, align: "center", w: 320 });
+  h += text(0, 144, "Flight Surgeon and crew have been alerted", { size: 9.5, weight: 500, color: "rgba(255,255,255,.85)", align: "center", w: 320 });
+  h += el(40, 186, 240, 32, `border-radius:16px;background:rgba(0,0,0,.25);overflow:hidden`,
+    el(0, 0, 240 * 0.35, 32, "background:rgba(255,255,255,.3)") + text(0, 9, "Hold here 3 s to cancel", { size: 10, weight: 700, align: "center", w: 240 }));
+  add("13 · Emergency (flashes red / dark)", h);
+})();
+
+// 14. Unknown card
+(() => {
+  let h = header({ title: "ASTRO HEALTH", sub: "Lunar base", time: "14:41" });
+  h += el(160 - 28, 62, 56, 56, `border-radius:14px;background:${C.panel};border:1px solid ${C.line}`, el(12, 12, 32, 32, "", svg("card", 32, C.dim)));
+  h += text(0, 130, "Unknown card", { size: 18, weight: 700, font: "Grotesk", align: "center", w: 320 });
+  h += text(0, 156, "A1:00:00:99", { size: 11, weight: 600, color: C.dim, align: "center", w: 320, font: "Grotesk" });
+  h += statusBar();
+  add("14 · Unknown card", h);
+})();
+
+// 15. Notification banner over crew home
+(() => {
+  const base = S[1].html;
+  let h = base + `<div class="abs" style="inset:0;background:rgba(5,8,13,.35)"></div>`;
+  h += el(PAD, HEAD + 4, 320 - PAD * 2, 54, `border-radius:8px;background:${C.panel2};border:1px solid ${C.doc};box-shadow:0 8px 20px rgba(0,0,0,.5)`,
+    el(8, 9, 36, 36, `border-radius:8px;background:${C.doc}`, el(9, 9, 18, 18, "", svg("message", 18, "#0b0f16"))) +
+    text(52, 9, "FLIGHT SURGEON · JUST ARRIVED", { size: 7.5, weight: 700, color: C.doc, ls: 0.5 }) +
+    text(52, 21, "Rest and re-check in 1 hour.", { size: 11, weight: 700 }) +
+    text(52, 36, "Tap to open Inbox", { size: 8.5, weight: 500, color: C.dim }));
+  add("15 · Notification banner (slides down, 6 s)", h);
+})();
+
+// 16. Reminder banner variant
+(() => {
+  const base = S[1].html;
+  let h = base + el(PAD, HEAD + 4, 320 - PAD * 2, 54, `border-radius:8px;background:${C.panel2};border:1px solid ${C.amber};box-shadow:0 8px 20px rgba(0,0,0,.5)`,
+    el(8, 9, 36, 36, `border-radius:8px;background:${C.amber}`, el(9, 9, 18, 18, "", svg("bell", 18, "#0b0f16"))) +
+    text(52, 9, "REMINDER · 19:00", { size: 7.5, weight: 700, color: C.amber, ls: 0.5 }) +
+    text(52, 21, "Evening mood check", { size: 11, weight: 700 }) +
+    text(52, 36, "Tap Mood to do it now", { size: 8.5, weight: 500, color: C.dim }));
+  add("16 · Reminder (only yours, only if not done)", h);
+})();
+
+// ---------- render ----------
+const grid = document.getElementById("grid");
+let zoom = 2;
+function render() {
+  grid.innerHTML = S.map((s) => `<figure><div class="frame"><div class="scr" style="zoom:${zoom}">${s.html}</div></div><figcaption>${s.name}</figcaption></figure>`).join("");
+}
+document.querySelectorAll("[data-z]").forEach((b) => b.addEventListener("click", () => {
+  zoom = Number(b.dataset.z);
+  document.querySelectorAll("[data-z]").forEach((x) => x.classList.toggle("on", x === b));
+  render();
+}));
+document.fonts.ready.then(render);
+render();
+</script>
+</body>
+</html>

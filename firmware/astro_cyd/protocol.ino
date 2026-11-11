@@ -125,6 +125,23 @@ void sendPong() {
   sendLine(doc);
 }
 
+// ---- Flight Surgeon on-device screens (phase 2 of the CYD redesign) ----
+void sendViewCrew(int id) {
+  JsonDocument doc;
+  doc["type"] = "view_crew"; doc["id"] = id;
+  sendLine(doc);
+}
+void sendAckAlert(int id) {
+  JsonDocument doc;
+  doc["type"] = "ack_alert"; doc["id"] = id;
+  sendLine(doc);
+}
+void sendQuickReply(int astroId, const String& text) {
+  JsonDocument doc;
+  doc["type"] = "quick_reply"; doc["astro_id"] = astroId; doc["text"] = text;
+  sendLine(doc);
+}
+
 // ---- incoming: laptop -> CYD ----
 // Reads whichever transport has a line ready -- USB serial (if the CYD
 // happens to be plugged in, e.g. during development) or the Wi-Fi TCP
@@ -151,6 +168,18 @@ void handleSerialIn() {
 
   String type = doc["type"].as<String>();
   if (type == "session") {
+    // Pulled straight into the shared globals here (not passed as
+    // JsonObject params to onSessionMsg) -- see ui_kit.ino's header
+    // comment on why only simple types cross tab boundaries in this
+    // sketch. "today" is entirely optional (older messages/laptop code
+    // without it just leave these as "no data"); ArduinoJson resolves a
+    // missing/null chain safely, it never crashes on an absent key.
+    curRole = doc["role"] | String("Crew member");
+    JsonVariantConst today = doc["today"];
+    vHr = today["heart_rate"]["v"] | String(""); vHrL = today["heart_rate"]["l"] | String("GRAY");
+    vBp = today["blood_pressure"]["v"] | String(""); vBpL = today["blood_pressure"]["l"] | String("GRAY");
+    vMood = today["mood"]["v"] | String(""); vMoodL = today["mood"]["l"] | String("GRAY");
+    vSleep = today["sleep"]["v"] | String(""); vSleepL = today["sleep"]["l"] | String("GRAY");
     onSessionMsg(doc["name"].as<String>(), doc["uid"].as<String>(), doc["level"].as<String>(), doc["idle_s"] | 0);
   } else if (type == "status") {
     onStatusMsg(doc["name"].as<String>(), doc["level"].as<String>(), doc["note"].as<String>());
@@ -174,6 +203,55 @@ void handleSerialIn() {
     goIdle();
   } else if (type == "ping") {
     sendPong();
+  } else if (type == "crew_list") {
+    JsonArrayConst items = doc["items"].as<JsonArrayConst>();
+    crewCount = 0;
+    for (JsonObjectConst it : items) {
+      if (crewCount >= CREW_MAX) break;
+      crewId[crewCount] = it["id"] | 0;
+      crewName[crewCount] = it["n"] | String("?");
+      crewLevel[crewCount] = it["l"] | String("GRAY");
+      crewHasAlert[crewCount] = (it["al"] | 0) != 0;
+      crewCount++;
+    }
+    onCrewListMsg();
+  } else if (type == "alerts_list") {
+    JsonArrayConst items = doc["items"].as<JsonArrayConst>();
+    alertsCount = 0;
+    for (JsonObjectConst it : items) {
+      if (alertsCount >= ALERTS_MAX) break;
+      alertId[alertsCount] = it["id"] | 0;
+      alertWho[alertsCount] = it["who"] | String("?");
+      alertText[alertsCount] = it["t"] | String("");
+      alertTs[alertsCount] = it["ts"] | String("");
+      alertsCount++;
+    }
+    if (selectedAlert >= alertsCount) selectedAlert = alertsCount > 0 ? 0 : -1;
+    onAlertsListMsg();
+  } else if (type == "inbox_list") {
+    JsonArrayConst items = doc["items"].as<JsonArrayConst>();
+    inboxHasItem = items.size() > 0;
+    if (inboxHasItem) {
+      JsonObjectConst it = items[0];
+      inboxAstroId = it["astro_id"] | 0;
+      inboxWho = it["who"] | String("?");
+      inboxBody = it["body"] | String("");
+      inboxTs = it["ts"] | String("");
+    }
+    onInboxListMsg();
+  } else if (type == "crew_detail") {
+    if ((doc["id"] | -1) == viewingCrewId) {
+      detailName = doc["n"] | String("?");
+      detailLevel = doc["l"] | String("GRAY");
+      detailTs = doc["ts"] | String("");
+      detailOnCyd = doc["on"] | false;
+      JsonVariantConst v = doc["v"];
+      detailHr = v["heart_rate"]["v"] | String(""); detailHrL = v["heart_rate"]["l"] | String("GRAY");
+      detailBp = v["blood_pressure"]["v"] | String(""); detailBpL = v["blood_pressure"]["l"] | String("GRAY");
+      detailTemp = v["temperature"]["v"] | String(""); detailTempL = v["temperature"]["l"] | String("GRAY");
+      detailSleep = v["sleep"]["v"] | String(""); detailSleepL = v["sleep"]["l"] | String("GRAY");
+      onCrewDetailMsg();
+    }
   }
 }
 

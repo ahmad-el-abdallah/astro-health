@@ -10,7 +10,7 @@ tables.
 """
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from backend import db
 from backend.hardware import protocol
@@ -64,6 +64,185 @@ def _latest_level(conn, astronaut_id):
     return row["overall_level"] if row else "GREEN"
 
 
+# Bare-number mood readings (the CYD's own face-tap path, see
+# routes.py's _record_cyd_value) don't carry the word the web Mental
+# Health tab's object-shaped readings do (routes.py's MOOD_SCORES) --
+# this is that same 1-5 scale, reversed, so the CYD's own crew-home vital
+# tile can show a word either way. Kept here, not imported from routes.py,
+# to avoid a circular import (routes.py already imports this module).
+_MOOD_SCORE_WORDS = {1: "Rough", 2: "Low", 3: "Okay", 4: "Good", 5: "Great"}
+
+
+def _today_vitals_for_cyd(conn, astronaut_id):
+    """Compact heart_rate/blood_pressure/mood/sleep/temperature snapshot
+    for the CYD's crew-home and (phase 2) crew-detail vitals tiles -- same
+    last-24h/first-row-wins idiom as routes.py's _today_snapshot(), kept
+    here rather than imported from it (routes.py already imports this
+    module, so the reverse would be circular). Pre-formatted into short
+    display strings so the firmware does zero value-shape parsing of its
+    own, matching every reading's dual-shape handling already established
+    on the frontend (sleep/mood can be a bare number from a physical
+    tag/CYD tap, or a richer object from the web tabs' own POST routes --
+    see docs/CLAUDE.md's "sleep/mood readings showed raw JSON" entry)."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    rows = {}
+    for r in conn.execute(
+        "SELECT indicator, value_json, level FROM readings WHERE astronaut_id = ? AND ts >= ? "
+        "AND indicator IN ('heart_rate','blood_pressure','mood','sleep','temperature') ORDER BY ts DESC",
+        (astronaut_id, since),
+    ):
+        if r["indicator"] not in rows:
+            rows[r["indicator"]] = r
+    out = {}
+    if "heart_rate" in rows:
+        r = rows["heart_rate"]
+        out["heart_rate"] = {"v": str(round(json.loads(r["value_json"]))), "l": r["level"]}
+    if "blood_pressure" in rows:
+        r = rows["blood_pressure"]
+        bp = json.loads(r["value_json"])
+        out["blood_pressure"] = {"v": f"{bp['systolic']}/{bp['diastolic']}", "l": r["level"]}
+    if "mood" in rows:
+        r = rows["mood"]
+        v = json.loads(r["value_json"])
+        word = v["mood"].capitalize() if isinstance(v, dict) else _MOOD_SCORE_WORDS.get(int(v), "?")
+        out["mood"] = {"v": word, "l": r["level"]}
+    if "sleep" in rows:
+        r = rows["sleep"]
+        v = json.loads(r["value_json"])
+        hours = v["hours"] if isinstance(v, dict) else v
+        h, m = int(hours), round((hours - int(hours)) * 60)
+        out["sleep"] = {"v": f"{h}h {m}m", "l": r["level"]}
+    if "temperature" in rows:
+        r = rows["temperature"]
+        out["temperature"] = {"v": f"{json.loads(r['value_json']):.1f}", "l": r["level"]}
+    return out
+
+
+# ---- Flight Surgeon on-device screens (phase 2 of the CYD redesign -- see
+# docs/CLAUDE.md's "CYD redesign" entries): crew roster, open alerts, and
+# the latest incoming crew report, all capped to a handful of items each so
+# the encoded line always comfortably fits the firmware's 512-byte buffer
+# (protocol.MAX_LINE_BYTES) regardless of how large the crew/alert backlog
+# grows -- a hackathon crew is a handful of people, not hundreds. ----
+CREW_LIST_MAX = 4
+ALERTS_LIST_MAX = 3
+
+
+def crew_list_for_cyd(conn):
+    """Non-surgeon roster for the surgeon's on-device home screen: name,
+    overall level, and whether they have an open (unacknowledged) alert."""
+    out = []
+    for a in conn.execute("SELECT * FROM astronauts WHERE role != 'Flight surgeon' ORDER BY id LIMIT ?", (CREW_LIST_MAX,)):
+        has_alert = conn.execute(
+            "SELECT 1 FROM alerts WHERE astronaut_id = ? AND acknowledged = 0 LIMIT 1", (a["id"],)
+        ).fetchone() is not None
+        out.append({"id": a["id"], "n": a["name"], "l": _latest_level(conn, a["id"]), "al": 1 if has_alert else 0})
+    return out
+
+
+def alerts_list_for_cyd(conn):
+    """Most recent open alerts, worst/newest first -- same ordering the web
+    Alerts screen uses (ts DESC; level isn't re-sorted since every row in
+    this table is already RED, the table's only convention)."""
+    out = []
+    for r in conn.execute(
+        "SELECT alerts.id AS id, alerts.ts AS ts, alerts.text AS text, astronauts.name AS who "
+        "FROM alerts LEFT JOIN astronauts ON astronauts.id = alerts.astronaut_id "
+        "WHERE alerts.acknowledged = 0 ORDER BY alerts.ts DESC LIMIT ?",
+        (ALERTS_LIST_MAX,),
+    ):
+        out.append({"id": r["id"], "who": r["who"] or "?", "t": r["text"][:40], "ts": r["ts"][11:16]})
+    return out
+
+
+def inbox_for_cyd(conn):
+    """Just the single latest *delivered*, *not-yet-replied-to* incoming
+    crew report, if any -- the mockup's Inbox screen shows one report +
+    quick-reply buttons, not a scrollable history (this firmware has no
+    scrolling touch model at all yet). Same delay-aware rule
+    routes.py's astronaut_messages() uses: a report still in transit
+    isn't shown.
+
+    "Replied to" has no dedicated column (the `messages` table's own
+    `read` means "delivered", not "handled" -- see docs/CLAUDE.md's "CYD
+    redesign phase 2" entry) -- derived instead as "a surgeon-origin
+    message to the same astronaut exists with a later sent_at", which is
+    true the instant either the CYD's own quick-reply or the web UI's own
+    reply (POST /messages) goes out, whichever happens first. Without
+    this, replying from the CYD made the report vanish for a moment (the
+    firmware's own optimistic local clear) and then reappear on the very
+    next refresh, since the report itself was still "the latest crew
+    message" with nothing marking it handled."""
+    row = conn.execute(
+        "SELECT id, astronaut_id, body, sent_at, deliver_at FROM messages "
+        "WHERE from_role = 'crew' ORDER BY sent_at DESC LIMIT 1"
+    ).fetchone()
+    if not row or row["deliver_at"] > _now_iso():
+        return []
+    already_replied = conn.execute(
+        "SELECT 1 FROM messages WHERE astronaut_id = ? AND from_role = 'surgeon' AND sent_at > ? LIMIT 1",
+        (row["astronaut_id"], row["sent_at"]),
+    ).fetchone() is not None
+    if already_replied:
+        return []
+    astro = _get_astronaut(conn, row["astronaut_id"])
+    return [{"astro_id": row["astronaut_id"], "who": astro["name"] if astro else "?",
+              "body": row["body"][:120], "ts": row["sent_at"][11:16]}]
+
+
+def crew_detail_for_cyd(conn, astronaut_id):
+    """One crew member's full vitals for the surgeon's Crew Detail screen,
+    fetched on demand (a `view_crew` message from the CYD) rather than
+    bundled into crew_list_for_cyd -- keeps that list's per-member cost
+    small and fixed regardless of how much detail this screen shows."""
+    astronaut = _get_astronaut(conn, astronaut_id)
+    if not astronaut:
+        return None
+    last = conn.execute("SELECT MAX(ts) AS t FROM readings WHERE astronaut_id = ?", (astronaut_id,)).fetchone()["t"]
+    return {
+        "id": astronaut_id, "n": astronaut["name"], "l": _latest_level(conn, astronaut_id),
+        "v": _today_vitals_for_cyd(conn, astronaut_id),
+        "ts": last[11:16] if last else "",
+        "on": astronaut_id in active_sessions,
+    }
+
+
+def send_surgeon_payload(conn, send_fn):
+    """Pushes the Flight Surgeon's three on-device lists in one go -- called
+    right after her session message (first tap) and again on every
+    background tick while she's signed in (see refresh_surgeon_cyd below).
+
+    Deliberately unconditional (no diffing against what was last sent) --
+    an earlier version tried caching/skipping unchanged sends to stop the
+    firmware from redrawing the whole screen every tick, but that traded
+    one bug for a worse one: this project's USB-serial link is documented
+    to sometimes corrupt/drop a line in a fast burst (see "USB serial
+    reliability" above), and if the one dropped line happened to be part
+    of what got cached as "already sent," the CYD could stay stuck showing
+    stale/incomplete data indefinitely, since nothing ever looked
+    "changed" again to trigger a resend. The screen-redraw-every-tick
+    problem is now solved on the firmware side instead
+    (`redrawSurgeonHomeThrottled()`, screens.ino), which also makes this
+    resend self-healing -- any single dropped line gets corrected on the
+    very next tick, a couple of seconds later, instead of needing a
+    cache-invalidating change to happen first."""
+    send_fn(protocol.crew_list(crew_list_for_cyd(conn)))
+    send_fn(protocol.alerts_list(alerts_list_for_cyd(conn)))
+    send_fn(protocol.inbox_list(inbox_for_cyd(conn)))
+
+
+def refresh_surgeon_cyd(send_fn):
+    """Called every background tick from app.py, same cadence as
+    check_timeouts()."""
+    if len(active_sessions) != 1:
+        return
+    (astronaut_id,) = active_sessions.keys()
+    with db.write_conn() as conn:
+        astronaut = _get_astronaut(conn, astronaut_id)
+        if astronaut and astronaut["role"] == "Flight surgeon":
+            send_surgeon_payload(conn, send_fn)
+
+
 def _start_session(conn, astronaut, uid, send_fn, emit_fn):
     active_sessions[astronaut["id"]] = {
         "uid": uid, "started_at": time.time(), "last_activity": time.time(),
@@ -73,8 +252,11 @@ def _start_session(conn, astronaut, uid, send_fn, emit_fn):
         "cyd_contact": time.time(),
     }
     level = _latest_level(conn, astronaut["id"])
-    send_fn(protocol.session(astronaut["name"], uid, level, SESSION_IDLE_S))
+    today = _today_vitals_for_cyd(conn, astronaut["id"])
+    send_fn(protocol.session(astronaut["name"], uid, level, SESSION_IDLE_S, astronaut["role"], today))
     send_fn(protocol.led(level))
+    if astronaut["role"] == "Flight surgeon":
+        send_surgeon_payload(conn, send_fn)
     emit_fn("session_started", {"astronaut_id": astronaut["id"], "name": astronaut["name"], "level": level})
 
 
@@ -263,7 +445,18 @@ def handle_scan(uid, send_fn, emit_fn):
             emit_fn("unknown_tag", {"uid": uid})
             return
         emit_fn("scan", {"uid": uid, "type": tag["type"], "label": tag["label"]})
-        if tag["type"] == "astronaut":
+        # A "surgeon" tag predates real login (docs/CLAUDE.md's "Login /
+        # access control") -- it used to be a timed PIN-replacement unlock,
+        # not an account. seed.py still registers the Flight Surgeon's own
+        # card this way (astronaut_id set, same as any crew card), so route
+        # it through the real session path exactly like "astronaut" --
+        # otherwise her card can start a *web* login (nfc_login does its
+        # own tag lookup, unaffected by this) but was never able to start a
+        # *CYD* session at all, silently: _handle_surgeon_tag below sends
+        # nothing to the board. The legacy astronaut_id-less unlock-only
+        # behavior (tests/conftest.py's seed_minimal(), no real account
+        # behind it) still falls through to it.
+        if tag["type"] == "astronaut" or (tag["type"] == "surgeon" and tag["astronaut_id"] is not None):
             _handle_astronaut_tag(conn, tag, send_fn, emit_fn)
         elif tag["type"] == "surgeon":
             _handle_surgeon_tag(conn, tag, send_fn, emit_fn)

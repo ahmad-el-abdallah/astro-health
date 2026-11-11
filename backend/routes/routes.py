@@ -1188,6 +1188,12 @@ def create_routes(app, socketio, bridge):
             emit_fn("serial_status", {"status": bridge.status, "fw": msg.get("fw")})
         elif mtype == "log":
             emit_fn("cyd_event", {"type": "log", "msg": msg.get("msg", "")})
+        elif mtype == "view_crew":
+            _send_crew_detail(msg.get("id"))
+        elif mtype == "ack_alert":
+            _ack_alert_from_cyd(msg.get("id"))
+        elif mtype == "quick_reply":
+            _quick_reply_from_cyd(msg.get("astro_id"), msg.get("text"))
         if mtype == "active":
             return  # the CYD's once-a-minute "someone's still using me" ping: no browser refresh
         emit_fn("cyd_event", {"type": mtype, **{k: v for k, v in msg.items() if k != "type"}})
@@ -1198,6 +1204,43 @@ def create_routes(app, socketio, bridge):
         with db.write_conn() as conn:
             t = conn.execute("SELECT astronaut_id FROM tags WHERE uid = ?", (uid,)).fetchone()
         return t["astronaut_id"] if t else None
+
+    # ---- Flight Surgeon on-device screens (phase 2 of the CYD redesign) --
+    # these three mirror the existing HTTP routes below (ack_alert ~
+    # POST /alerts/<id>/ack, quick_reply ~ POST /messages) exactly, just
+    # triggered by a CYD gesture (hold-to-acknowledge, a quick-reply tap)
+    # instead of a browser click. Kept as thin wrappers here rather than
+    # having the HTTP routes call into these, since the HTTP routes already
+    # existed and work; this just reuses their same DB/emit shape. ----
+    def _valid_id(v):
+        return isinstance(v, int) and not isinstance(v, bool)
+
+    def _send_crew_detail(astro_id):
+        if not _valid_id(astro_id):
+            return
+        with db.write_conn() as conn:
+            detail = sessions.crew_detail_for_cyd(conn, astro_id)
+        if detail:
+            send_fn(protocol.crew_detail(detail))
+
+    def _ack_alert_from_cyd(alert_id):
+        if not _valid_id(alert_id):
+            return
+        with db.write_conn() as conn:
+            conn.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+        emit_fn("alert_acknowledged", {"id": alert_id})
+        with db.write_conn() as conn:
+            sessions.send_surgeon_payload(conn, send_fn)
+
+    def _quick_reply_from_cyd(astro_id, text):
+        text = (text or "").strip()
+        if not _valid_id(astro_id) or not text:
+            return
+        with db.write_conn() as conn:
+            if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
+                return
+        deliver_at = comms.queue_reply(astro_id, text[:500])
+        emit_fn("message_sent", {"astronaut_id": astro_id, "deliver_at": deliver_at.isoformat()})
 
     def _record_cyd_value(msg, indicator, value):
         astro_id = _uid_to_astro(msg.get("uid"))

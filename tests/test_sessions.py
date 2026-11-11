@@ -1,4 +1,9 @@
+import json
+from datetime import datetime, timedelta, timezone
+
 from backend import db
+from backend.hardware import protocol
+from backend.jobs import comms
 from backend.logic import sessions
 from tests.conftest import seed_minimal
 
@@ -30,6 +35,51 @@ def test_astronaut_tap_starts_then_ends_session(fresh_db):
     sessions.handle_scan("A0000001", send_fn, emit_fn)
     assert astro_id not in sessions.active_sessions
     assert any(e[0] == "session_ended" for e in emitted)
+
+
+def test_session_message_carries_role_and_todays_vitals(fresh_db):
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) "
+            "VALUES (?, ?, 'heart_rate', ?, 'GREEN', 'manual')",
+            (astro_id, now, json.dumps(72)),
+        )
+        conn.execute(
+            "INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) "
+            "VALUES (?, ?, 'blood_pressure', ?, 'GREEN', 'manual')",
+            (astro_id, now, json.dumps({"systolic": 118, "diastolic": 76})),
+        )
+        conn.execute(
+            "INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) "
+            "VALUES (?, ?, 'mood', ?, 'GREEN', 'cyd')",
+            (astro_id, now, json.dumps(4)),
+        )
+        conn.execute(
+            "INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) "
+            "VALUES (?, ?, 'sleep', ?, 'GREEN', 'manual')",
+            (astro_id, now, json.dumps({"hours": 8.0, "bedtime": "23:00", "wake_time": "07:00"})),
+        )
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.handle_scan("A0000001", send_fn, emit_fn)
+    session_msg = next(protocol.decode(s) for s in sent if protocol.decode(s) and protocol.decode(s)["type"] == "session")
+    assert session_msg["role"] == "Commander"
+    assert session_msg["today"] == {
+        "heart_rate": {"v": "72", "l": "GREEN"},
+        "blood_pressure": {"v": "118/76", "l": "GREEN"},
+        "mood": {"v": "Good", "l": "GREEN"},
+        "sleep": {"v": "8h 0m", "l": "GREEN"},
+    }
+
+
+def test_session_message_today_is_empty_with_no_readings(fresh_db):
+    with db.write_conn() as conn:
+        seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.handle_scan("A0000001", send_fn, emit_fn)
+    session_msg = next(protocol.decode(s) for s in sent if protocol.decode(s) and protocol.decode(s)["type"] == "session")
+    assert session_msg["today"] == {}
 
 
 def test_object_tag_without_session_asks_to_tap_card(fresh_db):
@@ -88,3 +138,176 @@ def test_surgeon_tag_unlocks_surgeon_view(fresh_db):
     assert sessions.is_surgeon_unlocked() is False
     sessions.handle_scan("D1000001", send_fn, emit_fn)
     assert sessions.is_surgeon_unlocked() is True
+
+
+# ---- Flight Surgeon on-device screens (phase 2 of the CYD redesign) --
+# seed_minimal's own "D1000001" tag is the legacy, astronaut_id-less
+# surgeon-unlock card (see test above) -- these tests need a *real*,
+# logged-in-as astronaut whose role is exactly "Flight surgeon", so they
+# seed one directly. Tag type is deliberately "surgeon", matching real
+# backend/seed.py's own SURGEON tag exactly (not "astronaut") -- an
+# earlier version of this fixture used "astronaut" here, which silently
+# missed the real bug (handle_scan() used to route a real,
+# astronaut_id-having "surgeon"-type tag to the legacy unlock-only path,
+# never starting a session at all -- see the "surgeon home screen showing
+# no crew assigned" follow-up entry in docs/CLAUDE.md).
+def _seed_surgeon_and_crew(conn):
+    now = datetime.now(timezone.utc).isoformat()
+    surgeon_id = conn.execute(
+        "INSERT INTO astronauts (name, role, color, baseline_reaction_ms, created_at) VALUES (?, 'Flight surgeon', ?, 340, ?)",
+        ("Dr. Surgeon", "#2fbfa8", now),
+    ).lastrowid
+    conn.execute("INSERT INTO tags (uid, type, label, astronaut_id, data_json) VALUES ('S9000001', 'surgeon', 'Dr. Surgeon', ?, '{}')",
+                 (surgeon_id,))
+    crew_id = seed_minimal(conn)  # "Test Astro", role "Commander", uid A0000001
+    return surgeon_id, crew_id
+
+
+def test_surgeon_session_also_pushes_crew_alerts_and_inbox(fresh_db):
+    with db.write_conn() as conn:
+        _seed_surgeon_and_crew(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.handle_scan("S9000001", send_fn, emit_fn)
+    types = [protocol.decode(s)["type"] for s in sent if protocol.decode(s)]
+    assert types == ["session", "led", "crew_list", "alerts_list", "inbox_list"]
+
+
+def test_non_surgeon_session_does_not_push_surgeon_lists(fresh_db):
+    with db.write_conn() as conn:
+        seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.handle_scan("A0000001", send_fn, emit_fn)
+    types = [protocol.decode(s)["type"] for s in sent if protocol.decode(s)]
+    assert "crew_list" not in types and "alerts_list" not in types and "inbox_list" not in types
+
+
+def test_crew_list_for_cyd_includes_level_and_open_alert_flag(fresh_db):
+    with db.write_conn() as conn:
+        _, crew_id = _seed_surgeon_and_crew(conn)
+        conn.execute(
+            "INSERT INTO assessments (astronaut_id, ts, overall_level, note, details_json) VALUES (?, ?, 'YELLOW', 'x', '{}')",
+            (crew_id, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.execute(
+            "INSERT INTO alerts (astronaut_id, ts, level, text, acknowledged) VALUES (?, ?, 'RED', 'Flagged: heart rate', 0)",
+            (crew_id, datetime.now(timezone.utc).isoformat()),
+        )
+        items = sessions.crew_list_for_cyd(conn)
+    assert items == [{"id": crew_id, "n": "Test Astro", "l": "YELLOW", "al": 1}]
+
+
+def test_alerts_list_for_cyd_only_open_newest_first(fresh_db):
+    with db.write_conn() as conn:
+        _, crew_id = _seed_surgeon_and_crew(conn)
+        conn.execute(
+            "INSERT INTO alerts (astronaut_id, ts, level, text, acknowledged) VALUES (?, '2026-01-01T00:00:00+00:00', 'RED', 'old, already acked', 1)",
+            (crew_id,),
+        )
+        conn.execute(
+            "INSERT INTO alerts (astronaut_id, ts, level, text, acknowledged) VALUES (?, '2026-01-02T00:00:00+00:00', 'RED', 'newer, still open', 0)",
+            (crew_id,),
+        )
+        items = sessions.alerts_list_for_cyd(conn)
+    assert len(items) == 1
+    assert items[0]["who"] == "Test Astro"
+    assert items[0]["t"] == "newer, still open"
+    assert items[0]["ts"] == "00:00"
+
+
+def test_inbox_for_cyd_hides_reports_still_in_transit(fresh_db):
+    with db.write_conn() as conn:
+        _, crew_id = _seed_surgeon_and_crew(conn)
+        future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        conn.execute(
+            "INSERT INTO messages (from_role, astronaut_id, body, sent_at, deliver_at, read) VALUES ('crew', ?, 'help, chest pain', ?, ?, 0)",
+            (crew_id, datetime.now(timezone.utc).isoformat(), future),
+        )
+        assert sessions.inbox_for_cyd(conn) == []  # still in transit -- not shown yet
+
+        past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+        conn.execute(
+            "UPDATE messages SET deliver_at = ? WHERE astronaut_id = ?", (past, crew_id),
+        )
+        items = sessions.inbox_for_cyd(conn)
+    assert len(items) == 1
+    assert items[0] == {"astro_id": crew_id, "who": "Test Astro", "body": "help, chest pain", "ts": items[0]["ts"]}
+
+
+def test_inbox_for_cyd_hides_a_report_already_replied_to(fresh_db):
+    """The actual bug report: replying from the CYD made the report
+    disappear for a moment, then reappear on the next refresh -- it was
+    still "the latest crew message", nothing marked it handled."""
+    with db.write_conn() as conn:
+        _, crew_id = _seed_surgeon_and_crew(conn)
+        past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        conn.execute(
+            "INSERT INTO messages (from_role, astronaut_id, body, sent_at, deliver_at, read) VALUES ('crew', ?, 'help, chest pain', ?, ?, 1)",
+            (crew_id, past, past),
+        )
+        assert len(sessions.inbox_for_cyd(conn)) == 1  # not replied to yet
+
+    comms.queue_reply(crew_id, "Rest and re-check in 1 hour")  # opens its own write_conn -- can't nest inside the one above
+
+    with db.write_conn() as conn:
+        assert sessions.inbox_for_cyd(conn) == []  # replied -- no longer shown
+
+        # A second, later crew report after the reply must still show.
+        later = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO messages (from_role, astronaut_id, body, sent_at, deliver_at, read) VALUES ('crew', ?, 'worse now', ?, ?, 1)",
+            (crew_id, later, later),
+        )
+        items = sessions.inbox_for_cyd(conn)
+    assert len(items) == 1 and items[0]["body"] == "worse now"
+
+
+def test_crew_detail_for_cyd_reports_whether_on_the_cyd_now(fresh_db):
+    with db.write_conn() as conn:
+        _, crew_id = _seed_surgeon_and_crew(conn)
+        detail = sessions.crew_detail_for_cyd(conn, crew_id)
+    assert detail["n"] == "Test Astro"
+    assert detail["on"] is False
+
+    sessions.active_sessions[crew_id] = {"uid": "A0000001", "started_at": 0, "last_activity": 0, "cyd_contact": 0}
+    with db.write_conn() as conn:
+        detail = sessions.crew_detail_for_cyd(conn, crew_id)
+    assert detail["on"] is True
+
+
+def test_crew_detail_for_cyd_unknown_astronaut_returns_none(fresh_db):
+    with db.write_conn() as conn:
+        seed_minimal(conn)
+        assert sessions.crew_detail_for_cyd(conn, 9999) is None
+
+
+def test_refresh_surgeon_cyd_resends_every_tick_even_if_unchanged(fresh_db):
+    """Deliberately unconditional (see send_surgeon_payload()'s own
+    docstring for why a cached/diffed version was tried and reverted):
+    self-healing against this project's documented occasional
+    dropped/corrupted serial line matters more than skipping a resend of
+    identical data, for a payload this small."""
+    with db.write_conn() as conn:
+        surgeon_id, _ = _seed_surgeon_and_crew(conn)
+        sessions.active_sessions[surgeon_id] = {"uid": "S9000001", "started_at": 0, "last_activity": 0, "cyd_contact": 0}
+
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.refresh_surgeon_cyd(send_fn)
+    first_types = [protocol.decode(s)["type"] for s in sent if protocol.decode(s)]
+    assert first_types == ["crew_list", "alerts_list", "inbox_list"]
+
+    sent.clear()
+    sessions.refresh_surgeon_cyd(send_fn)  # nothing changed in between -- still sends again
+    second_types = [protocol.decode(s)["type"] for s in sent if protocol.decode(s)]
+    assert second_types == ["crew_list", "alerts_list", "inbox_list"]
+
+
+def test_surgeon_payload_is_resent_on_a_fresh_session(fresh_db):
+    with db.write_conn() as conn:
+        _seed_surgeon_and_crew(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.handle_scan("S9000001", send_fn, emit_fn)  # tap in
+    sessions.handle_scan("S9000001", send_fn, emit_fn)  # tap out -- ends the session
+    sent.clear()
+    sessions.handle_scan("S9000001", send_fn, emit_fn)  # tap back in -- same data, must still send
+    types = [protocol.decode(s)["type"] for s in sent if protocol.decode(s)]
+    assert types == ["session", "led", "crew_list", "alerts_list", "inbox_list"]
