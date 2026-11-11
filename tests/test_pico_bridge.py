@@ -50,6 +50,51 @@ def test_pico_plugged_in_after_start_is_still_found(monkeypatch):
     assert received == [{"type": "scan", "uid": "A1000001"}]
 
 
+class FlakySerial:
+    """Raises serial.SerialException on the first few reads (the documented
+    spurious CH340-style "device reports readiness to read but returned no
+    data" error -- see docs/CLAUDE.md "USB serial reliability"), then
+    recovers and yields a real scan line. Proves a short burst of these
+    doesn't tear down and reopen the connection."""
+
+    def __init__(self, *a, **kw):
+        self._flaky_reads_left = 5
+        self._lines = [b'{"type":"scan","uid":"A1000001"}\n']
+
+    def readline(self):
+        if self._flaky_reads_left > 0:
+            self._flaky_reads_left -= 1
+            raise pico_bridge.serial.SerialException("device reports readiness to read but returned no data")
+        if self._lines:
+            return self._lines.pop(0)
+        time.sleep(0.01)
+        return b""
+
+    def close(self):
+        pass
+
+
+def test_a_burst_of_spurious_read_errors_does_not_reopen_the_port(monkeypatch):
+    monkeypatch.setattr(pico_bridge, "find_port", lambda: "/dev/ttyFAKE")
+    opened = []
+    def fake_serial(*a, **kw):
+        opened.append(1)
+        return FlakySerial()
+    monkeypatch.setattr(pico_bridge.serial, "Serial", fake_serial)
+
+    received = []
+    bridge = pico_bridge.PicoBridge(on_message=received.append)
+    bridge.start()
+    for _ in range(100):
+        if received:
+            break
+        time.sleep(0.02)
+    bridge.stop()
+
+    assert received == [{"type": "scan", "uid": "A1000001"}]
+    assert len(opened) == 1  # never reopened -- the errors were ridden out, not fatal
+
+
 def test_an_explicitly_forced_port_is_never_overridden_by_find_port(monkeypatch):
     monkeypatch.setattr(pico_bridge, "find_port", lambda: (_ for _ in ()).throw(AssertionError("should not be called")))
     monkeypatch.setattr(pico_bridge.serial, "Serial", FakeSerial)

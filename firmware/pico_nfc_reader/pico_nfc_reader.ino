@@ -36,13 +36,24 @@ static void flushPn532() {
   while (pn532Serial.available()) pn532Serial.read();
 }
 
-static void printUidHex(const uint8_t* p, size_t n) {
-  char b[4];
+// Builds the whole "{"type":"scan","uid":"..."}" line into one buffer and
+// sends it with a single Serial.print() call. A previous version built it
+// with ~9 separate Serial.print() calls (the JSON prefix, then one call per
+// hex byte and per colon, then the suffix) -- on this core's USB-CDC, that
+// many fragmented tiny writes per message reliably dropped bytes mid-message
+// (confirmed on the real board: captured raw serial showed the laptop
+// receiving `{:cn,ud:9:50:4}` for what should have been
+// `{"type":"scan","uid":"9B:25:0F:54"}`, 20 of 35 bytes lost, every write
+// boundary a place more could vanish). One write, one boundary, nothing to
+// interleave or drop between calls.
+static void sendScanLine(const uint8_t* uid, size_t n) {
+  char line[96];
+  int pos = snprintf(line, sizeof(line), "{\"type\":\"scan\",\"uid\":\"");
   for (size_t i = 0; i < n; i++) {
-    if (i) Serial.print(':');
-    snprintf(b, sizeof(b), "%02X", p[i]);
-    Serial.print(b);
+    pos += snprintf(line + pos, sizeof(line) - pos, i ? ":%02X" : "%02X", uid[i]);
   }
+  snprintf(line + pos, sizeof(line) - pos, "\"}\n");
+  Serial.print(line);
 }
 
 static bool tryConnect() {
@@ -79,9 +90,7 @@ void loop() {
         cardPresent = true;
         memcpy(cardUid, uid, len);
         cardLen = len;
-        Serial.print("{\"type\":\"scan\",\"uid\":\"");
-        printUidHex(uid, len);
-        Serial.println("\"}");
+        sendScanLine(uid, len);
       }
     } else if (cardPresent && now - cardSeenMs >= CARD_GONE_MS) {
       cardPresent = false;

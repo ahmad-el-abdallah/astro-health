@@ -15,6 +15,7 @@ from serial.tools import list_ports
 from backend.hardware import protocol
 
 RECONNECT_S = 3
+MAX_CONSECUTIVE_READ_ERRORS = 40  # ~2s of a flaky adapter before giving up and reopening the port
 PORT_DESCRIPTION_HINTS = ("pico",)
 
 
@@ -62,9 +63,24 @@ class PicoBridge:
             except Exception:
                 time.sleep(RECONNECT_S)
                 continue
+            consecutive_errors = 0
             try:
                 while not self._stop.is_set():
-                    raw = ser.readline()
+                    try:
+                        raw = ser.readline()
+                    except serial.SerialException:
+                        # Same spurious-but-harmless error documented for the
+                        # CYD's own CH340 link (see serial_bridge.py / docs/
+                        # CLAUDE.md "USB serial reliability") -- the device is
+                        # still there, ride out a short burst instead of
+                        # tearing down and reopening the port (which can also
+                        # reset the board itself) on every single one of them.
+                        consecutive_errors += 1
+                        if consecutive_errors > MAX_CONSECUTIVE_READ_ERRORS:
+                            raise
+                        time.sleep(0.05)
+                        continue
+                    consecutive_errors = 0
                     if not raw:
                         continue
                     msg = protocol.decode(raw.decode("utf-8", errors="ignore"))
