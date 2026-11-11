@@ -247,9 +247,9 @@ export function Sidebar({ collapsed = false, drawer = false, onNavigate, onAccou
                           isActive ? "bg-control text-ink" : "text-ink-2 hover:bg-raised hover:text-ink",
                         )}
                       >
-                        <span className={cx("relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-control text-[11px] font-bold text-ink ring-2", RING[a.overall_level] || RING.GRAY)}>
+                        <span className={cx("relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-control text-[11px] font-bold text-ink ring-2", RING[a.status] || RING.GRAY)}>
                           {a.name?.[0]}
-                          <span className={cx("absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--ah-surface-1)]", DOT[a.overall_level] || DOT.GRAY)} />
+                          <span className={cx("absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--ah-surface-1)]", DOT[a.status] || DOT.GRAY)} />
                         </span>
                         <Fade hidden={collapsed} className="flex-1 truncate">{a.name}</Fade>
                         {a.session_active && !collapsed && <span className="text-[11px] font-semibold text-accent-text">live</span>}

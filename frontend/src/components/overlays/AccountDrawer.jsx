@@ -134,7 +134,7 @@ export function AccountDrawer({ open, onClose }) {
             onClick={toggleGlass}
             className={`relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors ${liteGlass ? "bg-accent" : "bg-line-strong"}`}
           >
-            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform ${liteGlass ? "translate-x-6" : "translate-x-1"}`} />
+            <span className={`absolute top-1 left-0 h-5 w-5 rounded-full bg-white transition-transform ${liteGlass ? "translate-x-6" : "translate-x-1"}`} />
           </button>
         </div>
 

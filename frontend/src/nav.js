@@ -32,7 +32,7 @@ export const DOCTOR_NAV = [
     group: "Monitor",
     items: [
       { to: "/doctor", label: "Crew overview", icon: "crew", legacy: "crew", end: true },
-      { to: "/doctor/alerts", label: "Alerts", icon: "alert", legacy: "surgeon", showsAlerts: true },
+      { to: "/doctor/alerts", label: "Alerts", title: "Alerts & notifications", icon: "alert", legacy: "surgeon", showsAlerts: true },
     ],
   },
   {

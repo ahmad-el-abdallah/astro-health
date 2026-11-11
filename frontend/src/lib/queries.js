@@ -37,6 +37,9 @@ export const useRoutine = () => useQuery({ queryKey: ["routine"], queryFn: () =>
 // and then so "due" turns into "missed" on time (no broadcast marks that moment).
 export const useSchedule = (id) =>
   useQuery({ queryKey: ["schedule", id], queryFn: () => get(`/astronauts/${id}/schedule`), enabled: !!id, refetchInterval: 20000 });
+// One crew member's thread with the Flight Surgeon (delay-aware on the server).
+export const useThread = (id) =>
+  useQuery({ queryKey: ["thread", id], queryFn: () => get(`/astronauts/${id}/messages`), enabled: !!id });
 export const useTags = () => useQuery({ queryKey: ["tags"], queryFn: () => get("/tags") });
 export const useAlerts = (enabled = true) => useQuery({ queryKey: ["alerts"], queryFn: () => get("/alerts"), enabled });
 export const useMessages = (enabled = true) =>

@@ -13,6 +13,8 @@ import { useAuth } from "../../auth/AuthProvider.jsx";
 import { navItemFor } from "../../nav.js";
 import { STRINGS } from "../../strings.js";
 import { AccountDrawer } from "../overlays/AccountDrawer.jsx";
+import { useToast } from "../overlays/Toasts.jsx";
+import { useSocketEvent } from "../../lib/socket.js";
 import { Shimmer } from "../ui/index.jsx";
 import { page } from "../ui/motion.js";
 import { Icon } from "../ui/Icon.jsx";
@@ -74,6 +76,19 @@ function useSidebar() {
   return { isPhone, collapsed, toggleRail, drawerOpen: isPhone && drawerOpen, setDrawerOpen, toggle };
 }
 
+// A crew member hears about a Flight Surgeon reply the moment it arrives (after the
+// comms delay), on whatever page they're on. The full thread is on their Overview.
+function ReplyNotifier() {
+  const { user, isSurgeon } = useAuth();
+  const toast = useToast();
+  useSocketEvent("message_delivered", (m) => {
+    if (!isSurgeon && m?.from_role === "surgeon" && m.astronaut_id === user?.astronaut_id) {
+      toast(`Message from your Flight Surgeon: ${String(m.body || "").slice(0, 80)}`, "info");
+    }
+  });
+  return null;
+}
+
 export function AppShell() {
   const location = useLocation();
   const outlet = useOutlet();
@@ -90,6 +105,7 @@ export function AppShell() {
   return (
     <div className="flex min-h-screen gap-5 p-5 pb-24 max-md:p-4 max-md:pb-24">
       <SpaceBackdrop />
+      <ReplyNotifier />
 
       {!sb.isPhone && (
         // Only this column's width animates; the sidebar inside keeps every icon at a fixed x.

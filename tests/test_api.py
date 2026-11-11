@@ -716,3 +716,53 @@ def test_history_rows_say_where_each_reading_came_from(client):
     client.post("/api/astronauts/1/assess", json={"heart_rate": 71})
     rows = client.get("/api/astronauts/1/history?indicator=heart_rate&days=1").get_json()
     assert rows and rows[-1]["source"] == "manual"
+
+
+def _surgeon_uid():
+    with db.write_conn() as conn:
+        return conn.execute(
+            "SELECT t.uid FROM tags t JOIN astronauts a ON a.id = t.astronaut_id WHERE a.role = 'Flight surgeon'"
+        ).fetchone()["uid"]
+
+
+def test_crew_cards_carry_todays_snapshot(client):
+    login_as(client, AHMAD_UID)
+    client.post("/api/astronauts/1/assess", json={"heart_rate": 72, "blood_pressure": {"systolic": 118, "diastolic": 76}})
+    login_as(client, _surgeon_uid())
+    ahmad = {c["id"]: c for c in client.get("/api/crew").get_json()}[1]
+    assert ahmad["status"] in ("GREEN", "YELLOW", "RED")
+    assert ahmad["today"]["heart_rate"]["value"] == 72
+    assert "open_alert" in ahmad and "last_reading" in ahmad
+
+
+def test_crew_member_with_nothing_today_is_no_data(client):
+    with db.write_conn() as conn:
+        conn.execute("DELETE FROM readings WHERE astronaut_id = 2")
+        conn.execute("DELETE FROM symptoms WHERE astronaut_id = 2")
+    login_as(client, _surgeon_uid())
+    sameer = {c["id"]: c for c in client.get("/api/crew").get_json()}[2]
+    assert sameer["status"] == "GRAY" and sameer["today"] == {}
+
+
+def test_message_thread_respects_the_comms_delay(client, monkeypatch):
+    from backend.jobs import comms
+    monkeypatch.setattr(comms, "delay_seconds", lambda: 3600)  # an hour each way
+    login_as(client, _surgeon_uid())
+    assert client.post("/api/messages", json={"astronaut_id": 1, "body": "  "}).status_code == 400
+    assert client.post("/api/messages", json={"astronaut_id": 999, "body": "hi"}).status_code == 404
+    assert client.post("/api/messages", json={"astronaut_id": 1, "body": "Drink water, rest."}).status_code == 200
+    comms.queue_report(1, "My head hurts")  # crew -> Earth, also an hour away
+
+    thread = client.get("/api/astronauts/1/messages").get_json()
+    reply = [m for m in thread if m["from_role"] == "surgeon"][-1]
+    report = [m for m in thread if m["from_role"] == "crew"][-1]
+    assert reply["body"] == "Drink water, rest." and reply["delivered"] is False
+    assert report["body"] is None and report["delivered"] is False  # still on its way to Earth
+
+    login_as(client, AHMAD_UID)
+    crew_view = client.get("/api/astronauts/1/messages").get_json()
+    assert all(m["body"] != "Drink water, rest." for m in crew_view)  # the reply hasn't arrived yet
+    assert any(m["body"] == "My head hurts" for m in crew_view)       # their own report is visible
+
+    login_as(client, SAMEER_UID)
+    assert client.get("/api/astronauts/1/messages").status_code == 403

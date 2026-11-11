@@ -114,6 +114,31 @@ def _compute_body_levels(conn, astro_id):
     return body_levels
 
 
+def _today_snapshot(conn, astro_id):
+    """The last 24 h for one astronaut, shared by /summary (Overview) and /crew (the
+    Flight Surgeon's crew cards): latest reading per indicator, latest symptom report,
+    and a single status -- the worst of those, or GRAY ("no data") when there's nothing."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    today = {}
+    for r in conn.execute(
+        "SELECT indicator, value_json, level, ts FROM readings WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC",
+        (astro_id, since),
+    ):
+        if r["indicator"] not in today:
+            today[r["indicator"]] = {"value": json.loads(r["value_json"]), "level": r["level"], "ts": r["ts"]}
+    sym = conn.execute(
+        "SELECT items_json, level, ts FROM symptoms WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 1",
+        (astro_id, since),
+    ).fetchone()
+    symptoms_today = {"items": json.loads(sym["items_json"]), "level": sym["level"], "ts": sym["ts"]} if sym else None
+    levels = [v["level"] for v in today.values()] + ([symptoms_today["level"]] if symptoms_today else [])
+    return {
+        "today": today,
+        "symptoms_today": symptoms_today,
+        "status": health_rules.overall_level(levels) if levels else "GRAY",
+    }
+
+
 def _latest_discomfort(conn, astro_id):
     """region -> most recently logged 0-10 discomfort intensity, same
     'first row wins per key' idiom astronaut_summary uses for today_levels."""
@@ -448,39 +473,21 @@ def create_routes(app, socketio, bridge):
             astro = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
             if not astro:
                 return jsonify({"error": "not found"}), 404
-            today_levels = {}
-            for ind_row in conn.execute(
-                "SELECT indicator, value_json, level, ts FROM readings WHERE astronaut_id = ? "
-                "AND ts >= ? ORDER BY ts DESC",
-                (astro_id, (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()),
-            ):
-                if ind_row["indicator"] not in today_levels:
-                    today_levels[ind_row["indicator"]] = {
-                        "value": json.loads(ind_row["value_json"]), "level": ind_row["level"], "ts": ind_row["ts"],
-                    }
+            snap = _today_snapshot(conn, astro_id)
             last_assessment = conn.execute(
                 "SELECT * FROM assessments WHERE astronaut_id = ? ORDER BY ts DESC LIMIT 1", (astro_id,)
             ).fetchone()
-            symptom_row = conn.execute(
-                "SELECT items_json, level, ts FROM symptoms WHERE astronaut_id = ? AND ts >= ? "
-                "ORDER BY ts DESC LIMIT 1",
-                (astro_id, (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()),
-            ).fetchone()
-            symptoms_today = (
-                {"items": json.loads(symptom_row["items_json"]), "level": symptom_row["level"], "ts": symptom_row["ts"]}
-                if symptom_row else None
-            )
             body_levels = _compute_body_levels(conn, astro_id)
             discomfort = _latest_discomfort(conn, astro_id)
         return jsonify({
             "astronaut": row(astro),
-            "today": today_levels,
+            "today": snap["today"],
             "overall_level": last_assessment["overall_level"] if last_assessment else "GRAY",
             "last_check": last_assessment["ts"] if last_assessment else None,
             "body_levels": body_levels,
             "discomfort": discomfort,
             "session_active": astro_id in sessions.active_sessions,
-            "symptoms_today": symptoms_today,
+            "symptoms_today": snap["symptoms_today"],
         })
 
     @bp.get("/astronauts/<int:astro_id>/history")
@@ -872,10 +879,18 @@ def create_routes(app, socketio, bridge):
             for a in crew_rows:
                 last = conn.execute("SELECT * FROM assessments WHERE astronaut_id = ? ORDER BY ts DESC LIMIT 1", (a["id"],)).fetchone()
                 active_alerts = conn.execute("SELECT COUNT(*) AS c FROM alerts WHERE astronaut_id = ? AND acknowledged = 0", (a["id"],)).fetchone()["c"]
+                open_alert = conn.execute(
+                    "SELECT id, ts, text FROM alerts WHERE astronaut_id = ? AND acknowledged = 0 ORDER BY ts DESC LIMIT 1", (a["id"],)
+                ).fetchone()
+                last_reading = conn.execute("SELECT MAX(ts) AS t FROM readings WHERE astronaut_id = ?", (a["id"],)).fetchone()["t"]
+                snap = _today_snapshot(conn, a["id"])
                 out.append({
                     **row(a), "overall_level": last["overall_level"] if last else "GRAY",
                     "last_check": last["ts"] if last else None, "active_alerts": active_alerts,
                     "session_active": a["id"] in sessions.active_sessions,
+                    # Crew overview cards: today's status, latest vitals, flags.
+                    "status": snap["status"], "today": snap["today"], "symptoms_today": snap["symptoms_today"],
+                    "open_alert": row(open_alert), "last_reading": last_reading,
                 })
         return jsonify(out)
 
@@ -931,6 +946,8 @@ def create_routes(app, socketio, bridge):
             if err:
                 return jsonify(err[0]), err[1]
             conn.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+        # Every open doctor screen (badge, alerts list, crew cards) refreshes at once.
+        emit_fn("alert_acknowledged", {"id": alert_id})
         return jsonify({"ok": True})
 
     # ---- messages (flight surgeon) ----
@@ -949,12 +966,48 @@ def create_routes(app, socketio, bridge):
     @bp.post("/messages")
     def send_message():
         body = request.get_json(force=True) or {}
+        text = (body.get("body") or "").strip()
+        astro_id = body.get("astronaut_id")
+        if not text or not isinstance(astro_id, int) or isinstance(astro_id, bool):
+            return jsonify({"error": "astronaut_id and a non-empty body are required"}), 400
         with db.write_conn() as conn:
             _, err = auth.authorize_surgeon(conn)
             if err:
                 return jsonify(err[0]), err[1]
-        deliver_at = comms.queue_reply(body.get("astronaut_id"), body["body"])
+            if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
+                return jsonify({"error": "not found"}), 404
+        deliver_at = comms.queue_reply(astro_id, text[:2000])
+        # Open screens show the reply "in transit" straight away; message_delivered follows later.
+        emit_fn("message_sent", {"astronaut_id": astro_id, "deliver_at": deliver_at.isoformat()})
         return jsonify({"ok": True, "deliver_at": deliver_at.isoformat()})
+
+    # ---- one crew member's two-way thread with the Flight Surgeon (profile page,
+    # and the crew member's own inbox). Delay-aware, decided here, not in the browser:
+    # a crew report still on its way shows the surgeon only that it's coming (not what
+    # it says), and a surgeon reply still on its way doesn't exist yet for the crew. ----
+    @bp.get("/astronauts/<int:astro_id>/messages")
+    def astronaut_messages(astro_id):
+        with db.write_conn() as conn:
+            viewer, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            data = rows(conn.execute(
+                "SELECT * FROM messages WHERE astronaut_id = ? ORDER BY sent_at ASC", (astro_id,)
+            ).fetchall())
+        now = datetime.now(timezone.utc).isoformat()
+        viewer_is_surgeon = auth.is_surgeon(viewer) and viewer["id"] != astro_id
+        out = []
+        for m in data:
+            delivered = bool(m["read"]) or m["deliver_at"] <= now
+            own = (m["from_role"] == "surgeon") == viewer_is_surgeon
+            item = {k: m[k] for k in ("id", "from_role", "sent_at", "deliver_at", "body")}
+            item["delivered"] = delivered
+            if not delivered and not own:
+                if not viewer_is_surgeon:
+                    continue
+                item["body"] = None
+            out.append(item)
+        return jsonify(out)
 
     # ---- mission ----
     @bp.get("/mission")

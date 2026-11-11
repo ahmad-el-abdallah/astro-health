@@ -11,7 +11,6 @@ import { SimulatorDock } from "./components/SimulatorDock.jsx";
 import { EmergencyOverlay } from "./components/overlays/EmergencyOverlay.jsx";
 import { ToastProvider } from "./components/overlays/Toasts.jsx";
 import { Login } from "./pages/Login.jsx";
-import { Pending } from "./pages/Pending.jsx";
 import LogoCrew from "./assets/brand/logo-mark-crew.svg?react";
 
 // Each page is its own chunk, loaded when first opened -- the login screen ships small,
@@ -24,6 +23,9 @@ const Sleep = lazy(() => import("./pages/crew/Sleep.jsx"));
 const Mission = lazy(() => import("./pages/crew/Mission.jsx"));
 const Learn = lazy(() => import("./pages/crew/Learn.jsx"));
 const Schedule = lazy(() => import("./pages/crew/Schedule.jsx"));
+const CrewOverview = lazy(() => import("./pages/doctor/CrewOverview.jsx"));
+const Alerts = lazy(() => import("./pages/doctor/Alerts.jsx"));
+const CrewProfile = lazy(() => import("./pages/doctor/CrewProfile.jsx"));
 
 function Splash() {
   return (
@@ -57,9 +59,9 @@ function Gate() {
         <Route path="mission" element={<Mission />} />
         <Route path="schedule" element={<Schedule />} />
         <Route path="learn" element={<Learn />} />
-        <Route path="doctor" element={<DoctorOnly><Pending legacyTab="crew" title="Crew overview" /></DoctorOnly>} />
-        <Route path="doctor/alerts" element={<DoctorOnly><Pending legacyTab="surgeon" title="Alerts" /></DoctorOnly>} />
-        <Route path="doctor/crew/:id" element={<DoctorOnly><Pending legacyTab="surgeon" title="Crew member profile" /></DoctorOnly>} />
+        <Route path="doctor" element={<DoctorOnly><CrewOverview /></DoctorOnly>} />
+        <Route path="doctor/alerts" element={<DoctorOnly><Alerts /></DoctorOnly>} />
+        <Route path="doctor/crew/:id" element={<DoctorOnly><CrewProfile /></DoctorOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

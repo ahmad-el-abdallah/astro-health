@@ -274,7 +274,7 @@ function TaskRow({ entry, last, flash, canAct }) {
           )}
         </AnimatePresence>
         <span className={cx("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", entry.status === "done" ? "bg-good-bg text-good-fg" : "bg-accent-soft text-accent-text")}>
-          <Icon name={entry.status === "done" ? "check" : KIND_ICON[entry.kind] || "schedule"} size={18} />
+          <Icon name={entry.status === "done" ? "tick" : KIND_ICON[entry.kind] || "schedule"} size={18} />
         </span>
         <div className="min-w-0 flex-1">
           <div className={cx("text-[15px] font-semibold", entry.status === "done" && "text-ink-2")}>{entry.text}</div>

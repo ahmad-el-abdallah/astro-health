@@ -10,7 +10,7 @@ const ToastContext = createContext(() => {});
 
 const KIND = {
   info: { icon: "check", cls: "border-line-strong" },
-  success: { icon: "check", cls: "border-good-edge" },
+  success: { icon: "tick", cls: "border-good-edge" },
   warn: { icon: "bell", cls: "border-check-edge" },
   error: { icon: "alert", cls: "border-alert-border" },
 };

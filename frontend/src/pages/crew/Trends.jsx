@@ -223,7 +223,7 @@ function SummaryCard({ indicator, days, stats, change }) {
 
 // ---------- 4. insights, weekday pattern, log ----------
 const TONE = {
-  good: { icon: "check", cls: "bg-good-bg text-good-fg" },
+  good: { icon: "tick", cls: "bg-good-bg text-good-fg" },
   check: { icon: "alert", cls: "bg-check-bg text-check-fg" },
   info: { icon: "trends", cls: "bg-accent-soft text-accent-text" },
 };

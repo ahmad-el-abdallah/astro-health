@@ -20,6 +20,8 @@ import { TrendChart, TREND_INDICATORS } from "../../components/TrendCard.jsx";
 import { RingGauge } from "../../components/charts/RingGauge.jsx";
 import { StageBar, StageLegend } from "../../components/charts/StageBar.jsx";
 import { SymptomReporter } from "../../components/SymptomReporter.jsx";
+import { Thread } from "../../components/Thread.jsx";
+import { useAuth } from "../../auth/AuthProvider.jsx";
 import { STRINGS } from "../../strings.js";
 
 const MAIN_TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "sleep", "mood"];
@@ -397,6 +399,7 @@ function MissionChecks({ summary, mission, rules }) {
 
 export default function Overview() {
   const { id } = useAstronautPicker();
+  const { isSurgeon } = useAuth();
   const summary = useSummary(id);
   const mission = useMission();
   const rules = useHealthRules();
@@ -434,6 +437,16 @@ export default function Overview() {
           <MissionChecks summary={s} mission={mission.data} rules={rules.data} />
         </div>
       </Row>
+
+      {/* Reports to Earth and the Flight Surgeon's replies, on the comms delay. */}
+      <Card className="flex flex-col gap-1">
+        <CardTitle
+          eyebrow="Earth link"
+          title={isSurgeon ? `Messages with ${s?.astronaut?.name || "this crew member"}` : "Your Flight Surgeon"}
+          subtitle={`Every message waits out the comms delay${mission.data?.profile?.label ? ` (${mission.data.profile.label})` : ""}. Red results and symptom reports are sent automatically.`}
+        />
+        <Thread astroId={id} name={s?.astronaut?.name || "Crew"} viewer={isSurgeon ? "surgeon" : "crew"} compact />
+      </Card>
 
       <SymptomReporter open={reporting} onClose={() => setReporting(false)} astroId={id} />
     </>

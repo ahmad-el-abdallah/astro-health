@@ -13,32 +13,12 @@ import { useContent, useHealthRules, useMission, useSummary } from "../../lib/qu
 import { AnimatedNumber, Card, CardTitle, Progress, StatusChip, cx } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
 import { Planet3D } from "../../three/planet3d.js";
+import { RiskMeter } from "../../components/RiskMeter.jsx";
 
 const ORDER = ["station", "lunar_base", "mars_transit", "mars_base", "rover"];
 const ENV_ICON = { station: "env-station", lunar_base: "env-lunar", mars_transit: "env-transit", mars_base: "env-mars", rover: "env-rover" };
 const HAZARD_ICON = { space_radiation: "hazard-radiation", isolation_confinement: "hazard-isolation", distance_from_earth: "hazard-distance", gravity_fields: "hazard-gravity", hostile_environment: "hazard-environment" };
 const RISK_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-const RISK_CLR = { HIGH: "var(--color-risk-high)", MEDIUM: "var(--color-risk-medium)", LOW: "var(--color-risk-low)" };
-
-export function RiskMeter({ risk }) {
-  const n = { LOW: 1, MEDIUM: 2, HIGH: 3 }[risk] || 0;
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-bold" style={{ color: RISK_CLR[risk] }} title={`Mission risk: ${risk}`}>
-      <span className="inline-flex gap-[3px]">
-        {[1, 2, 3].map((i) => (
-          <motion.span
-            key={i}
-            className="h-[5px] w-3.5 rounded-[3px]"
-            initial={{ backgroundColor: "#2c3757" }}
-            animate={{ backgroundColor: i <= n ? RISK_CLR[risk] : "#2c3757" }}
-            transition={{ delay: 0.2 + i * 0.12 }}
-          />
-        ))}
-      </span>
-      {risk ? `${risk[0]}${risk.slice(1).toLowerCase()} risk` : ""}
-    </span>
-  );
-}
 
 // Port of mission.js attentionFor().
 function attentionFor(risk, level) {

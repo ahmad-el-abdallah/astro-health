@@ -46,8 +46,10 @@ export const EVENT_INVALIDATIONS = {
   reminder: [["schedule"]],
   session_started: [["summary"], ["crew"]],
   session_ended: [["summary"], ["crew"]],
-  alert: [["alerts"], ["crew"], ["messages"]],
-  message_delivered: [["messages"]],
+  alert: [["alerts"], ["crew"], ["messages"], ["thread"]],
+  alert_acknowledged: [["alerts"], ["crew"]],
+  message_delivered: [["messages"], ["thread"]],
+  message_sent: [["messages"], ["thread"]],
   mission_changed: [["mission"]],
   unknown_tag: [["admin-unknown"]],
 };
