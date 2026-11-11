@@ -273,9 +273,14 @@ def end_session_for(astronaut_id, send_fn, emit_fn):
 
 
 def _handle_astronaut_tag(conn, tag, send_fn, emit_fn):
+    """A CYD behaves like a personal watch now (docs/CLAUDE.md "CYD pairing"), not a
+    shared kiosk you toggle on and off by re-tapping -- re-tapping your own card must
+    never log you out, only "Done" on the device (or the web's own Log out button)
+    does. Tapping a *different* card still switches the device to them, ending
+    whoever was on it (a real handoff)."""
     astronaut_id = tag["astronaut_id"]
     if astronaut_id in active_sessions:
-        _end_session(conn, astronaut_id, send_fn, emit_fn)
+        note_cyd_contact(astronaut_id)  # still a sign of life -- keep the idle timer fresh
         return
     for other_id in list(active_sessions.keys()):
         _end_session(conn, other_id, send_fn, emit_fn)

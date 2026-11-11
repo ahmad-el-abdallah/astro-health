@@ -22,7 +22,7 @@ def test_unknown_tag_notifies_cyd_and_ui(fresh_db):
     assert emitted[0] == ("unknown_tag", {"uid": "ZZZZZZZZ"})
 
 
-def test_astronaut_tap_starts_then_ends_session(fresh_db):
+def test_astronaut_tap_starts_a_session(fresh_db):
     with db.write_conn() as conn:
         astro_id = seed_minimal(conn)
     sent, emitted, send_fn, emit_fn = _recorder()
@@ -31,10 +31,45 @@ def test_astronaut_tap_starts_then_ends_session(fresh_db):
     assert astro_id in sessions.active_sessions
     assert any(e[0] == "session_started" for e in emitted)
 
-    sent.clear(); emitted.clear()
+
+def test_retapping_the_same_card_never_logs_you_out(fresh_db):
+    """The CYD is a personal watch (docs/CLAUDE.md "CYD pairing"), not a shared
+    kiosk toggled by re-tapping -- only an explicit end_session ("Done" on the
+    device, or the web's Log out) ends a session now."""
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+
     sessions.handle_scan("A0000001", send_fn, emit_fn)
+    sent.clear(); emitted.clear()
+
+    sessions.handle_scan("A0000001", send_fn, emit_fn)  # re-tap the same card
+    assert astro_id in sessions.active_sessions  # still logged in
+    # handle_scan always emits "scan" (the web login flow needs that broadcast
+    # regardless), but nothing else -- no session_ended, no session_started again.
+    assert emitted == [("scan", {"uid": "A0000001", "type": "astronaut", "label": "Test Astro"})]
+    assert sent == []
+
+
+def test_tapping_a_different_card_ends_the_first_and_switches(fresh_db):
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+        now = datetime.now(timezone.utc).isoformat()
+        other_id = conn.execute(
+            "INSERT INTO astronauts (name, role, color, baseline_reaction_ms, created_at) VALUES (?, ?, ?, ?, ?)",
+            ("Other Astro", "Crew member", "#ffffff", 340, now),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO tags (uid, type, label, astronaut_id, data_json) VALUES ('A0000002', 'astronaut', 'Other Astro', ?, '{}')",
+            (other_id,),
+        )
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    sessions.handle_scan("A0000001", send_fn, emit_fn)
+    sessions.handle_scan("A0000002", send_fn, emit_fn)  # a real handoff
+
     assert astro_id not in sessions.active_sessions
-    assert any(e[0] == "session_ended" for e in emitted)
+    assert other_id in sessions.active_sessions
 
 
 def test_session_message_carries_role_and_todays_vitals(fresh_db):
@@ -359,10 +394,10 @@ def test_refresh_surgeon_cyd_resends_every_tick_even_if_unchanged(fresh_db):
 
 def test_surgeon_payload_is_resent_on_a_fresh_session(fresh_db):
     with db.write_conn() as conn:
-        _seed_surgeon_and_crew(conn)
+        surgeon_id, _ = _seed_surgeon_and_crew(conn)
     sent, emitted, send_fn, emit_fn = _recorder()
     sessions.handle_scan("S9000001", send_fn, emit_fn)  # tap in
-    sessions.handle_scan("S9000001", send_fn, emit_fn)  # tap out -- ends the session
+    sessions.end_session_for(surgeon_id, send_fn, emit_fn)  # an explicit end (e.g. "Done") -- a re-tap no longer does this
     sent.clear()
     sessions.handle_scan("S9000001", send_fn, emit_fn)  # tap back in -- same data, must still send
     types = [protocol.decode(s)["type"] for s in sent if protocol.decode(s)]

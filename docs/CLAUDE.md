@@ -1967,9 +1967,32 @@ code, on this new branch, with my own call on the status-board scope.
   dock still appears correctly on every other route (checked the login screen) so the new
   `KioskOverlays` conditional didn't regress anything else.
 
+## Follow-up: re-tapping your own card must not log you out (2026-11-12)
+
+User tested the new pairing feature and reported the real problem with the *old* toggle model
+head-on: "when I scan the NFC card again its logging me out from the CYD" -- exactly backwards
+from how a personal watch should behave. The CYD was still a shared kiosk underneath
+(`_handle_astronaut_tag()`: tap once starts a session, tap the *same* card again ends it), which
+pairing alone didn't fix -- pairing only covers surviving a transport switch, not this.
+
+- **Fixed in `backend/logic/sessions.py`'s `_handle_astronaut_tag()`**: re-tapping a card that's
+  already logged in is now a no-op (just refreshes the idle timer via `note_cyd_contact()`) --
+  **only** an explicit `end_session` (pressing "Done" on the device) or the web's own Log out
+  button ends a session now. Tapping a *different* card still switches the device to them,
+  ending whoever was on it first (a real handoff, unchanged). Applies uniformly to the CMO/Flight
+  Surgeon's tag too, since it routes through the same function.
+- Backend-only -- the CYD firmware never decided this itself (it only ever reflects whatever
+  `session`/`end_session`/`idle` message the laptop sends), so no reflash needed, just a server
+  restart.
+- One existing test (`test_surgeon_payload_is_resent_on_a_fresh_session`) assumed the old
+  tap-to-toggle-off behavior for the surgeon tag specifically -- updated to end the session
+  explicitly (`sessions.end_session_for(...)`, the same "Done" path) between taps instead of
+  relying on a second scan to do it. 2 new tests (`test_retapping_the_same_card_never_logs_you_out`,
+  `test_tapping_a_different_card_ends_the_first_and_switches`). 226/226 total passing.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 224 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 226 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, consult, voice, scheduler, SPA serving, CYD logout).
 - `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
