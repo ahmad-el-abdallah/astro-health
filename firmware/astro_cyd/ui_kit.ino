@@ -95,6 +95,18 @@ void iconNfc(int cx, int cy, float s, uint16_t color, uint16_t bg) {
   }
 }
 
+void iconWifi(int cx, int cy, float s, uint16_t color, uint16_t bg) {
+  int oy = cy + (int)(5 * s);
+  tft.fillCircle(cx, oy, max(1, (int)(1.4 * s)), color);
+  for (int i = 1; i <= 3; i++) {
+    int r = (int)(i * 4.2 * s);
+    // Same angle range as iconExercise's own upward-opening fan below --
+    // 270 is "straight up" in drawArc's convention, so 200-340 is a
+    // symmetric arc centered above the dot (a standard Wi-Fi glyph).
+    tft.drawArc(cx, oy, r, r - max(1, (int)(1.3 * s)), 200, 340, color, bg, true);
+  }
+}
+
 void iconCard(int cx, int cy, float s, uint16_t color, uint16_t bg) {
   int w = (int)(18 * s), h = (int)(13 * s);
   tft.drawRoundRect(cx - w / 2, cy - h / 2, w, h, (int)(2 * s), color);
@@ -221,6 +233,17 @@ void drawTile(int x, int y, int w, int h, uint16_t color, IconFn iconFn, const S
   }
 }
 bool hitTile(int x, int y, int w, int h, int tx, int ty) { return hitRect(x, y, w, h, tx, ty); }
+
+// ---- key: a compact labeled button for the Wi-Fi setup keyboard
+// (wifi_setup.ino) -- like drawTile but text-only and small enough for a
+// 10-column keyboard row, not an icon+label tile. ----
+void drawKey(int x, int y, int w, int h, const String& label, uint16_t color, int font) {
+  tft.fillRoundRect(x, y, w, h, 4, color);
+  tft.drawRoundRect(x, y, w, h, 4, U_LINE);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(TFT_WHITE, color);
+  tft.drawString(label, x + w / 2, y + h / 2, font);
+}
 
 // Splits the content band (between header and footer) into n equal rows
 // in a column of width U_COL_W, returning row i's y and h via out-params.

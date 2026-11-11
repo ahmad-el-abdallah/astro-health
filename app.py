@@ -29,6 +29,7 @@ from backend.hardware.serial_bridge import SerialBridge, find_port
 from backend.hardware.wifi_bridge import (
     WifiBridge, is_reachable as wifi_is_reachable,
     DEFAULT_HOST as WIFI_DEFAULT_HOST, DEFAULT_PORT as WIFI_DEFAULT_PORT,
+    MDNS_HOST as WIFI_MDNS_HOST,
 )
 
 BACKGROUND_TICK_S = 2
@@ -88,6 +89,11 @@ def choose_bridge(args, on_message, on_status, on_send):
         return SerialBridge(port=usb_port, **kwargs)
     if wifi_is_reachable(args.wifi_host, args.wifi_port):
         return WifiBridge(host=args.wifi_host, port=args.wifi_port, **kwargs)
+    # A CYD in "Join Wi-Fi" mode (docs/CLAUDE.md "CYD Wi-Fi mode setup") isn't
+    # at the fixed AP gateway above -- only tried when --wifi-host wasn't
+    # explicitly overridden, so an explicit value is always respected as-is.
+    if args.wifi_host == WIFI_DEFAULT_HOST and wifi_is_reachable(WIFI_MDNS_HOST, args.wifi_port):
+        return WifiBridge(host=WIFI_MDNS_HOST, port=args.wifi_port, **kwargs)
     return SerialBridge(simulate=True, **kwargs)
 
 

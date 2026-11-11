@@ -2022,10 +2022,65 @@ govern a web-triggered scan.
   real Socket.IO client watching the same moment saw no outgoing `session`/`led` message and no
   `session_started` event.
 
+## On-device Wi-Fi mode setup: Access Point or Join Wi-Fi, with a real touch keyboard (2026-11-12)
+
+User wanted the CYD's AP-only Wi-Fi to become a real on-device choice instead: open a menu on the
+device itself and pick "Access Point" (today's default) or "Join Wi-Fi" (the CYD joins the *same*
+network the laptop is already on), typing the network name/password in on the touchscreen -- no
+reflash, no hardcoded credentials, no phone-based captive portal (explicitly confirmed over
+hardcoding and WiFiManager).
+
+- **The station radio was already live** -- `nfc.ino`'s `setupLink()` has run `WiFi.mode(WIFI_AP_STA)`
+  since the ESP-NOW work (now vestigial, see that section), just disconnected. Joining a real
+  network is a config change on an already-running interface, not a new radio mode. AP+STA share
+  one radio/channel (an ESP32 hardware limit) -- joining a network shifts the AP's own broadcast
+  channel to match it, harmless now that ESP-NOW (the only thing that ever cared) is dead.
+- **`wifi_bridge.ino`'s TCP server doesn't care how the device got its IP** -- split
+  `startAccessPoint()`'s AP-specific setup from a new shared `startTcpServer()`, called from both
+  the AP path (`setup()`, unchanged) and a successful Wi-Fi join (`wifi_setup.ino`). The laptop's
+  `backend/hardware/wifi_bridge.py` (`WifiBridge`) needed **zero changes** -- it was already just a
+  generic TCP client given a host/port.
+- **New `firmware/astro_cyd/wifi_setup.ino`**: four new screens (`SCR_WIFI_MENU/_SCAN/_KEYBOARD/
+  _CONNECTING`), reachable only from Idle (a new third tile there, `idleTouch()` wired into
+  `handleTouch()`'s switch, which previously had Idle falling into `default: break`). A real
+  on-device network scan (`WiFi.scanNetworks(true)`, async, polled via `WiFi.scanComplete()` from
+  `loop()` -- **never** the blocking synchronous call, which would freeze touch/SOS for several
+  seconds and violates this firmware's own explicit "loop() must never block" rule) lists up to 5
+  found networks (capped the same "simple caps beat pagination" way as `CREW_MAX`/`ALERTS_MAX`, not
+  sorted by signal strength -- first few found). Tapping one opens a touch QWERTY (10-column grid,
+  two pages -- letters+shift toggle / digits+symbols toggle, phone-keyboard style, Backspace/Space/
+  Cancel/Connect) to enter the password, shown in plain text (a one-time setup flow, not a
+  sensitive-field pattern elsewhere in this app). Connect is async too (`WiFi.begin()` itself never
+  blocks; `pollWifiConnect()` polls `WiFi.status()` against a 15s timeout from `loop()`) --
+  success persists the mode + SSID + password (`Preferences`, same pattern as `pairedUid`) **only**
+  for a fresh interactive attempt (`wifiConnectIsSetupFlow`), never for the normal boot-time
+  reconnect using already-saved credentials, then `ESP.restart()`s a few seconds later (after
+  showing the real assigned IP on-screen -- essential once off USB, no serial console left to read
+  it from) into a clean STA-only `setup()`. Failure shows why, with "Try again" or "Other network".
+  Access Point from the menu just persists `staMode=false` and restarts the same way. Mode changes
+  are never hot-switched -- `ESP.restart()` is the one place that (re)wires a transport, avoiding a
+  second parallel runtime-switch code path.
+- A connected STA-mode device also registers `astro-cyd.local` via `ESPmDNS` (bundled with the
+  esp32 core, no new library) as a friendlier alternative to reading the IP off a 320x240 screen,
+  and the Idle screen gets a one-line `Wi-Fi: <ip>` status for exactly that same reason.
+- **Backend, small and optional**: `app.py`'s `choose_bridge()` auto-detect now also tries
+  `astro-cyd.local` (new `MDNS_HOST` in `backend/hardware/wifi_bridge.py`) after the fixed AP
+  gateway, only when `--wifi-host` wasn't explicitly overridden -- so `python app.py` with no flags
+  can find a Join-Wi-Fi-mode device too. Best-effort: depends on the OS's own mDNS/`.local`
+  resolution, not this code. 3 new tests (`tests/test_choose_bridge.py`), 232/232 total passing.
+- New icon `iconWifi` (ui_kit.ino, same concentric-arc style as `iconNfc`/`iconExercise`) and a new
+  shared `drawKey()` helper (compact labeled button, distinct from the icon+label `drawTile`) for
+  the keyboard's keys.
+- **Honest scope note, same as every firmware pass in this file**: `arduino-cli compile` is clean
+  (35% flash / 15% RAM, up from the CYD redesign's 34%/15% baseline) with zero warnings even under
+  `--warnings all`, but none of this has been seen on the real resistive touchscreen yet -- key
+  sizing on a 320x240 screen in particular should be expected to need iteration once flashed. Ask
+  before flashing, same standing rule as always.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 229 tests (rules engine, protocol, sessions, REST API, symptoms,
-  login/access control, consult, voice, scheduler, SPA serving, CYD logout).
+- `.venv/bin/python -m pytest` — 232 tests (rules engine, protocol, sessions, REST API, symptoms,
+  login/access control, consult, voice, scheduler, SPA serving, CYD logout, bridge auto-detect).
 - `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`

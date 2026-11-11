@@ -71,6 +71,7 @@ typedef void (*IconFn)(int cx, int cy, float s, uint16_t color, uint16_t bg);
 #include <esp_wifi.h>
 #include <SD.h>
 #include <Preferences.h>
+#include <ESPmDNS.h>
 #include "nfc_link.h"
 
 // ---- persistent pairing (docs/CLAUDE.md "CYD pairing") ----
@@ -145,6 +146,10 @@ enum Screen {
   // card still starts a session like any crew member's (sessionTouch()'s
   // caller branches on curRole to pick SCR_SURGEON_HOME over SCR_SESSION).
   SCR_SURGEON_HOME, SCR_CREW_DETAIL, SCR_ALERTS, SCR_INBOX,
+  // Wi-Fi mode setup (wifi_setup.ino), reachable from Idle only -- Access
+  // Point (today's default) vs Join Wi-Fi, with a real on-device scan +
+  // touch keyboard, not hardcoded credentials.
+  SCR_WIFI_MENU, SCR_WIFI_SCAN, SCR_WIFI_KEYBOARD, SCR_WIFI_CONNECTING,
 };
 Screen screen = SCR_IDLE;
 Screen screenBeforeToast = SCR_IDLE;
@@ -237,6 +242,36 @@ String lastDrawnSurgeonHomeSignature = "\x01";  // sentinel no real signature ca
 String lastDrawnAlertsSignature = "\x01";
 String lastDrawnInboxSignature = "\x01";
 
+// ---- Wi-Fi mode setup (wifi_setup.ino) ----
+// Persisted mode: false = Access Point (default, today's behavior), true =
+// Join Wi-Fi. Read once in setup() from prefs; wifi_setup.ino only ever
+// changes it by writing prefs then ESP.restart() -- never hot-switched, so
+// there's exactly one code path (setup()) that wires up a transport.
+bool staMode = false;
+// Capped small enough to fit on-screen with no scrolling (same "simple caps
+// beat pagination" rule as CREW_MAX/ALERTS_MAX elsewhere in this firmware) --
+// not sorted by signal strength, just the first few networks found.
+static const int WIFI_NETWORKS_MAX = 5;
+int wifiScanCount = 0;
+bool wifiScanInProgress = false;
+String wifiScanSsid[WIFI_NETWORKS_MAX];
+int wifiScanRssi[WIFI_NETWORKS_MAX];
+String wifiSelectedSsid = "";
+static const int WIFI_PW_MAX = 63;  // WPA2's own max
+char wifiPwBuf[WIFI_PW_MAX + 1] = {0};
+int wifiPwLen = 0;
+bool wifiKbShift = false, wifiKbPage2 = false;
+bool wifiConnectPending = false;
+// true only for a connect attempt started from the interactive keyboard
+// screen (new, unsaved credentials being tried) -- false for the normal
+// boot-time reconnect using already-persisted ones, so pollWifiConnect()
+// only ever persists+restarts for the former, never loops on the latter.
+bool wifiConnectIsSetupFlow = false;
+uint32_t wifiConnectStartMs = 0;
+uint32_t wifiRestartAtMs = 0;  // 0 = no restart scheduled
+String wifiConnectError = "";
+static const uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
+
 // reaction test (10 trials; see docs/build-prompt.md section 10, screen 5)
 static const int REACTION_TRIALS = 10;
 int reactionTrial = 0;
@@ -310,9 +345,18 @@ void setup() {
 
   touchInit();
   prefs.begin("astro", false);
+  staMode = prefs.getBool("staMode", false);
 
   setupLink();     // nfc.ino: ESP-NOW receive from the S3 reader
-  startAccessPoint();  // wifi_bridge.ino: the CYD's own Wi-Fi network for the laptop
+  // Wi-Fi mode setup (wifi_setup.ino): Access Point (today's default) or
+  // Join Wi-Fi, picked on-device and persisted -- never hot-switched, so
+  // this is the one place that decides which transport comes up.
+  if (staMode) {
+    wifiSelectedSsid = prefs.getString("staSsid", "");
+    beginWifiStaConnect(wifiSelectedSsid, prefs.getString("staPassword", ""), false);
+  } else {
+    startAccessPoint();  // wifi_bridge.ino: the CYD's own Wi-Fi network for the laptop
+  }
   initQueue();     // protocol.ino: RAM (+ SD if present) offline queue
 
   sendHello();
@@ -322,6 +366,9 @@ void setup() {
 void loop() {
   handleTcpClient();     // wifi_bridge.ino: accept/track the laptop's TCP connection
   handleSerialIn();     // protocol.ino: parse laptop -> CYD JSON lines (serial or Wi-Fi)
+  pollWifiScan();        // wifi_setup.ino: async network scan (never blocks loop())
+  pollWifiConnect();     // wifi_setup.ino: async Wi-Fi join (never blocks loop())
+  pollWifiRestart();     // wifi_setup.ino: the delayed restart after a successful new join
   handleLink();          // nfc.ino: drain ESP-NOW frames from the S3
   handleTouch();         // screens.ino
   updateScreenTimers();  // screens.ino: toasts, reaction test, breathing, timeouts

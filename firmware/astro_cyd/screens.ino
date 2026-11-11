@@ -86,10 +86,12 @@ void drawIdleScreen() {
   clearScreen();
   drawHeader("ASTRO HEALTH", "", false, "", 0);
   int y, h;
-  colRow(2, 0, y, h);
+  colRow(3, 0, y, h);
   drawTile(U_PAD, y, U_COL_W, h, U_CREW, iconNfc, "Tap card", "to sign in", "");
-  colRow(2, 1, y, h);
+  colRow(3, 1, y, h);
   drawSosTile(U_PAD, y, U_COL_W, h);
+  colRow(3, 2, y, h);
+  drawTile(U_PAD, y, U_COL_W, h, U_SLATE, iconWifi, "Wi-Fi", staMode ? "Join Wi-Fi" : "Access Point", "");
 
   // Content band is narrower than the old full-width idle screen (the
   // left column now reserves U_COL_W+PAD px), so every string here is
@@ -109,7 +111,20 @@ void drawIdleScreen() {
   tft.fillCircle(mid - lw / 2 - 8, 182, 4, laptopOnline ? U_GREEN : U_RED);
   tft.setTextDatum(ML_DATUM);
   tft.drawString(laptopTxt, mid - lw / 2, 182, 1);
+  // Once off USB there's no serial console left to read an IP from -- this
+  // is the only other place it's ever shown (see wifi_setup.ino).
+  if (staMode && WiFi.status() == WL_CONNECTED) {
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(U_DIM, U_BG);
+    tft.drawString("Wi-Fi: " + WiFi.localIP().toString(), mid, 200, 1);
+  }
   drawFooter(laptopOnline);
+}
+
+void idleTouch(int x, int y) {
+  int y0, h;
+  colRow(3, 2, y0, h);
+  if (hitRect(U_PAD, y0, U_COL_W, h, x, y)) { enterWifiMenu(); return; }
 }
 
 // ---- screen: crew home (session menu + today's vitals) ----
@@ -957,7 +972,12 @@ void handleTouch() {
     case SCR_CREW_DETAIL:  crewDetailTouch(x, y); break;
     case SCR_ALERTS:       alertsTouch(x, y); break;
     case SCR_INBOX:        inboxTouch(x, y); break;
-    default: break;  // Idle / Breathe / Status / Exercise timer / Unknown tag: no taps needed
+    case SCR_IDLE:            idleTouch(x, y); break;
+    case SCR_WIFI_MENU:       wifiMenuTouch(x, y); break;
+    case SCR_WIFI_SCAN:       wifiScanTouch(x, y); break;
+    case SCR_WIFI_KEYBOARD:   wifiKeyboardTouch(x, y); break;
+    case SCR_WIFI_CONNECTING: wifiConnectingTouch(x, y); break;
+    default: break;  // Breathe / Status / Exercise timer / Unknown tag: no taps needed
   }
 }
 

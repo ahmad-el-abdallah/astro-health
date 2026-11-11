@@ -23,6 +23,12 @@ PING_INTERVAL_S = 5
 PROBE_TIMEOUT_S = 1.0
 DEFAULT_HOST = "192.168.4.1"  # the CYD access point's gateway IP (ESP32 default)
 DEFAULT_PORT = 8765
+# A CYD in "Join Wi-Fi" mode (docs/CLAUDE.md "CYD Wi-Fi mode setup") registers
+# this via ESPmDNS once connected -- tried as a second auto-detect host so
+# `python app.py` with no flags can also find it with no manual --wifi-host.
+# Best-effort: whether Python resolves a bare .local name depends on the OS's
+# own mDNS support (e.g. nss-mdns/avahi on desktop Linux), not this code.
+MDNS_HOST = "astro-cyd.local"
 
 
 def is_reachable(host=DEFAULT_HOST, port=DEFAULT_PORT, timeout=PROBE_TIMEOUT_S):
