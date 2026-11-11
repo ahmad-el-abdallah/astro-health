@@ -65,6 +65,8 @@ void sendLine(JsonDocument& doc) {
 void sendHello() {
   JsonDocument doc;
   doc["type"] = "hello"; doc["fw"] = FW_VERSION;
+  String pairedUid = prefs.getString("pairedUid", "");
+  if (pairedUid.length()) doc["paired_uid"] = pairedUid;
   sendLine(doc);
 }
 void sendScan(const String& uid) {

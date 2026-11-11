@@ -28,6 +28,16 @@ bool hitRect(int bx, int by, int bw, int bh, int x, int y) {
   return x >= bx && x <= bx + bw && y >= by && y <= by + bh;
 }
 
+// On a real mission the Flight Surgeon is Earth-based -- this role's
+// physical presence on the station is a crew member serving as Crew
+// Medical Officer, not the surgeon herself. Presentation-only: the DB
+// role value, web app badge, and every permission check stay exactly
+// "Flight surgeon" (docs/CLAUDE.md "CMO on-device framing") -- only this
+// device's own on-screen label differs.
+String displayRole(const String& role) {
+  return role == "Flight surgeon" ? "Crew Medical Officer" : role;
+}
+
 void clearScreen() { tft.fillScreen(U_BG); }
 
 // Greedy word-wrap: draws `s` as however many centered lines of at most
@@ -123,7 +133,7 @@ void drawSessionScreen() {
   // curRole just labels the header here in phase 1 -- the Flight Surgeon
   // still gets this exact same generic screen (see this file's header
   // comment); a distinct surgeon home screen is the later, separate pass.
-  drawHeader(curName.length() ? curName : curUid, curRole, false, chip, colorForLevel(curLevel));
+  drawHeader(curName.length() ? curName : curUid, displayRole(curRole), false, chip, colorForLevel(curLevel));
 
   int y, h;
   colRow(4, 0, y, h); drawTile(U_PAD, y, U_COL_W, h, U_CREW, iconMood, "Mood", "", "");
@@ -186,7 +196,7 @@ void crewRowRect(int i, int& rx, int& ry, int& rw, int& rh) {
 void drawSurgeonHomeScreen() {
   clearScreen();
   String chip = alertsCount > 0 ? String(alertsCount) + " OPEN" : "";
-  drawHeader(curName.length() ? curName : curUid, "Flight surgeon", true, chip, U_RED);
+  drawHeader(curName.length() ? curName : curUid, displayRole("Flight surgeon"), true, chip, U_RED);
 
   int y, h;
   colRow(2, 0, y, h); drawTile(U_PAD, y, U_COL_W, h, U_RED, iconAlert, "Alerts", "", alertsCount > 0 ? String(alertsCount) : "");
@@ -797,6 +807,10 @@ void onSessionMsg(const String& name, const String& uid, const String& level, ui
   if (idleS > 0) sessionIdleMs = idleS * 1000UL;
   lastTouchMs = millis();
   lastActivePingMs = lastTouchMs;
+  // Any real login -- a fresh tap, or a resumed Wi-Fi reconnect -- keeps
+  // the stored pairing current (docs/CLAUDE.md "CYD pairing"). Re-tapping
+  // a different card naturally re-pairs the device to them.
+  if (uid.length()) prefs.putString("pairedUid", uid);
   goHome();
 }
 

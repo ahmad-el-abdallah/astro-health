@@ -29,6 +29,12 @@ void handleTcpClient() {
     if (incoming) {
       tcpClient = incoming;
       Serial.println("[wifi] laptop connected");
+      // sendHello() only ever fires once at cold boot (astro_cyd.ino's
+      // setup()) -- if this is the laptop joining *after* a tap already
+      // happened over USB, it would otherwise never learn who's paired
+      // (docs/CLAUDE.md "CYD pairing"). Re-announcing here covers exactly
+      // that case; it's a harmless no-op resend otherwise.
+      sendHello();
     }
   }
 }

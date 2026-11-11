@@ -289,6 +289,29 @@ def _handle_surgeon_tag(conn, tag, send_fn, emit_fn):
     emit_fn("surgeon_unlocked", {"until": surgeon_unlocked_until, "name": tag["label"]})
 
 
+def resume_paired_session(uid, send_fn, emit_fn):
+    """A CYD that's been paired to one astronaut (see docs/CLAUDE.md's "CYD
+    pairing") sends its stored UID back on every `hello` -- at cold boot and
+    again whenever a new Wi-Fi client connects (e.g. it moved from USB to a
+    power bank and only later joined Wi-Fi). This lets it keep representing
+    the same astronaut with no fresh NFC tap, the same way a personal watch
+    wouldn't ask you to re-authenticate every time you look at it.
+
+    Deliberately never ends or replaces an already-active session -- a
+    passive reconnect must not be able to log someone else out or steal the
+    (shared, one-at-a-time) CYD out from under whoever's actually using it
+    right now. It only ever fills in when nothing else is active."""
+    if active_sessions:
+        return
+    with db.write_conn() as conn:
+        tag = _get_tag(conn, uid)
+        if not tag or tag["astronaut_id"] is None or tag["type"] not in ("astronaut", "surgeon"):
+            return
+        astronaut = _get_astronaut(conn, tag["astronaut_id"])
+        if astronaut:
+            _start_session(conn, astronaut, uid, send_fn, emit_fn)
+
+
 def start_emergency(text, astronaut_id, send_fn, emit_fn):
     emergency["active"] = True
     emergency["text"] = text

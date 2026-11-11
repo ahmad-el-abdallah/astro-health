@@ -1892,9 +1892,84 @@ home screen.
   216/216 tests passing (`arduino-cli compile` 34%/15%, unchanged). Flashed; verify on the real
   board next.
 
+## CYD pairing, the Flight Surgeon reframed as the on-station CMO, and a crew-wide status board (2026-11-12, branch `cyd-pairing`)
+
+User stepped back and questioned the architecture as "a real NASA solution," not just a demo: the
+CYD is a shared kiosk when the pitch wants it to act like a personal watch; the Flight Surgeon's
+physical card logging into the station's own CYD doesn't make sense if she's Earth-based (the
+whole reason this app already models a comms delay); and a "big screen on the station" idea had no
+defined audience. Concretely asked for: plug the CYD into the laptop over USB, log in once, then
+move it to a power bank and have it keep representing that astronaut with no re-tap. Built as real
+code, on this new branch, with my own call on the status-board scope.
+
+- **CYD pairing is small because the dual-transport plumbing already existed.**
+  `firmware/astro_cyd/wifi_bridge.ino`'s AP + TCP server has run unconditionally since the
+  power-bank feature was first built, and `sendLine()`/`handleSerialIn()` already read/write both
+  Serial and the Wi-Fi socket interchangeably -- outgoing/incoming never cared which transport was
+  live. The only real gap was identity: `sendHello()` fired once at cold boot with no astronaut
+  info, and nothing re-announced who was logged in when the laptop joined the CYD's Wi-Fi *after*
+  a tap already happened over USB. Fixed with persistence, not a new transport: a `Preferences`
+  namespace (`astro_cyd.ino`'s global `prefs`) stores `pairedUid`, written in `screens.ino`'s
+  `onSessionMsg()` on every real login (fresh tap or a resumed reconnect), and read by
+  `protocol.ino`'s `sendHello()` to include `paired_uid` on every hello -- both at boot and (new)
+  on every fresh Wi-Fi client accept in `wifi_bridge.ino`'s `handleTcpClient()`, since that's the
+  "joined late" case the old once-at-boot `sendHello()` could never cover.
+- **Backend**: `backend/logic/sessions.py`'s new `resume_paired_session(uid, send_fn, emit_fn)`
+  starts a session for the paired astronaut via the existing `_start_session()` -- but **only**
+  when `active_sessions` is currently empty, so a passive reconnect can never steal or end a
+  session someone's actually using right now. Wired into `backend/routes/routes.py`'s existing
+  `hello` branch of `handle_cyd_message`. No protocol schema change needed --
+  `protocol.decode()` already accepts arbitrary extra fields on any known message type.
+  **Honest limit**: this doesn't eliminate the manual step of the laptop actually joining the
+  CYD's Wi-Fi network once it's off USB (`app.py --wifi`, or auto-detect if already joined) --
+  that's the pre-existing power-bank path, unchanged. What this adds is that the astronaut doesn't
+  have to re-tap once it's on. A rewrite where the CYD instead joins the *station's* existing
+  Wi-Fi and connects out to a backend-side listener (avoiding the laptop ever switching networks)
+  was considered and explicitly scoped out of this pass -- real extra firmware + backend work, a
+  later phase if wanted.
+- **The Flight Surgeon's on-device identity is reframed as the Crew Medical Officer** -- a real,
+  distinct role on actual crews (a crew member with extra medical training handling first-line,
+  in-person triage, while the actual Flight Surgeon stays on the ground). Presentation-only, by
+  design: the DB `role` value, every permission check, and the web app's own role badge all stay
+  exactly `"Flight surgeon"` -- zero risk to the auth/permission logic built across Phases 1-2 of
+  the CYD redesign. Only `screens.ino`'s on-device header label changes, via a new
+  `displayRole(role)` helper (maps `"Flight surgeon"` -> `"Crew Medical Officer"` for display only),
+  applied at both `drawSessionScreen()`'s and `drawSurgeonHomeScreen()`'s header calls. The story:
+  one shared account/role models both the on-station CMO (physical CYD access) and the Earth-based
+  Flight Surgeon (full remote web access, subject to the existing comms delay) -- a deliberate,
+  documented hackathon-scale simplification, not an oversight, worth stating plainly if a judge
+  asks.
+- **Crew-wide status board** (`GET /api/status-board`, deliberately unauthenticated like
+  `/content`/`/routine`/`/mission` -- but unlike those, it reads real per-astronaut data, so it
+  aggregates server-side before responding and never returns a name or an individual's own
+  reading, which is the one rule this route exists to enforce): mission clock/day
+  (`scheduler.mission_clock()`), the current mission profile's label, crew headcount, and
+  GREEN/YELLOW/RED/GRAY counts (reusing `_today_snapshot()`'s own per-astronaut status, just
+  counted rather than named), plus today's shared routine with done/total counts per task
+  (`scheduler.day_plan()` run per astronaut, aggregated across the crew -- that function is
+  per-astronaut internally for exactly this reason). New frontend route `/status-board`
+  (`frontend/src/pages/StatusBoard.jsx`), outside the normal crew/doctor login gate the same way
+  `/admin` already is (`App.jsx`). A new `KioskOverlays` wrapper hides the dev-only
+  `SimulatorDock`/`EmergencyOverlay` specifically on this one route -- a real shared station
+  display shouldn't show a raw protocol debug dock; every other route's behavior is unchanged.
+- **Verified**: firmware changes compile-checked clean (34%/15%, unchanged from the CYD redesign's
+  own baseline) -- **not yet flashed or seen on the real board**, same standing rule as every other
+  firmware change in this file (ask first). Backend: 6 new tests (`test_sessions.py`'s
+  `resume_paired_session` cases -- starts when idle, never steals a different active session,
+  ignores an unknown UID or a legacy account-less surgeon tag; `test_api.py`'s end-to-end `hello`
+  + `paired_uid` case and the status-board aggregate-only assertion), 224/224 total passing.
+  Live-verified against an isolated throwaway copy on its own port (never the user's live
+  `data/astro.db`), using a fake test tag UID (not a real crew card) per this file's own
+  convention: a real Socket.IO client confirmed `resume_paired_session` actually emits
+  `session_started` exactly once, not on a second redundant hello while that session was already
+  active; a real headless-Chromium screenshot of `/status-board` showed the mission clock
+  advancing, correct aggregate counts, zero console errors, and no Simulator dock -- confirmed the
+  dock still appears correctly on every other route (checked the login screen) so the new
+  `KioskOverlays` conditional didn't regress anything else.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 216 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 224 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, consult, voice, scheduler, SPA serving, CYD logout).
 - `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
@@ -1904,21 +1979,18 @@ home screen.
   it running between tasks. Never point tests at the user's live `data/astro.db`.
 - Ask before flashing firmware to a real board, same as Lifeline.
 
-## Status (2026-11-11)
+## Status (2026-11-12)
 
-- Branch `cyd-redesign` (currently checked out, branched from `ui-redesign`'s tip, identical
-  history otherwise) holds both CYD redesign phases above -- `firmware/astro_cyd/ui_kit.ino` new,
-  `screens.ino`/`astro_cyd.ino`/`protocol.ino` edited, `backend/hardware/protocol.py`,
-  `backend/logic/sessions.py`, `backend/routes/routes.py`'s `handle_cyd_message`, `app.py`'s
-  background loop, `backend/hardware/pico_bridge.py` (the two Pico-reconnect-detection fixes
-  below), plus `tests/test_protocol.py`/`tests/test_sessions.py`/`tests/test_api.py`/
-  `tests/test_pico_bridge.py` (new) -- all **uncommitted**. `firmware/tools/cyd_preview.html`
-  (the design reference) is untracked. Phase 2's four new screens are compile-checked and
-  pytest-covered but **not yet flashed/seen on real hardware** -- see that section's own note.
-- Branch `ui-redesign` holds the whole React rebuild (crew pages, Flight Surgeon screens,
-  /admin, glass theme, sidebar, Schedule, Trends analytics, rewards removal, session fixes),
-  committed but **not pushed** and **not merged into master** yet — check `git log` /
-  `git status` before assuming more.
-- `firmware/astro_cyd` was flashed twice on 2026-11-11 (end_session reason; then idle_s from
-  the laptop + "active" pings + no points header); boot + `hello` confirmed both times.
+- `master` holds everything through the full CYD redesign (phases 1-2), the Pico bridge
+  reconnect-detection fix, and a second, real Pico firmware bug fix found this session: the
+  on-device `sendScanLine()` now builds its whole JSON line into one buffer and sends it with a
+  single `Serial.print()` call, instead of ~9 fragmented calls -- confirmed by raw-sniffing the
+  real serial port that the old fragmented version reliably dropped bytes mid-message (one
+  captured example: 20 of 35 bytes lost) even over the Pico's native USB-CDC, not just the CYD's
+  flakier CH340 adapter link. Flashed and merged; pushed to `origin/master`.
+  `firmware/esp32s3_nfc_reader/` stays dead/reference-only, untouched.
+- New branch `cyd-pairing` (checked out) holds this session's three-part realism pass -- see the
+  dated entry above. All committed here, not on `master`. Firmware changes compile-checked only,
+  **not yet flashed** -- ask before flashing, same standing rule as always, and the laptop's
+  `app.py` must release the serial port first.
 - `data/nvidia_api_key` holds a real key and is gitignored, not tracked at all.

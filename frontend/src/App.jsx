@@ -3,7 +3,7 @@
 import { lazy, Suspense } from "react";
 import { MotionConfig, motion } from "motion/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider.jsx";
 import { queryClient } from "./lib/queries.js";
 import { AppShell } from "./components/layout/AppShell.jsx";
@@ -27,6 +27,7 @@ const CrewOverview = lazy(() => import("./pages/doctor/CrewOverview.jsx"));
 const Alerts = lazy(() => import("./pages/doctor/Alerts.jsx"));
 const CrewProfile = lazy(() => import("./pages/doctor/CrewProfile.jsx"));
 const Admin = lazy(() => import("./pages/admin/Admin.jsx"));
+const StatusBoard = lazy(() => import("./pages/StatusBoard.jsx"));
 
 function Splash() {
   return (
@@ -43,6 +44,19 @@ function Splash() {
 function DoctorOnly({ children }) {
   const { isSurgeon } = useAuth();
   return isSurgeon ? children : <Navigate to="/" replace />;
+}
+
+// The Simulator/Emergency overlays are dev tooling for the normal crew/doctor app --
+// /status-board is meant to sit on a real shared screen, so neither belongs there.
+function KioskOverlays() {
+  const { pathname } = useLocation();
+  if (pathname === "/status-board") return null;
+  return (
+    <>
+      <SimulatorDock />
+      <EmergencyOverlay />
+    </>
+  );
 }
 
 function Gate() {
@@ -76,13 +90,15 @@ export default function App() {
         <BrowserRouter>
           <AuthProvider>
             <ToastProvider>
-              {/* /admin has its own superuser login, so it sits outside the crew/doctor gate. */}
+              {/* /admin has its own superuser login, and /status-board is a read-only,
+                  unauthenticated shared-display view (aggregate-only backend response) --
+                  both sit outside the crew/doctor gate. */}
               <Routes>
                 <Route path="/admin" element={<Suspense fallback={<Splash />}><Admin /></Suspense>} />
+                <Route path="/status-board" element={<Suspense fallback={<Splash />}><StatusBoard /></Suspense>} />
                 <Route path="*" element={<Gate />} />
               </Routes>
-              <SimulatorDock />
-              <EmergencyOverlay />
+              <KioskOverlays />
             </ToastProvider>
           </AuthProvider>
         </BrowserRouter>

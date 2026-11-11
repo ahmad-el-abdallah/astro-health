@@ -1064,6 +1064,44 @@ def create_routes(app, socketio, bridge):
                 return jsonify(err[0]), err[1]
             return jsonify(scheduler.day_plan(conn, astro_id))
 
+    # ---- crew-wide status board: a shared station display, not a personal
+    # dashboard (docs/CLAUDE.md "crew-wide status board"). Deliberately
+    # unauthenticated, same as /content, /routine, /mission above -- but
+    # unlike those, it reads real per-astronaut data, so it aggregates
+    # before responding and never returns a name, a role other than the
+    # count, or any individual's own reading. That's the one rule this
+    # route exists to enforce. ----
+    @bp.get("/status-board")
+    def status_board():
+        with db.write_conn() as conn:
+            crew = [a for a in rows(conn.execute("SELECT * FROM astronauts").fetchall())
+                    if a["role"] != "Flight surgeon"]
+            level_counts = {"GREEN": 0, "YELLOW": 0, "RED": 0, "GRAY": 0}
+            task_counts = {}
+            for a in crew:
+                level_counts[_today_snapshot(conn, a["id"])["status"]] += 1
+                for entry in scheduler.day_plan(conn, a["id"])["entries"]:
+                    key = (entry["time"], entry["text"], entry["kind"])
+                    t = task_counts.setdefault(key, {
+                        "time": entry["time"], "text": entry["text"], "kind": entry["kind"],
+                        "done": 0, "total": 0,
+                    })
+                    t["total"] += 1
+                    if entry["status"] == "done":
+                        t["done"] += 1
+
+        day, day_seconds = scheduler.mission_clock()
+        profile_id, profile = comms.current_profile()
+        return jsonify({
+            "crew_count": len(crew),
+            "levels": level_counts,
+            "mission": {"profile_id": profile_id, "label": profile.get("label")},
+            "day": day + 1,
+            "day_seconds": day_seconds,
+            "time_scale": scheduler.TIME_SCALE,
+            "tasks": sorted(task_counts.values(), key=lambda t: t["time"]),
+        })
+
     @bp.get("/health-rules")
     def health_rules_config():
         from backend.config import health_rules as load_health_rules
@@ -1186,6 +1224,14 @@ def create_routes(app, socketio, bridge):
                     emit_fn("logout_requested", {"astronaut_id": astro_id})
         elif mtype == "hello":
             emit_fn("serial_status", {"status": bridge.status, "fw": msg.get("fw")})
+            # A paired CYD (docs/CLAUDE.md "CYD pairing") announces who it last
+            # belonged to on every hello -- cold boot, and again on every new
+            # Wi-Fi connection -- so it can keep representing that astronaut
+            # with no fresh tap. See sessions.resume_paired_session()'s own
+            # docstring for why this can never steal an already-open session.
+            paired_uid = msg.get("paired_uid")
+            if paired_uid:
+                sessions.resume_paired_session(paired_uid, send_fn, emit_fn)
         elif mtype == "log":
             emit_fn("cyd_event", {"type": "log", "msg": msg.get("msg", "")})
         elif mtype == "view_crew":

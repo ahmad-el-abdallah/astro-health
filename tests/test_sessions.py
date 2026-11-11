@@ -118,6 +118,62 @@ def test_meal_tag_logs_activity(fresh_db):
     assert any("Meal logged" in s for s in sent)
 
 
+def test_resume_paired_session_starts_a_session_when_none_is_active(fresh_db):
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    sessions.resume_paired_session("A0000001", send_fn, emit_fn)
+
+    assert astro_id in sessions.active_sessions
+    assert any(e[0] == "session_started" for e in emitted)
+
+
+def test_resume_paired_session_never_steals_a_different_active_session(fresh_db):
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+        now = datetime.now(timezone.utc).isoformat()
+        other_id = conn.execute(
+            "INSERT INTO astronauts (name, role, color, baseline_reaction_ms, created_at) VALUES (?, ?, ?, ?, ?)",
+            ("Other Astro", "Crew member", "#ffffff", 340, now),
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO tags (uid, type, label, astronaut_id, data_json) VALUES ('A0000002', 'astronaut', 'Other Astro', ?, '{}')",
+            (other_id,),
+        )
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    sessions.handle_scan("A0000001", send_fn, emit_fn)  # astro_id's session is genuinely active
+    sent.clear(); emitted.clear()
+
+    sessions.resume_paired_session("A0000002", send_fn, emit_fn)  # a different device reconnecting
+
+    assert astro_id in sessions.active_sessions  # untouched
+    assert other_id not in sessions.active_sessions  # not started either
+    assert emitted == []  # a passive reconnect made no visible change
+
+
+def test_resume_paired_session_ignores_an_unknown_uid(fresh_db):
+    with db.write_conn() as conn:
+        seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.resume_paired_session("ZZZZZZZZ", send_fn, emit_fn)
+    assert sessions.active_sessions == {}
+    assert sent == [] and emitted == []
+
+
+def test_resume_paired_session_ignores_a_legacy_surgeon_tag_with_no_account(fresh_db):
+    """seed_minimal's 'D1000001' is the pre-login-era surgeon tag shape
+    (astronaut_id NULL) -- resuming must never try to start a session for
+    an astronaut that doesn't exist."""
+    with db.write_conn() as conn:
+        seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+    sessions.resume_paired_session("D1000001", send_fn, emit_fn)
+    assert sessions.active_sessions == {}
+    assert sent == [] and emitted == []
+
+
 def test_emergency_card_sets_emergency_state(fresh_db):
     with db.write_conn() as conn:
         seed_minimal(conn)

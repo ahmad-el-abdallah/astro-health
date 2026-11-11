@@ -70,7 +70,16 @@ typedef void (*IconFn)(int cx, int cy, float s, uint16_t color, uint16_t bg);
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <SD.h>
+#include <Preferences.h>
 #include "nfc_link.h"
+
+// ---- persistent pairing (docs/CLAUDE.md "CYD pairing") ----
+// Survives power cycles, unlike every other piece of session state in this
+// firmware -- lets this device keep representing one astronaut after it
+// moves from USB to a power bank + Wi-Fi, with no fresh NFC tap. Opened
+// once in setup(); protocol.ino's sendHello() reads it, screens.ino's
+// onSessionMsg() writes it.
+Preferences prefs;
 
 // ---------------- touch wiring + calibration ----------------
 // Touch is bit-banged (plain digitalWrite/digitalRead), not the
@@ -300,6 +309,7 @@ void setup() {
   tft.fillScreen(TFT_BLACK);
 
   touchInit();
+  prefs.begin("astro", false);
 
   setupLink();     // nfc.ino: ESP-NOW receive from the S3 reader
   startAccessPoint();  // wifi_bridge.ino: the CYD's own Wi-Fi network for the laptop

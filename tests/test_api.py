@@ -195,6 +195,24 @@ def test_content_and_health_rules_and_routine_are_served(client):
         assert isinstance(res.get_json(), dict)
 
 
+def test_status_board_is_unauthenticated_and_aggregate_only(client):
+    res = client.get("/api/status-board")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["crew_count"] > 0
+    assert set(data["levels"].keys()) == {"GREEN", "YELLOW", "RED", "GRAY"}
+    assert sum(data["levels"].values()) == data["crew_count"]
+    assert "mission" in data and "label" in data["mission"]
+    assert isinstance(data["tasks"], list) and data["tasks"]
+    for task in data["tasks"]:
+        assert set(task.keys()) == {"time", "text", "kind", "done", "total"}
+        assert task["done"] <= task["total"]
+    # the one rule this route exists to enforce: never an individual
+    blob = json.dumps(data)
+    assert "Ahmad" not in blob and "Sameer" not in blob and "Nasser" not in blob
+    assert "name" not in data and all("astronaut_id" not in t for t in data["tasks"])
+
+
 def test_rewards_routes_are_gone(client):
     login_as(client, AHMAD_UID)
     assert client.get("/api/rewards/1").status_code == 404
@@ -834,3 +852,19 @@ def test_cyd_quick_reply_ignores_unknown_astronaut(client):
 def test_cyd_view_crew_does_not_crash(client):
     res = client.post("/api/simulate/event", json={"type": "view_crew", "id": 1})
     assert res.status_code == 200
+
+
+def test_cyd_hello_with_paired_uid_resumes_the_session(client):
+    """See docs/CLAUDE.md "CYD pairing": a hello carrying paired_uid is how
+    a device that moved from USB to Wi-Fi resumes without a fresh tap."""
+    res = client.post("/api/simulate/event", json={"type": "hello", "fw": "1", "paired_uid": AHMAD_UID})
+    assert res.status_code == 200
+    with db.write_conn() as conn:
+        tag = conn.execute("SELECT astronaut_id FROM tags WHERE uid = ?", (AHMAD_UID,)).fetchone()
+    assert tag["astronaut_id"] in sessions.active_sessions
+
+
+def test_cyd_hello_without_paired_uid_does_not_start_anything(client):
+    res = client.post("/api/simulate/event", json={"type": "hello", "fw": "1"})
+    assert res.status_code == 200
+    assert sessions.active_sessions == {}
