@@ -316,6 +316,23 @@ void pollWifiConnect() {
   }
   if (millis() - wifiConnectStartMs > WIFI_CONNECT_TIMEOUT_MS) {
     wifiConnectPending = false;
+    if (!wifiConnectIsSetupFlow) {
+      // The background reconnect (boot, or any time the link drops) used to
+      // just give up silently after one timeout -- the stored credentials
+      // were never touched, but the device would sit there neither
+      // connected nor running its own AP, which looks identical to "it
+      // forgot my Wi-Fi" from the outside. A transient miss (the router
+      // busy, weak signal at that exact moment, a slow DHCP lease) is
+      // common and not a reason to stop trying -- retry indefinitely, same
+      // philosophy as the laptop's own serial/Wi-Fi bridges never giving up
+      // on reconnecting either. The *interactive* setup flow (testing a
+      // password someone just typed) still stops and shows the error below
+      // instead -- auto-retrying a genuinely wrong password forever would
+      // hide the mistake rather than let them fix it.
+      Serial.println("[wifi] background reconnect timed out, retrying...");
+      beginWifiStaConnect(wifiSelectedSsid, prefs.getString("staPassword", ""), false);
+      return;
+    }
     wifiConnectError = "Wrong password, or the network is out of range.";
     if (screen == SCR_WIFI_CONNECTING) drawWifiConnectingScreen();
   }

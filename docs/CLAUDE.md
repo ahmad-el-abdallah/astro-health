@@ -2252,6 +2252,34 @@ server process to simulate "laptop went away") accidentally avoided ever hitting
 - 1 new test (`test_resume_paired_session_refreshes_its_own_stale_active_entry`), 236/236 total
   passing.
 
+### Follow-up: "forgetting" the Wi-Fi was a missing retry, not lost credentials (same day, 2026-11-12)
+
+User reported the CYD sometimes not reconnecting to their Wi-Fi "by default for no reason." Given
+`Preferences` (NVS flash) doesn't spontaneously lose data, and every persistence path (mode,
+SSID, password) had already been directly verified on the real board, the more likely explanation
+was checked first: what happens if the boot-time reconnect attempt simply *fails once*?
+
+- **Root cause, confirmed by reading `pollWifiConnect()`**: on a connection timeout, the code
+  just set `wifiConnectPending = false` and stopped -- for the background/boot-time reconnect
+  (`wifiConnectIsSetupFlow == false`), **nothing ever retried**. A single transient miss (the
+  router busy, weak signal at that exact moment, a slow DHCP lease -- all common, none of them
+  "wrong password") left the device stuck indefinitely: not connected to the real network, and
+  not running its own AP either (that path is only taken when `staMode` is `false`, which this
+  failure never touched). From the outside that's indistinguishable from "it forgot my Wi-Fi,"
+  even though `staSsid`/`staPassword`/`staMode` in flash were never touched by this failure at
+  all -- confirmed by the already-logged `hello` showing the same SSID across multiple real
+  resets earlier in this session.
+- **Fixed**: on a background-reconnect timeout, `pollWifiConnect()` now just calls
+  `beginWifiStaConnect()` again with the same stored credentials and keeps retrying indefinitely
+  -- same "never give up reconnecting" philosophy the laptop's own serial/Wi-Fi bridges already
+  use. The *interactive* setup flow (testing a password someone just typed on the keyboard) is
+  deliberately exempt from this -- auto-retrying a genuinely wrong password forever would hide
+  the mistake instead of surfacing "Try again"/"Other network" to actually fix it.
+- The Idle screen's Wi-Fi status line now also shows `Wi-Fi: reconnecting...` while retrying
+  (previously showed nothing at all unless already connected), so a mid-retry device visibly
+  isn't stuck, not just silently either-connected-or-not.
+- `arduino-cli compile` clean (35%/15%, unchanged).
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 236 tests (rules engine, protocol, sessions, REST API, symptoms,

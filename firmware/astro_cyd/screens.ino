@@ -112,11 +112,17 @@ void drawIdleScreen() {
   tft.setTextDatum(ML_DATUM);
   tft.drawString(laptopTxt, mid - lw / 2, 182, 1);
   // Once off USB there's no serial console left to read an IP from -- this
-  // is the only other place it's ever shown (see wifi_setup.ino).
-  if (staMode && WiFi.status() == WL_CONNECTED) {
+  // is the only other place it's ever shown (see wifi_setup.ino). Also
+  // shown mid-retry (not just once connected) so a dropped/not-yet-joined
+  // link is visibly still trying, not indistinguishable from stuck.
+  if (staMode) {
     tft.setTextDatum(MC_DATUM);
     tft.setTextColor(U_DIM, U_BG);
-    tft.drawString("Wi-Fi: " + WiFi.localIP().toString(), mid, 200, 1);
+    if (WiFi.status() == WL_CONNECTED) {
+      tft.drawString("Wi-Fi: " + WiFi.localIP().toString(), mid, 200, 1);
+    } else {
+      tft.drawString("Wi-Fi: reconnecting...", mid, 200, 1);
+    }
   }
   drawFooter(laptopOnline);
 }
