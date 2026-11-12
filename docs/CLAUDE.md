@@ -2212,9 +2212,49 @@ have resumed. A genuinely different bug from the last two, not a regression of t
   Logged out afterward via an explicit `end_session` (reason `"done"`) to leave the board clean.
 - `arduino-cli compile` clean (35%/15%, unchanged).
 
+### Follow-up: a real board replug (server left running) still didn't resume -- a stale session entry, not a hello timing issue (same day, 2026-11-12)
+
+User reported the fix above didn't actually hold on a literal USB replug. Root cause this time was
+different from either of the last two, and the earlier verification method (killing the whole
+server process to simulate "laptop went away") accidentally avoided ever hitting it.
+
+- **Root cause**: nothing on the backend ever clears `active_sessions` on a mere bridge
+  disconnect -- only an explicit `end_session` does (see `_end_session()`/the no-retap-logout
+  entry above). So an astronaut's own entry is typically still sitting in `active_sessions` as a
+  stale leftover after a board reboot, even though the board's own `curUid` always resets to empty
+  at boot. `resume_paired_session()`'s original guard (`if active_sessions: return`, see "CYD
+  pairing" above) couldn't tell that apart from a *genuinely different* astronaut actively using
+  the device -- so it refused to resume *this exact astronaut's own* session, leaving a
+  correctly-paired board stuck at Idle forever. The previous verification pass killed the whole
+  server process to simulate the laptop going away, which also wipes `active_sessions` as a side
+  effect -- giving `resume_paired_session()` a clean slate it would never actually have in the
+  real scenario (server keeps running, only the board reboots).
+- **Fixed**: the guard now only refuses when some *other* astronaut_id is in `active_sessions` --
+  if it's empty, or already holds this same astronaut, `resume_paired_session()` goes ahead and
+  (re-)sends the session, which both starts a fresh one and refreshes a stale one back down to the
+  device that's reconnecting.
+- **Verified live, properly this time**: tapped Ahmad in on the real board (server already
+  running), then reset *only the board* via a DTR pulse over the still-free USB serial port --
+  deliberately **not** touching the running server process, unlike the previous pass -- waited
+  past the reconnect window, and confirmed (via tapping a second real card, which produces an
+  unambiguous `session_ended`-then-`session_started` pair if and only if something was genuinely
+  still active) that Ahmad's session had survived the board-only reboot. Backend-only fix, no
+  reflash needed -- just a server restart.
+- **Caught and corrected a flawed verification of the earlier "Done clears pairedUid" firmware
+  fix while re-testing this**: `/api/simulate/event`'s `end_session` type only ever tells the
+  *backend* a session ended -- it's injected straight into `handle_cyd_message()`, the same
+  entry point a real message takes, but it never reaches the real board at all, so it can never
+  exercise `screens.ino`'s `endSessionLocally("done")` (the only place that actually clears
+  `pairedUid`). An earlier attempt to verify that fix this way produced a false pass. That
+  firmware fix is still believed correct by direct code reading, but **genuinely requires a real
+  physical Done-button press on the touchscreen to verify** -- there is no way to simulate that
+  specific action remotely, unlike everything else that's been verified live this session.
+- 1 new test (`test_resume_paired_session_refreshes_its_own_stale_active_entry`), 236/236 total
+  passing.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 235 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 236 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, consult, voice, scheduler, SPA serving, CYD logout, bridge auto-detect).
 - `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.

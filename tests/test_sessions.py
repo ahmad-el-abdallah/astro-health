@@ -231,6 +231,28 @@ def test_resume_paired_session_starts_a_session_when_none_is_active(fresh_db):
     assert any(e[0] == "session_started" for e in emitted)
 
 
+def test_resume_paired_session_refreshes_its_own_stale_active_entry(fresh_db):
+    """A board reboot/replug resets the CYD's own curUid to empty, but
+    nothing ever clears active_sessions on a mere bridge disconnect -- only
+    an explicit end_session does -- so this exact astronaut's own entry is
+    typically still sitting there as a stale leftover, not a real conflict.
+    The original, too-strict "active_sessions is non-empty -> refuse"
+    rule treated that as someone else already using the device and left a
+    correctly-paired board stuck at Idle forever. Must resend instead."""
+    with db.write_conn() as conn:
+        astro_id = seed_minimal(conn)
+    sent, emitted, send_fn, emit_fn = _recorder()
+
+    sessions.handle_scan("A0000001", send_fn, emit_fn)  # the original tap
+    sent.clear(); emitted.clear()
+
+    sessions.resume_paired_session("A0000001", send_fn, emit_fn)  # the same device reconnecting
+
+    assert astro_id in sessions.active_sessions
+    assert any(e[0] == "session_started" for e in emitted)  # resent, not silently dropped
+    assert any('"type":"session"' in s for s in sent)
+
+
 def test_resume_paired_session_never_steals_a_different_active_session(fresh_db):
     with db.write_conn() as conn:
         astro_id = seed_minimal(conn)

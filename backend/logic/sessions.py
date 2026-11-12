@@ -319,17 +319,30 @@ def resume_paired_session(uid, send_fn, emit_fn):
     the same astronaut with no fresh NFC tap, the same way a personal watch
     wouldn't ask you to re-authenticate every time you look at it.
 
-    Deliberately never ends or replaces an already-active session -- a
-    passive reconnect must not be able to log someone else out or steal the
-    (shared, one-at-a-time) CYD out from under whoever's actually using it
-    right now. It only ever fills in when nothing else is active."""
-    if active_sessions:
-        return
+    Deliberately never ends or replaces a *different* astronaut's
+    already-active session -- a passive reconnect must not be able to log
+    someone else out or steal the (shared, one-at-a-time) CYD out from
+    under whoever's actually using it right now.
+
+    But a reboot/replug (the CYD's own `curUid` always resets to empty at
+    boot) never told the backend the session ended -- nothing clears
+    `active_sessions` on a mere bridge disconnect, only an explicit
+    end_session does -- so *this exact astronaut's* own entry is often
+    still sitting there as a stale leftover, not a real conflict. Refusing
+    to touch it in that case (the original, too-strict rule) left the
+    device stuck at Idle forever even though it was correctly paired,
+    because the backend thought someone was "already using it" when that
+    someone was this same device reconnecting. Re-sending the session in
+    that case isn't stealing anything -- it's the one legitimate case this
+    function exists for."""
     with db.write_conn() as conn:
         tag = _get_tag(conn, uid)
         if not tag or tag["astronaut_id"] is None or tag["type"] not in ("astronaut", "surgeon"):
             return
-        astronaut = _get_astronaut(conn, tag["astronaut_id"])
+        astronaut_id = tag["astronaut_id"]
+        if any(other_id != astronaut_id for other_id in active_sessions):
+            return  # a genuinely different session is active -- don't disturb it
+        astronaut = _get_astronaut(conn, astronaut_id)
         if astronaut:
             _start_session(conn, astronaut, uid, send_fn, emit_fn)
 
