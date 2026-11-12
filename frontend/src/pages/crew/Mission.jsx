@@ -22,7 +22,7 @@ const RISK_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
 // Port of mission.js attentionFor().
 function attentionFor(risk, level) {
-  if (level === "RED") return { cls: "border-l-alert-fg", text: "Act now: open Doctor AI & body for what to do.", tone: "text-alert-fg" };
+  if (level === "RED") return { cls: "border-l-alert-fg", text: "Act now: open Astra & body for what to do.", tone: "text-alert-fg" };
   if (level === "YELLOW" && risk !== "LOW") return { cls: "border-l-check-fg", text: "Watch closely: this mission makes it worse.", tone: "text-check-fg" };
   if (level === "GRAY" && risk === "HIGH") return { cls: "border-l-line-strong border-dashed", text: "High risk, but no reading today. Measure it.", tone: "text-muted" };
   return null;

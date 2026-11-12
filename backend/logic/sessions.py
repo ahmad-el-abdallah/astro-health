@@ -17,7 +17,7 @@ from backend.hardware import protocol
 from backend.logic import health_rules
 from backend.jobs import comms
 
-from backend.config import SESSION_IDLE_S
+from backend.config import SESSION_IDLE_S, TIME_SCALE
 
 # The CYD runs the real idle timeout (SESSION_IDLE_S since its last touch) and reports it
 # as end_session reason "idle". This laptop-side timeout is only the safety net for when
@@ -411,41 +411,81 @@ def _touch_session(astronaut_id):
         active_sessions[astronaut_id]["last_activity"] = time.time()
 
 
+def _cyd_is(astronaut_id):
+    """Only the astronaut on the CYD right now should see its workout/sleep screens."""
+    return astronaut_id in active_sessions
+
+
+def start_toggle(conn, astronaut_id, kind, key, label, send_fn, emit_fn):
+    """Start a sleep or workout timer (a tag tap, or Astra: "I'm going to bed")."""
+    open_toggles[key] = {"astronaut_id": astronaut_id, "kind": kind, "started_at": time.time(), "started_iso": _now_iso()}
+    _touch_session(astronaut_id)
+    if _cyd_is(astronaut_id):
+        if kind == "exercise":
+            send_fn(protocol.exercise("start", 0))
+            send_fn(protocol.toast(f"Workout started: {label}"))
+        else:
+            send_fn(protocol.sleep("start", 0))
+            send_fn(protocol.toast("Good night"))
+    emit_fn("cyd_event", {"type": f"{kind}_start", "astronaut_id": astronaut_id})
+    _request_analysis(astronaut_id, f"{kind}_start")
+
+
+def stop_toggle(conn, key, send_fn, emit_fn):
+    """Stop a running timer and log it. The duration is measured on the MISSION clock
+    (x TIME_SCALE), the same clock as the schedule and reminders -- so a 5-minute demo
+    nap logs 5 hours, not 0.1. Returns {"kind", "minutes"|"hours", "level"}."""
+    info = open_toggles.pop(key)
+    astronaut_id, kind = info["astronaut_id"], info["kind"]
+    mission_s = (time.time() - info["started_at"]) * TIME_SCALE
+    _touch_session(astronaut_id)
+    out = {"kind": kind, "astronaut_id": astronaut_id}
+    if kind == "exercise":
+        minutes = max(1, round(mission_s / 60))
+        conn.execute(
+            "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, ?, ?, ?, ?)",
+            (astronaut_id, "exercise", info["started_iso"], _now_iso(), json.dumps({"minutes": minutes, "tag": key})),
+        )
+        lvl = health_rules.evaluate("exercise", minutes)
+        conn.execute("INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'exercise', ?, ?, 'tag')",
+                     (astronaut_id, _now_iso(), json.dumps(minutes), lvl))
+        if _cyd_is(astronaut_id):
+            send_fn(protocol.exercise("stop", minutes))
+            send_fn(protocol.toast(f"Workout done: {minutes} min"))
+        emit_fn("cyd_event", {"type": "exercise_stop", "astronaut_id": astronaut_id, "minutes": minutes})
+        out.update(minutes=minutes, level=lvl)
+    else:
+        hours = round(mission_s / 3600, 1)
+        conn.execute(
+            "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, ?, ?, ?, ?)",
+            (astronaut_id, "sleep", info["started_iso"], _now_iso(), json.dumps({"hours": hours})),
+        )
+        lvl = health_rules.evaluate("sleep", hours)
+        conn.execute("INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'sleep', ?, ?, 'tag')",
+                     (astronaut_id, _now_iso(), json.dumps(hours), lvl))
+        if _cyd_is(astronaut_id):
+            send_fn(protocol.sleep("stop", hours))
+            send_fn(protocol.toast(f"Slept {hours} h"))
+        emit_fn("cyd_event", {"type": "sleep_stop", "astronaut_id": astronaut_id, "hours": hours})
+        out.update(hours=hours, level=lvl)
+    _request_analysis(astronaut_id, f"{kind}_stop")
+    return out
+
+
+def running_toggle(astronaut_id, kind):
+    """The key of this astronaut's running sleep/workout timer (tag- or voice-started)."""
+    for key, info in open_toggles.items():
+        if info["astronaut_id"] == astronaut_id and info["kind"] == kind:
+            return key
+    return None
+
+
 def _handle_object_tag(conn, tag, send_fn, emit_fn):
     kind = tag["type"]
     extra = json.loads(tag["data_json"] or "{}")
 
     if tag["uid"] in open_toggles:
-        info = open_toggles.pop(tag["uid"])
-        astronaut_id = info["astronaut_id"]
-        started_at = info["started_at"]
-        duration_s = time.time() - started_at
-        _touch_session(astronaut_id)
-        if kind == "exercise":
-            minutes = max(1, round(duration_s / 60))
-            conn.execute(
-                "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, ?, ?, ?, ?)",
-                (astronaut_id, "exercise", info["started_iso"], _now_iso(), json.dumps({"minutes": minutes, "tag": tag["uid"]})),
-            )
-            lvl = health_rules.evaluate("exercise", minutes)
-            conn.execute("INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'exercise', ?, ?, 'tag')",
-                         (astronaut_id, _now_iso(), json.dumps(minutes), lvl))
-            send_fn(protocol.exercise("stop", minutes))
-            send_fn(protocol.toast(f"Workout done: {minutes} min"))
-            emit_fn("cyd_event", {"type": "exercise_stop", "astronaut_id": astronaut_id, "minutes": minutes})
-        elif kind == "sleep":
-            hours = round(duration_s / 3600, 1)
-            conn.execute(
-                "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, ?, ?, ?, ?)",
-                (astronaut_id, "sleep", info["started_iso"], _now_iso(), json.dumps({"hours": hours})),
-            )
-            lvl = health_rules.evaluate("sleep", hours)
-            conn.execute("INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'sleep', ?, ?, 'tag')",
-                         (astronaut_id, _now_iso(), json.dumps(hours), lvl))
-            send_fn(protocol.sleep("stop", hours))
-            send_fn(protocol.toast(f"Slept {hours} h"))
-            emit_fn("cyd_event", {"type": "sleep_stop", "astronaut_id": astronaut_id, "hours": hours})
-        _request_analysis(astronaut_id, f"{kind}_stop")
+        stop_toggle(conn, tag["uid"], send_fn, emit_fn)
         return
 
     if kind in ("exercise", "sleep"):
@@ -453,16 +493,7 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
         if astronaut_id is None:
             send_fn(protocol.toast("Tap your card first", "YELLOW"))
             return
-        open_toggles[tag["uid"]] = {"astronaut_id": astronaut_id, "kind": kind, "started_at": time.time(), "started_iso": _now_iso()}
-        _touch_session(astronaut_id)
-        if kind == "exercise":
-            send_fn(protocol.exercise("start", 0))
-            send_fn(protocol.toast(f"Workout started: {tag['label']}"))
-        else:
-            send_fn(protocol.sleep("start", 0))
-            send_fn(protocol.toast("Good night"))
-        emit_fn("cyd_event", {"type": f"{kind}_start", "astronaut_id": astronaut_id})
-        _request_analysis(astronaut_id, f"{kind}_start")
+        start_toggle(conn, astronaut_id, kind, tag["uid"], tag["label"], send_fn, emit_fn)
         return
 
     # one-shot object tags: meal, medicine, bp_guide

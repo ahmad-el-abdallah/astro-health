@@ -1,6 +1,6 @@
 // The Flight Surgeon's alert feed, built from real data only:
 // - every open (unacknowledged) alert from the alerts table -- RED by design (a RED
-//   assessment, a RED discomfort report, or one the crew member asked Doctor AI to send);
+//   assessment, a RED discomfort report, or one the crew member asked Astra to send);
 // - today's out-of-range readings and symptom reports from each crew card's snapshot;
 // - crew members with no reading in the last 24 h.
 // Pure (unit-tested in feed.test.js); the Crew overview shows the top few, the Alerts

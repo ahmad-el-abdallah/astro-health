@@ -1,13 +1,13 @@
-// Crew · Doctor AI & body. Laid out like the user's reference dashboard: a realistic
+// Crew · Astra & body. Laid out like the user's reference dashboard: a realistic
 // x-ray anatomy model in the centre (src/three/anatomy), the patient and the selected
 // region on the left, lab-style vitals with sparklines on the right, the last 7 days
-// along the bottom, and the Doctor AI consultation in a slide-in drawer.
+// along the bottom, and the Astra consultation in a slide-in drawer.
 // Ports every feature of the old Body tab (static/js/tabs/body.js): region selection +
 // camera fly-to, 0-10 discomfort per region blended into the region's color, About this
 // part, danger alert + consent-gated report, Analyze symptoms, the readings form, the
 // AI chat with all its actions, and Face to Face.
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAstronautPicker } from "../../auth/AuthProvider.jsx";
@@ -22,8 +22,7 @@ import { REGIONS } from "../../three/anatomy/regions.js";
 import { STRINGS } from "../../strings.js";
 import { WebGLBoundary } from "../../three/webgl.jsx";
 import { ChatDrawer } from "./body/ChatDrawer.jsx";
-import { VoiceMode } from "./body/VoiceMode.jsx";
-import { audioCtx } from "../../lib/stationAudio.js";
+import { useAstra } from "../../components/AstraProvider.jsx";
 import { useConsultation } from "./body/useConsultation.js";
 import { LAB_INDICATORS, LabTile, LogReadingCard, ProfileCard, RegionCard, Timeline } from "./body/Panels.jsx";
 
@@ -88,8 +87,13 @@ function BodyFor({ astroId }) {
   const [layers, setLayers] = useState({ skin: true, muscles: false, bones: true, organs: true });
   const [resetSignal, setResetSignal] = useState(0);
   const [chatOpen, setChatOpen] = useState(params.get("consult") === "1");
-  const [voiceOpen, setVoiceOpen] = useState(false); // the full-screen voice screen, chat hidden
-  const openVoice = () => { audioCtx(); setChatOpen(false); setVoiceOpen(true); };
+  // Astra (components/AstraProvider.jsx) owns the voice screen and -- for a crew member
+  // looking at their own body -- the one shared conversation. The Flight Surgeon viewing a
+  // crew member gets a local text chat only (no AI voice for the surgeon, by design).
+  const navigate = useNavigate();
+  const astra = useAstra();
+  const shared = astra.available && astra.astroId === astroId;
+  const openVoice = shared ? () => { setChatOpen(false); astra.open(); } : null;
 
   const s = summary.data;
   const today = useMemo(() => s?.today || {}, [s?.today]);
@@ -114,15 +118,23 @@ function BodyFor({ astroId }) {
     }
   }, [astroId, qc, toast]);
 
-  const consultation = useConsultation({
+  const local = useConsultation({
     astroId,
     content: content.data,
     mission: mission.data,
     persistDiscomfort,
     selectRegion: setSelected,
+    onNavigate: navigate,
   });
-  const { ensureConversation } = consultation;
-  useEffect(() => { if (s?.astronaut) ensureConversation(s.astronaut.name); }, [s?.astronaut, ensureConversation]);
+  const consultation = shared ? astra.consultation : local;
+  const { ensureConversation } = local;
+  useEffect(() => { if (!shared && s?.astronaut) ensureConversation(s.astronaut.name); }, [shared, s?.astronaut, ensureConversation]);
+  // While this page is open, Astra's replies drive the twin too (select + draft the region).
+  const { linkBody } = astra;
+  useEffect(() => linkBody({
+    selectRegion: setSelected,
+    onDiscomfort: (region, intensity) => setDraft((d) => ({ ...d, [region]: intensity })),
+  }), [linkBody]);
 
   useEffect(() => {
     if (chatOpen || params.get("consult") !== "1") return;
@@ -180,14 +192,16 @@ function BodyFor({ astroId }) {
     <>
       <motion.div variants={{ initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 } }} className="flex flex-wrap items-center gap-3">
         <p className="m-0 mr-auto max-w-2xl text-[15px] text-ink-2">
-          Describe how you feel or tap your twin — Doctor AI compares it with your own baseline and tells you what to do next.
+          Describe how you feel or tap your twin — Astra compares it with your own baseline and tells you what to do next.
         </p>
         <Button onClick={() => setChatOpen(true)}>
           <Icon name="doctor-ai" size={17} /> Chat
         </Button>
-        <Button variant="primary" onClick={openVoice}>
-          <Icon name="waveform" size={17} /> Talk to Doctor AI
-        </Button>
+        {openVoice && (
+          <Button variant="primary" onClick={openVoice}>
+            <Icon name="waveform" size={17} /> Talk to Astra
+          </Button>
+        )}
       </motion.div>
 
       <div role="radiogroup" aria-label="Body region" className="flex flex-wrap gap-2">
@@ -278,14 +292,6 @@ function BodyFor({ astroId }) {
         astroId={astroId}
         onVoiceMode={openVoice}
       />
-      {voiceOpen && (
-        <VoiceMode
-          onClose={() => setVoiceOpen(false)}
-          astroId={astroId}
-          submit={consultation.submit}
-          thinking={consultation.thinking}
-        />
-      )}
     </>
   );
 }

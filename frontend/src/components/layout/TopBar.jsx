@@ -7,6 +7,44 @@ import { useAstronautPicker, useAuth } from "../../auth/AuthProvider.jsx";
 import { useAlerts, useMission } from "../../lib/queries.js";
 import { Icon } from "../ui/Icon.jsx";
 import { DoctorTools } from "./DoctorTools.jsx";
+import { useAstra } from "../AstraProvider.jsx";
+import { cx } from "../ui/index.jsx";
+
+// The Astra pill (crew only): is she listening for her name? Click to switch her on/off.
+const PILL = {
+  listening: { dot: "bg-good-fg animate-[ah-pulse-dot_2s_ease-in-out_infinite]", text: "Say \u201cAstra\u201d", tone: "text-ink" },
+  paused: { dot: "bg-accent-text", text: "Astra is talking", tone: "text-ink" },
+  starting: { dot: "bg-subtle", text: "Astra starting…", tone: "text-ink-2" },
+  off: { dot: "bg-subtle", text: "Astra off", tone: "text-ink-2" },
+  elsewhere: { dot: "bg-subtle", text: "Astra in another tab", tone: "text-ink-2", hint: "Astra listens in the tab you used last (two tabs can't share the microphone). Click anywhere in this tab to bring her here." },
+  blocked: { dot: "bg-check-fg", text: "Mic blocked", tone: "text-check-fg", hint: "The browser blocked the microphone. Allow it in the site settings (the icon left of the address), then click here twice." },
+  insecure: { dot: "bg-check-fg", text: "Astra needs localhost", tone: "text-check-fg", hint: "Browsers only allow the microphone on localhost or https. Open the app as http://localhost:5000 on the computer running it." },
+  unsupported: { dot: "bg-check-fg", text: "No voice here", tone: "text-check-fg", hint: "This browser can't recognise speech. Use Chrome or Edge." },
+};
+
+function AstraPill() {
+  const astra = useAstra();
+  if (!astra.available) return null;
+  const p = PILL[astra.state] || PILL.off;
+  const needsClick = astra.enabled && astra.state === "listening" && !astra.activated;
+  const title = p.hint
+    || (astra.enabled ? "Astra is listening for her name on every page. Click to switch her off." : "Click to let Astra listen for her name.")
+    + (needsClick ? " Click anywhere once so she can talk back." : "");
+  return (
+    <button
+      onClick={() => astra.setEnabled(!astra.enabled)}
+      aria-pressed={astra.enabled}
+      aria-label={`Astra: ${p.text}. ${title}`}
+      title={title}
+      className={cx("flex min-h-11 cursor-pointer items-center gap-2 ah-glass rounded-full px-3.5 text-[13px] font-semibold hover:border-accent-text/50", p.tone)}
+    >
+      <Icon name="waveform" size={15} className="text-accent-text" />
+      <span className={cx("h-2 w-2 rounded-full", p.dot)} />
+      <span className="max-md:hidden">{p.text}</span>
+      {needsClick && <span className="text-[11px] font-medium text-check-fg max-lg:hidden">· click once for voice</span>}
+    </button>
+  );
+}
 
 export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = null }) {
   const { isSurgeon, signOut } = useAuth();
@@ -41,6 +79,8 @@ export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = 
           </motion.h1>
         </AnimatePresence>
       </div>
+
+      <AstraPill />
 
       <Link
         to="/mission"

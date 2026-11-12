@@ -75,7 +75,7 @@ firmware/esp32s3_nfc_reader/ dead hardware, kept for reference only -- see "Pico
                              replaces the dead ESP32-S3" below, do not try to revive this board
 firmware/pico_nfc_reader/   the live NFC reader: Pico + PN532, USB-straight-to-laptop
 firmware/existing/          reference-only copies of Lifeline's lock sketch + nfc_link.h
-tests/                      pytest (227) -- flat, one test_<module>.py per backend module, plus
+tests/                      pytest (243) -- flat, one test_<module>.py per backend module, plus
                              test_spa.py (SPA serving), test_cyd_logout.py, test_scheduler.py
 docs/build-prompt.md        the original 16-section spec
 docs/CLAUDE.md              these notes (root CLAUDE.md only imports this)
@@ -2589,11 +2589,365 @@ frontend tests. **Not yet confirmed with the real Pico + a real card** -- if a t
 ever lost, check the server's terminal for the scan line to tell a reader/USB problem from a
 browser one.
 
+## "Astra": a wake word that calls the AI from any page (2026-11-12)
+
+User: "call the AI by saying her name 'Astra' ... voice always on ... from any page". Decided
+with the user: rename the AI to Astra everywhere, crew only (still no AI for the Flight
+Surgeon), and "Astra, <question>" in one breath is answered straight away (the name alone
+beeps and listens).
+
+- **`frontend/src/lib/wakeWord.js`**: `findWakeCommand(text)` (pure; "astra"/"hey|hi|ok|okay
+  astra" + a few mishearings, word-bounded so "astronaut"/"Astro Health"/"extra" never match;
+  returns `{question}`) and `createWakeListener()` -- a continuous SpeechRecognition that acts
+  only on FINAL results (from `e.resultIndex`), restarts itself on every `end` (0.3 s, backing
+  off to 5 s after errors), stops for good on `not-allowed` ("blocked"), `pause()/resume()`.
+- **`frontend/src/components/AstraProvider.jsx`** (mounted once in `App.jsx`, inside the router
+  and AuthProvider): runs the listener only for a signed-in crew member, not on /admin or
+  /status-board, only in a secure context (localhost/https), and pauses it while the voice
+  screen is open (one recognition at a time); a wake while `voiceState.speaking` is ignored so
+  Astra can't wake herself. Owns the **one shared conversation** (`useConsultation`) and the
+  **global voice screen** (`VoiceMode`, moved out of `Body.jsx`; new `initialQuestion` prop).
+  `useAstra()` = `{available, astroId, consultation, open(question?), enabled, setEnabled,
+  state, activated, linkBody}`. The Body page uses the shared conversation when the viewed
+  astronaut is the signed-in crew member (the surgeon viewing someone keeps a local text chat,
+  no voice buttons) and `linkBody()`s its region select + discomfort draft so the twin still
+  follows Astra's replies. Full page reload = fresh conversation (in-memory, as before).
+- **Top bar Astra pill** (`TopBar.jsx`): Say "Astra" / Astra off / Mic blocked / Astra needs
+  localhost / No voice here, plus "click once for voice" until the page has had a click
+  (`navigator.userActivation`, browsers block sound before that). Click toggles; localStorage
+  `ah-astra`, default on.
+- **Rename**: every "Doctor AI" in `frontend/src`, `config/ai_analyst.json` (`"You are Astra,
+  ..."`) and the README -> "Astra" (nav "Astra & body" / "Body & Astra"). The `doctor-ai` icon
+  name and this file's dated history are unchanged.
+- **Limits, stated to the user**: Chrome/Edge only; the mic stays open while Astra is on and
+  Chrome streams it to Google (Edge: Microsoft); localhost/https only (a LAN `http://ip` page
+  gets "Astra needs localhost"); the tab must stay open.
+- **Verified**: 44 frontend tests (7 new wake-word), lint clean, dist rebuilt; backend
+  unchanged (prompt text only). Isolated :5057 copy, real Groq key, fake continuous + one-shot
+  recognition: 16/16 checks -- background listener on Overview, pill text, no wake without
+  the name, "Astra, how am I doing?" opens the voice screen and a real AI reply is spoken,
+  listener paused during the call and resumed after, "hey astra" on Trends beeps (2525 Hz) and
+  listens, auto-restart after a network error, pill off releases the mic and on restores it,
+  labels say Astra, surgeon gets no listener/pill. A first "shared conversation" check passed
+  falsely (it matched the "How am I doing?" chip, after a full reload) -- redone with in-app
+  navigation and exact text: the voice question and reply both appear in the Body chat.
+  **Not yet tried with a real microphone** -- the user checks in real Chrome/Edge on localhost.
+
+## Astra actions: open pages and fill things in, with a yes/no check (2026-11-12)
+
+User: Astra should "take me to pages" and "type inputs for me ... my mood is low will auto log
+mood". Decided with the user: **ask first, then save**; she can log mood + sleep, symptoms +
+pain, vitals, journal entries and alerts to the flight surgeon; "take me to …" on the voice
+screen closes it and shows the page.
+
+- **`backend/services/analyst.py`**: the chat answer is now `{reply, actions[]}`. `parse_chat
+  (raw, symptom_ids)` validates each action on its own (`_clean_action`): `navigate` (8 page
+  ids), `log_mood` (5 moods + note), `log_sleep` (HH:MM, not equal), `log_symptoms` (catalog
+  ids only), `log_vitals` (sane limits, BP needs both numbers, no bools), `log_discomfort`,
+  `journal`, `alert_surgeon`; a bad one is dropped, max 4. An old-style top-level
+  region/intensity still becomes `log_discomfort`. `_chat_prompt` lists the shapes, values and
+  **four short examples** (added after the live test: without them the model once asked
+  "Should I add a journal entry…?" but sent no action, and dropped mood notes). Safety net:
+  `_offers_without_action` -- a "should I / want me to" reply with no save action gets ONE
+  corrective retry. `can_act=False` (surgeon asking about a crew member) adds a note so the
+  model doesn't offer anything, and actions are emptied (also emptied in the route).
+- **`/chat` route**: passes the symptom catalog; actions only when
+  `auth.current_astronaut_id() == astro_id`.
+- **Frontend**: `lib/astraActions.js` (`PAGES`, `describeAction`, `doneSentence`, `isYes`/`isNo`
+  -- short answers only, so "yes and what's my heart rate…" is a new question -- and
+  `runActions` through the normal routes: /mood, /sleep, /symptoms, /assess, /discomfort (via
+  the shared `persistDiscomfort` so the twin follows), /journal, /alert). `useConsultation`
+  keeps `pending` (+ ref) and a `confirm` card on the message; `submit()` answers a pending
+  card locally on yes/no (never sent to the AI), otherwise drops it ("Skipped") and asks the
+  AI; it returns `{text, navigate}`. `confirm()`/`cancel()` back the buttons; `goTo()` calls
+  `onNavigate` (AstraProvider: close the voice screen + `navigate`; Body's local chat:
+  `navigate`). ChatDrawer: `ConfirmCard` (Yes, save / No, then Saved ✓ / Not saved /
+  Skipped). VoiceMode: the same card under the orb ("Say yes to save or no to cancel"), and
+  after "Opening …" it calls `onNavigate`, which closes it.
+- **Test isolation fix found on the way**: every test app started a real Pico reader thread
+  that outlived its test -- it could open the real reader on this laptop and, later, the fake
+  port in `test_pico_bridge.py` (that test then saw 2 opens and failed). `app.py` now skips
+  `pico_bridge.start()` when `ASTRO_NO_PICO=1`, which `tests/conftest.py` sets.
+- **Free-tier note**: a burst of chat + the analyses that each save triggers can exceed Groq's
+  ~8K tokens/minute; the run then got 502/503 for a minute (chat falls back to keyword replies).
+- **Verified**: 242 backend + 52 frontend tests, lint clean, dist rebuilt. Live with the real
+  Groq key on an isolated copy: voice "my mood is low, I'm stressed" -> card "Log mood: low ·
+  note: stressed" -> spoken "yes" -> saved, "Done, I saved your mood as low."; voice "take me
+  to the sleep page" -> "Opening Sleep page." -> on /sleep, screen closed; text vitals 72 bpm /
+  37.4 °C -> nothing saved until Yes, then both saved; "I have a headache" -> No -> nothing
+  saved; sleep 23:00-06:00, journal entry, dizzy alert (received by the surgeon) all saved
+  after Yes; surgeon asking to log for Ahmad -> "I can't log data for you", no actions.
+  **Not yet tried with a real microphone.**
+
+## "Sometimes Astra doesn't answer and I need to refresh" (2026-11-12)
+
+Traced every place the voice/chat flow could wait forever; each got a fix, and the freezes were
+reproduced in a browser before and after:
+1. **Neural voice + locked audio froze on "Speaking…" forever.** A page that hasn't been
+   clicked since load has a *suspended* AudioContext; `playNeural` started a source that never
+   played, so `ended` never fired. Now `playNeural` throws `audio-locked` if the context won't
+   run (-> browser voice) and has a safety timer (clip length + 3 s).
+2. **"Thinking…" could last a minute+** (up to 3 AI calls x 20 s). `analyst.chat` now has a
+   whole-turn budget (`CHAT_BUDGET_S = 22`, retries only if >= 5 s left, each call gets the
+   remaining time); `useConsultation` aborts `/chat` after 25 s and says "Sorry, I couldn't reach
+   my AI just now…".
+3. **The keyword fallback saved discomfort without asking** ("what's my heart rate?" -> heart
+   5/10 logged) -- found by test B, contradicting the "ask first" rule. The fallback now never
+   saves; it says it couldn't reach the AI and adds the mentioned body part's advice.
+4. **The wake-word listener could go deaf silently.** `createWakeListener` has a watchdog
+   (`WATCHDOG_MS = 45000`: no start/audio/sound/speech/result/error event -> throw the session
+   away and start fresh) and `restart()`, which AstraProvider calls on tab visibility/focus.
+5. **Voice screen safety nets**: stuck on Thinking/Speaking for 40 s -> cancel, "That took too
+   long…", listen again; idle (not listening) with the mic on -> start listening after 2.5 s.
+   Chrome's speech queue is cleared/resumed before each browser-voice utterance.
+
+Every recovery logs a `[astra] …` console warning, so the user can open DevTools and tell what
+happened next time. Verified on an isolated copy with the real key: (A) neural engine with audio
+locked -> browser voice, then listening again; (B) `/chat` never answering -> after ~27 s the
+"couldn't reach" reply, nothing saved, listening again; (C) the voice screen's recognition failing
+to start once -> started by itself. 243 backend + 53 frontend tests.
+
+## Talking over Astra ("barge-in"), and she remembers where she was cut off (2026-11-12)
+
+User: "when I cut her speak, stop the answer and wait for my words, but still remember what I
+said before the cutting".
+
+- **`frontend/src/lib/bargeIn.js`** (pure, tested): `isBargeIn(heard, replyText)` -- two+ words
+  that aren't in what she's saying, or mostly-new speech, or a stop word ("stop", "wait",
+  "hold on", "hey Astra"…); `isEcho(final, replyText)` -- her own words leaking from the
+  speakers into the mic (all words hers, or a long run with one misheard word; a short "yes" is
+  never echo, so answering her "Should I…?" works); `isStopCommand`; `spokenPart(text, chars)`.
+- **`useVoice`**: `startListening({ keepSpeaking: true })` listens WITHOUT cancelling speech;
+  `currentText()` / `spokenSoFar()` (browser voice: `onboundary` charIndex; neural voice:
+  elapsed / clip length via `stationAudio.output.startedAtMs/durationMs`).
+- **`VoiceMode`**: as soon as she starts speaking it starts a keepSpeaking listen (and keeps
+  re-listening on silence while she talks). `onInterim` -> `isBargeIn` -> `interrupt()`: note
+  `spokenSoFar()`, bump `turnRef` (the spoken turn's continuation stops: no navigate, no
+  re-listen), `cancel()` the voice only, `onInterrupted(soFar)`. The finished sentence then
+  arrives in `onFinal` and becomes the next question. Gotcha found by the live test: browsers
+  deliver a final result through `onresult` first, so `onInterim` already stopped her by the
+  time `onFinal` runs -- `cutInRef` remembers that, so a bare "stop" right after cutting in is
+  "stop and wait" (nothing sent), not a question. Status shows "Speaking" while she talks even
+  though it's also listening. Tapping the orb uses the same `interrupt()`.
+- **`useConsultation.markInterrupted(heard)`**: the last assistant turn in the AI history
+  becomes `<full reply> [interrupted: the astronaut cut me off after "<what she'd said>…" and did
+  not hear the rest]`, so the conversation (including your earlier questions) is kept and her
+  next answer picks up sensibly. Wired through AstraProvider -> `onInterrupted`.
+- **Echo caveat**: speaker output picked up by the mic is filtered by comparing with her own
+  words; headphones (or a quieter speaker) make cutting in most reliable.
+- **Verified** live (real Groq, scripted fake mic): her own voice during the first answer was
+  ignored; "wait what about my sleep" stopped her mid-answer and became the next question; the
+  AI history showed the cut-off marker ("…after \"You have no vitals, symptoms or discomfort
+  logged yet today. Your…\"") plus the earlier question; a bare "stop" during the next answer
+  stopped her and sent nothing. 58 frontend tests (5 new), lint clean, dist rebuilt.
+
+## More voice options on /admin: echo levels, male voices, speed, pitch, radio, presets (2026-11-12)
+
+User: "more options in the admin page: one with less echo, one with no echo, one for male, and
+any other option". The old single `fx` on/off became separate settings.
+
+- **`backend/voice_settings.py`** stores these settings:
+  - `engine`
+  - `voice`: 14 edge-tts voices, 7 female and 7 male, US/GB/AU, each id checked against
+    `edge_tts.list_voices()`. `VOICES` maps an id to (label, gender).
+  - `browser_gender`: female or male.
+  - `echo`: off, light, medium or strong.
+  - `radio`, `beeps`, `hum`: real booleans.
+  - `rate`: 0.8–1.3.
+  - `pitch`: low, normal or high.
+
+  It has three other jobs:
+  - `_upgrade()` converts an old saved `fx`: true becomes medium echo plus beeps and hum,
+    false becomes all off.
+  - `validate(body, base)` returns a 400 message for any bad value.
+  - `public()` sends voices as `[{id, label, gender}]`.
+- **`backend/services/voice.py`**: `synthesize(text, voice, rate, pitch)` passes edge-tts's
+  own `rate` ("+20%") and `pitch` (±12 Hz) options, so speed and pitch are real changes to the
+  voice, not audio tricks.
+  - `/speak` uses the saved values.
+  - `/admin/voice-test` validates the card's **unsaved** form and speaks with it.
+- **`lib/stationAudio.js`**:
+  - `echoParams(level)` gives each level's reverb tail, wet amount, delay, feedback and echo.
+    It returns null for off; an unknown level counts as medium.
+  - `playNeural(buf, { echo, radio })` builds no convolver at all when echo is off.
+  - The radio chain is a 300 Hz high-pass, a 3400 Hz low-pass, a 1500 Hz band-pass, and a
+    tanh WaveShaper crackle.
+- **`useVoice`**:
+  - The browser voice uses `1.02 × rate` and pitch 0.85 / 1 / 1.15.
+  - `pickVoice(voices, "male")` tries Guy/Andrew first, then a `MALE_NAMES` match, then an
+    English voice whose name isn't clearly female.
+  - The new tests found a real bug: the female rule's `google` also matched "Google UK English
+    Male". The female path now skips male names.
+- **`VoiceMode`**: the cabin hum follows `hum` and the start beep follows `beeps`.
+- **The Admin card** has:
+  - 5 presets: Station comms (the default), Clean, Ship computer, Mission control radio,
+    Captain. The highlight follows the form; editing any field clears it.
+  - Engine.
+  - Voice: the neural dropdown in Female/Male groups, or Female/Male buttons for the browser
+    engine.
+  - Echo buttons, and the Space radio switch: both greyed out on the browser engine.
+  - Beeps and hum switches.
+  - A speed slider and pitch buttons.
+  - Test voice and Save. "Not saved yet" shows when anything differs.
+- **Verified**:
+  - 246 backend and 62 frontend tests pass, lint is clean, and dist is rebuilt.
+  - A headless check on an isolated :5057 copy passed 28/28, with real edge-tts and Web Audio
+    instrumented:
+    - Clean: no convolver, no beeps, no band-pass.
+    - Captain, Station comms and Radio: reverb plus 2525/2475 Hz beeps. Only Radio has the
+      band-pass.
+    - The browser engine with Male picks "Google UK English Male" at pitch 1.15.
+    - Echo controls are disabled on the browser engine.
+    - Strong echo plus Ryan saves and reads back from `/api/voice-settings`.
+    - No page errors.
+  - The card has no horizontal scroll at 390 px.
+  - **Not yet heard through real speakers**: the user judges the presets with Test voice.
+
+## "Sometimes I call Astra and she doesn't answer" (2026-11-12)
+
+Four separate causes. Each one is fixed and checked in a browser (15/15 new checks, plus the
+16 older Astra checks still pass):
+
+1. **Phrases the browser never finished were lost.** The wake listener only acted on FINAL
+   results, but Chrome sometimes leaves a phrase "in progress" for a long time, or ends the
+   session before finishing it.
+   - An in-progress phrase that already has the name now wakes her after `interimMs`. That's
+     1 s for the name alone, 1.5 s if words follow it.
+   - She also wakes at once if the session ends with the name half-heard.
+   - Each result index fires once, so a late final can't wake her a second time.
+   - Pausing drops a half-heard name (`disarmSession`).
+2. **Mishearings.**
+   - `maxAlternatives = 3`, and every guess is checked.
+   - The name also matches "Astro", "Austra", "Ostra" and "Astrid".
+   - "Astro Health" (the app's own name) is excluded, and "astronaut" / "extra" still never
+     match.
+   - The restart after a normal session end is now 100 ms (was 300), to lose less speech in
+     the gap.
+3. **Two tabs fought over the microphone**, so neither heard anything. Fixed in
+   `AstraProvider`:
+   - A `BroadcastChannel("ah-astra-mic")` gives the mic to the tab used last (shown, focused
+     or clicked).
+   - The other tabs stop listening; their pill shows "Astra in another tab".
+   - Closing the owner tab hands the mic back to a visible tab.
+   - The wake handler also pauses the listener right away, before the voice screen starts its
+     own recognition.
+4. **She answered in silence on a page nobody had clicked yet** (after a reload or an NFC
+   login). Browsers block speechSynthesis and Web Audio until a click.
+   - `VoiceMode` checks `navigator.userActivation.hasBeenActive`. While it's false, it shows a
+     **"Tap so Astra can talk"** button and her words as text.
+   - The tap replays her answer with sound.
+   - Any other tap or keypress just unlocks sound.
+   - Gotcha: the global pointerdown listener must skip the button itself
+     (`data-unlock-sound`). Otherwise the button is removed before its click fires and nothing
+     replays.
+
+Wake events log `[astra] wake word (final|unfinished|session ended): "…"` at info level, and
+phrases without her name log at debug ("Verbose" in DevTools). If she ever misses a call, that
+log shows what the browser actually heard.
+
+Testing gotchas:
+- Playwright's `page.evaluate` counts as a user gesture, so a "never clicked" page can't be
+  produced that way. Fake `navigator.userActivation` in an init script instead, kept across the
+  app's reloads with a sessionStorage flag.
+- The seed no longer creates a fake test card: insert `A1000001` into the isolated copy's
+  `tags` table first.
+
+## Astra's 12 new abilities: talking to the doctor, speaking first, doing things (2026-11-13)
+
+User asked for ideas for what Astra should be able to do and picked all 12 suggestions. The
+two examples they gave (alert on bad vitals; "I'm tired, tell the doctor") already existed:
+the analysis alerts on RED, and `alert_surgeon` with a yes card.
+
+**Talking to the doctor**
+- Messages: `POST /astronauts/<id>/message` is a normal crew → surgeon message via
+  `comms.queue_report`, not an alert. It is delayed like everything else.
+- Health summary: `POST .../summary-report {period: today|week}`, written by
+  `analyst.summary()`. With no AI, `_summary_fallback` sends the latest analysis plus the
+  7-day stats.
+- Alert seen: `/alerts/<id>/ack` now emits `astronaut_id`, `text` and `deliver_at` (now +
+  comms delay). The crew page tells them only after the delay.
+- Voice SOS (`emergency` action, or `isEmergencyPhrase()` before the AI is even asked)
+  starts a 5 s countdown (`useConsultation` `emergency` / `cancelEmergency`), then
+  `POST /emergency`.
+  - **Gotcha:** her line says "say cancel", so a spoken "cancel" while she's still talking
+    looked like echo. `VoiceMode.onFinal` checks `isCancelPhrase` first while a countdown
+    runs.
+
+**Astra speaks first** (`lib/astraNotices.js` holds the pure rules, tested; `AstraProvider`
+listens; `components/astra/AstraNotice.jsx` is the card)
+- The events and their triggers:
+  - `analysis`: worse level, 10 min cooldown, and the event's new `alerted` flag
+  - `reminder`
+  - missed tasks: `lib/schedule.js` `withLiveStatus` (moved out of `Schedule.jsx`) on a
+    local 30 s tick, first check records only
+  - `message_delivered` from the surgeon
+  - `alert_acknowledged` (waits for `deliver_at`)
+  - `astra_followup`
+  - the daily briefing: localStorage `ah-briefing-<id>-<date>`; its question goes to the AI
+- `canSpeakNotice` allows speaking only when all of these hold:
+  - admin `notices` (new voice setting: speak/show/off) is "speak"
+  - the pill is on
+  - the page has been clicked
+  - this tab owns the mic
+  - no call is open
+  - the tab is visible
+  - ≤ 1 per minute
+- During a call, `consultation.announce()` adds the notice to the conversation, and
+  VoiceMode's `announcement` prop says it when idle.
+- Answer/Talk opens the call with an `opening` (spoken unless it already was) and the yes/no
+  card.
+- No AI calls happen for notices.
+
+**Doing things**
+- Sleep/workout by voice: `POST .../activity {kind, action}`.
+  - The start/stop bodies of `_handle_object_tag` became
+    `sessions.start_toggle/stop_toggle/running_toggle`. Voice keys are `web:<id>:<kind>`, and
+    a tag-started timer can be stopped by voice. CYD messages go only to the astronaut on the
+    CYD.
+  - **Durations are now measured on the mission clock (× TIME_SCALE), for tags too**: a
+    5-minute demo nap logs 5 h, not 0.1 h. This is a deliberate behaviour change.
+- `take_vitals`: `prepareActions()` turns it into a `log_vitals` card with real
+  `/simulate_vitals` numbers before the yes. She explains the `/assess` result.
+- Guided activities (`components/astra/GuidedActivity.jsx`) start at once with no card (they
+  save only at the end and have Stop):
+  - breathing (box 4-4-4-4 × 4, `chime()` per phase), saved via `/breathing`
+  - reaction test (5 trials, early tap = lapse), saved via `/reaction`; it shares
+    `_save_reaction` with the CYD
+  - measure guide (content.json `measure_guides`)
+
+  The first live run showed the AI reciting all the steps itself, so the prompt now says
+  "one short sentence, the app reads the steps".
+- Memory: the `astra_memory` table and `backend/logic/astra_memory.py`.
+  - `remember` / `forget` actions run without a card.
+  - Automatic notes with a 3-mission-hour follow-up after a low mood, pain ≥ 6, or symptoms.
+  - `emit_due` runs in the background loop. Browsers fetch `?due=1` on load.
+  - Account → "What Astra remembers" (self only; the surgeon gets 403).
+  - Chat context (`build_context(for_chat=True)`) now carries the last 3 messages, today's
+    alerts (seen / not seen) and up to 15 memories `[#id]`.
+
+**Groq's 400 "json_validate_failed"**: the free model sometimes writes broken JSON, and Groq
+then answers HTTP 400, not 200. `_call_once` now returns the `failed_generation` text, so the
+normal parse-or-retry path handles it. Before this, those turns failed as "AI busy". `/chat`
+and the summary now print `[astra] chat failed: <reason>` in the server terminal.
+
+**Verified live** (isolated :5057 copy, real Groq key, fake mic/voice in headless Chromium):
+- the briefing, and every notice type (at 600×)
+- message, summary
+- sleep by voice (0.3 h for 19 s at 60×), take my vitals
+- remember + recall
+- guide, reaction test, breathing
+- SOS cancel / real emergency
+- 07:00 reminder → Answer → sensor card → "yes" saves
+- surgeon 403 on memory
+- no page errors
+
+266 backend + 82 frontend tests. **Not yet heard with a real mic and speakers.**
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 227 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 266 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 37 Vitest tests (format, trends stats, alert feed, report text, voice);
+- `cd frontend && npm test` — 82 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

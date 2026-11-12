@@ -1,4 +1,4 @@
-// Voice for the Doctor AI chat and voice mode. Listening always uses the browser's Web
+// Voice for the Astra chat and voice mode. Listening always uses the browser's Web
 // Speech API (SpeechRecognition). Speaking uses the engine chosen on /admin
 // (GET /api/voice-settings):
 //   * "browser" -- speechSynthesis on this computer: offline, but no echo is possible
@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVoiceSettings } from "./queries.js";
 import { levelOf, output, playNeural, quindar, stopNeural } from "./stationAudio.js";
+import { spokenPart } from "./bargeIn.js";
 
 // Shared, mutable on purpose: the face/orb read `mouth` every animation frame without
 // making React re-render 60 times a second.
@@ -22,16 +23,37 @@ export const MAX_SPOKEN_CHARS = 600;
 export const MIC_DENIED = "Microphone permission denied - text input still works";
 export const STT_UNAVAILABLE = "Voice input unavailable in this browser - use text";
 const STORE_KEY = "ah-voice";
-const DEFAULT_SETTINGS = { engine: "browser", fx: true };
+const DEFAULT_SETTINGS = {
+  engine: "browser", browser_gender: "female", echo: "medium", radio: false, beeps: true, hum: true, rate: 1, pitch: "normal", notices: "speak",
+};
+const BROWSER_PITCH = { low: 0.85, normal: 1, high: 1.15 };
 
-/** A calm female voice first (Edge's "Aria"/"Jenny" Natural voices), then the spec's order:
- *  1. en-US/en-GB named female/Samantha/Zira/Google, 2. any "en*", 3. null (= default). */
-export function pickVoice(voices = []) {
+// Browser voices have no "gender" field, only names -- these are the common ones.
+const MALE_NAMES = /\b(male|guy|andrew|brian|christopher|eric|roger|steffan|david|mark|james|daniel|alex|fred|tom|oliver|arthur|aaron|ryan|thomas|william)\b/i;
+const FEMALE_NAMES = /\b(female|aria|jenny|ava|emma|michelle|samantha|zira|hazel|susan|karen|moira|tessa|victoria|sonia|libby|natasha|serena|kate)\b/i;
+
+/** The browser voice to use. female (default): Edge's "Aria"/"Jenny" first, then the spec's
+ *  order (en-US/en-GB named female/Samantha/Zira/Google, any "en*", null = default).
+ *  male: Edge's Guy/Andrew, Chrome's "Google UK English Male", Windows David/Mark, Mac
+ *  Daniel/Alex…, then any English voice that isn't clearly female. */
+export function pickVoice(voices = [], gender = "female") {
   const usGb = (v) => /^en[-_](us|gb)$/i.test(v.lang || "");
+  const en = (v) => /^en/i.test(v.lang || "");
+  if (gender === "male") {
+    return (
+      voices.find((v) => usGb(v) && /guy|andrew/i.test(v.name || "")) ||
+      voices.find((v) => usGb(v) && MALE_NAMES.test(v.name || "")) ||
+      voices.find((v) => en(v) && MALE_NAMES.test(v.name || "")) ||
+      voices.find((v) => en(v) && !FEMALE_NAMES.test(v.name || "")) ||
+      voices.find(en) ||
+      null
+    );
+  }
   return (
     voices.find((v) => usGb(v) && /aria|jenny/i.test(v.name || "")) ||
-    voices.find((v) => usGb(v) && /female|samantha|zira|google/i.test(v.name || "")) ||
-    voices.find((v) => /^en/i.test(v.lang || "")) ||
+    voices.find((v) => usGb(v) && /female|samantha|zira|google/i.test(v.name || "") && !/\bmale\b/i.test(v.name || "")) ||
+    voices.find((v) => en(v) && !MALE_NAMES.test(v.name || "")) ||
+    voices.find(en) ||
     null
   );
 }
@@ -79,16 +101,19 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
   const heardRef = useRef({ final: "", interim: "", failed: false, aborted: false });
   const rafRef = useRef(0);
   const tokenRef = useRef(0);
+  const progress = useRef(null); // { text, chars } of what she's saying now
   const live = useRef({});
   useEffect(() => {
     live.current = { onInterim, onFinal, onNoSpeech, voiceOn, settings, astroId, alwaysSpeak, handsFree };
   });
 
-  // Chrome fills getVoices() asynchronously: choose now, and again when the list arrives.
+  // Chrome fills getVoices() asynchronously: choose now, and again when the list arrives
+  // (and whenever the admin switches the browser voice between female and male).
+  const gender = settings.browser_gender;
   useEffect(() => {
     const s = getSynth();
     if (!s) return undefined;
-    const choose = () => { voiceRef.current = pickVoice(s.getVoices()); };
+    const choose = () => { voiceRef.current = pickVoice(s.getVoices(), gender); };
     choose();
     if (s.addEventListener) {
       s.addEventListener("voiceschanged", choose);
@@ -96,7 +121,7 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
     }
     s.onvoiceschanged = choose;
     return () => { s.onvoiceschanged = null; };
-  }, []);
+  }, [gender]);
 
   // Mouth: from the real loudness when the neural voice plays; otherwise jumps to 1 on each
   // word boundary and decays every frame, with a small oscillation while speaking.
@@ -135,8 +160,9 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
     const s = getSynth();
     if (!s) { resolve(); return; }
     const u = new window.SpeechSynthesisUtterance(text);
-    u.rate = 1.02;
-    u.pitch = 1;
+    const { rate = 1, pitch = "normal" } = live.current.settings || {};
+    u.rate = 1.02 * rate;
+    u.pitch = BROWSER_PITCH[pitch] ?? 1;
     if (voiceRef.current) {
       u.voice = voiceRef.current;
       u.lang = voiceRef.current.lang;
@@ -146,8 +172,14 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
     u.onstart = () => { if (token === tokenRef.current) setTalking(true); };
     u.onend = finish;
     u.onerror = finish;
-    u.onboundary = () => { voiceState.mouth = 1; };
+    u.onboundary = (e) => {
+      voiceState.mouth = 1;
+      if (progress.current && typeof e.charIndex === "number") progress.current.chars = e.charIndex + (e.charLength || 0);
+    };
     setTimeout(finish, 6000 + text.length * 110); // Chrome sometimes never fires onend
+    // Chrome's speech queue can get stuck "paused" (e.g. after the tab was hidden): clear it.
+    s.cancel();
+    if (s.paused) s.resume();
     s.speak(u);
   }), [setTalking]);
 
@@ -156,9 +188,10 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
     if (!text || (!cfg.alwaysSpeak && !cfg.voiceOn)) return;
     const spoken = String(text).slice(0, MAX_SPOKEN_CHARS);
     cancel();
+    progress.current = { text: spoken, chars: 0 };
     const token = tokenRef.current;
     const mine = () => token === tokenRef.current;
-    const { engine, fx } = cfg.settings;
+    const { engine, beeps, echo, radio } = cfg.settings;
     try {
       let audio = null;
       if (engine === "neural" && cfg.astroId) {
@@ -174,18 +207,20 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
         setPreparing(false);
       }
       setTalking(true);
-      if (fx) await quindar("start");
+      if (beeps) await quindar("start");
       if (!mine()) return;
       let played = false;
       if (audio) {
         try {
-          await playNeural(audio, { fx });
+          await playNeural(audio, { echo, radio });
           played = true;
-        } catch { /* undecodable audio: the browser voice below */ }
+        } catch (err) {
+          console.warn("[astra] neural voice couldn't play, using the browser voice:", err?.message || err);
+        }
       }
       if (!played && mine()) await speakBrowser(spoken, token);
       if (!mine()) return;
-      if (fx) await quindar("end");
+      if (beeps) await quindar("end");
     } finally {
       if (mine()) {
         setPreparing(false);
@@ -194,10 +229,24 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
     }
   }, [cancel, setTalking, speakBrowser]);
 
-  const startListening = useCallback(() => {
+  // What she's saying right now, and how much of it she'd actually said (whole words) --
+  // read this BEFORE cancel() when the astronaut interrupts.
+  const currentText = useCallback(() => progress.current?.text || "", []);
+  const spokenSoFar = useCallback(() => {
+    const p = progress.current;
+    if (!p) return "";
+    let chars = p.chars;
+    if (output.startedAtMs && output.durationMs) {
+      chars = Math.round(Math.min(1, (performance.now() - output.startedAtMs) / output.durationMs) * p.text.length);
+    }
+    return spokenPart(p.text, chars);
+  }, []);
+
+  // keepSpeaking: listen WHILE she talks (so you can talk over her) instead of stopping her.
+  const startListening = useCallback(({ keepSpeaking = false } = {}) => {
     if (!Recognition) { setError(STT_UNAVAILABLE); return; }
     if (recRef.current) return;
-    cancel(); // don't talk over the astronaut
+    if (!keepSpeaking) cancel(); // don't talk over the astronaut
     setError(null);
     const rec = new Recognition();
     rec.lang = "en-US";
@@ -275,7 +324,7 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
   }, []);
 
   return {
-    speak, cancel, startListening, stopListening, abortListening, voiceOn, toggleVoice,
+    speak, cancel, startListening, stopListening, abortListening, voiceOn, toggleVoice, currentText, spokenSoFar,
     speaking, preparing, listening, error, setError, support, settings, state: voiceState,
   };
 }

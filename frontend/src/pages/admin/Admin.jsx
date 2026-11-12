@@ -7,7 +7,7 @@
 // - Card registry: every assigned card/tag, with delete (two-step).
 // - Crew accounts: role, card, sign-in status, set a username/password, clear Face ID,
 //   and add a crew member. Account recovery only -- the secrets are never shown.
-// - Station voice: which engine speaks Doctor AI's replies (browser voice, offline, no echo
+// - Station voice: which engine speaks Astra's replies (browser voice, offline, no echo
 //   / Microsoft neural voice, needs internet, station reverb + echo), which neural voice,
 //   station effects on/off, and "Test voice" to hear it before saving.
 import { useState } from "react";
@@ -386,10 +386,60 @@ function Accounts({ astronauts }) {
 }
 
 const ENGINES = [
-  ["browser", "Browser voice", "Works offline. The computer's own voice (best: Edge \"Aria\" / Chrome \"Google US English\"). Station beeps, but no echo."],
-  ["neural", "Microsoft neural voice", "Natural voice with the station reverb + echo. Needs internet; falls back to the browser voice."],
+  ["browser", "Browser voice", "Works offline, using the computer's own voice. Beeps, speed and pitch work; echo and radio don't."],
+  ["neural", "Microsoft neural voice", "Natural voice with every station effect. Needs internet; falls back to the browser voice."],
+];
+const ECHOES = [["off", "Off"], ["light", "Light"], ["medium", "Medium"], ["strong", "Strong"]];
+const PITCHES = [["low", "Low"], ["normal", "Normal"], ["high", "High"]];
+const FIELDS = ["engine", "voice", "browser_gender", "echo", "radio", "beeps", "hum", "rate", "pitch", "notices"];
+const NOTICES = [["speak", "Out loud"], ["show", "Card only"], ["off", "Off"]];
+// One click fills the whole form (then Test voice / Save).
+const PRESETS = [
+  ["Station comms", "The default: calm voice, metal-cabin echo, NASA beeps.",
+    { engine: "neural", voice: "en-US-AriaNeural", browser_gender: "female", echo: "medium", radio: false, beeps: true, hum: true, rate: 1, pitch: "normal" }],
+  ["Clean", "Just the voice: no echo, no beeps, no hum.",
+    { engine: "neural", voice: "en-US-AriaNeural", browser_gender: "female", echo: "off", radio: false, beeps: false, hum: false, rate: 1, pitch: "normal" }],
+  ["Ship computer", "Light echo, a little slower.",
+    { engine: "neural", voice: "en-US-JennyNeural", browser_gender: "female", echo: "light", radio: false, beeps: true, hum: true, rate: 0.92, pitch: "normal" }],
+  ["Mission control radio", "Male voice over a crackly space radio.",
+    { engine: "neural", voice: "en-US-GuyNeural", browser_gender: "male", echo: "light", radio: true, beeps: true, hum: false, rate: 1.05, pitch: "normal" }],
+  ["Captain", "Deep male voice, light echo.",
+    { engine: "neural", voice: "en-US-AndrewNeural", browser_gender: "male", echo: "light", radio: false, beeps: true, hum: true, rate: 0.95, pitch: "low" }],
 ];
 const SAMPLE = "Station health system online. All crew vitals are being monitored.";
+
+function Segment({ label, options, value, onChange, disabled = false, hint }) {
+  return (
+    <div className={cx("flex flex-col gap-1.5", disabled && "opacity-50")}>
+      <span className="text-sm font-semibold">{label}{hint && <span className="ml-2 text-xs font-normal text-muted">{hint}</span>}</span>
+      <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+        {options.map(([id, text]) => (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={value === id}
+            disabled={disabled}
+            onClick={() => onChange(id)}
+            className={cx("min-h-10 cursor-pointer rounded-xl border px-3.5 text-[13px] font-semibold disabled:cursor-not-allowed",
+              value === id ? "border-accent-text/60 bg-accent-soft text-accent-text" : "border-line bg-raised text-ink-2 hover:text-ink")}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Switch({ label, hint, checked, onChange, disabled = false }) {
+  return (
+    <label className={cx("flex cursor-pointer items-start gap-3 text-sm", disabled && "cursor-not-allowed opacity-50")}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="mt-1 accent-[var(--ah-accent)]" />
+      <span><span className="font-semibold">{label}</span><span className="block text-xs text-muted">{hint}</span></span>
+    </label>
+  );
+}
 
 function VoiceSettings() {
   const qc = useQueryClient();
@@ -398,9 +448,12 @@ function VoiceSettings() {
   const [edits, setEdits] = useState(null); // unsaved changes; null = show what's saved
   const [testing, setTesting] = useState(false);
   if (!saved.data) return null;
-  const form = edits || { engine: saved.data.engine, voice: saved.data.voice, fx: saved.data.fx };
-  const setForm = setEdits;
-  const dirty = saved.data && (form.engine !== saved.data.engine || form.voice !== saved.data.voice || form.fx !== saved.data.fx);
+  const form = edits || Object.fromEntries(FIELDS.map((k) => [k, saved.data[k]]));
+  const set = (patch) => setEdits({ ...form, ...patch });
+  const dirty = FIELDS.some((k) => form[k] !== saved.data[k]);
+  const neural = form.engine === "neural";
+  const voices = saved.data.voices || [];
+  const activePreset = PRESETS.find(([, , p]) => FIELDS.every((k) => k === "notices" || p[k] === form[k]))?.[0];
 
   async function save() {
     const out = await put("/admin/voice-settings", form);
@@ -414,41 +467,62 @@ function VoiceSettings() {
     audioCtx(); // unlock sound inside this click
     setTesting(true);
     try {
-      if (form.fx) await quindar("start");
+      if (form.beeps) await quindar("start");
       let played = false;
-      if (form.engine === "neural") {
+      if (neural) {
         const res = await fetch("/api/admin/voice-test", {
           method: "POST", credentials: "same-origin",
-          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voice: form.voice }),
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
         });
-        if (res.ok) { await playNeural(await res.arrayBuffer(), { fx: form.fx }); played = true; }
+        if (res.ok) { await playNeural(await res.arrayBuffer(), { echo: form.echo, radio: form.radio }); played = true; }
         else toast("The neural voice didn't answer (no internet?) -- this is the browser voice instead.", "warn");
       }
       if (!played && window.speechSynthesis) {
         await new Promise((resolve) => {
           const u = new window.SpeechSynthesisUtterance(SAMPLE);
-          const v = pickVoice(window.speechSynthesis.getVoices());
+          const v = pickVoice(window.speechSynthesis.getVoices(), form.browser_gender);
           if (v) { u.voice = v; u.lang = v.lang; }
-          u.rate = 1.02;
+          u.rate = 1.02 * form.rate;
+          u.pitch = { low: 0.85, normal: 1, high: 1.15 }[form.pitch];
           u.onend = resolve;
           u.onerror = resolve;
           window.speechSynthesis.cancel();
           window.speechSynthesis.speak(u);
         });
       }
-      if (form.fx) await quindar("end");
+      if (form.beeps) await quindar("end");
     } finally {
       setTesting(false);
     }
   }
 
   return (
-    <Card className="flex flex-col gap-4">
-      <CardTitle eyebrow="Station voice" title="How Doctor AI sounds" subtitle="Used by the crew's chat and voice mode. Changes apply to everyone." />
+    <Card className="flex flex-col gap-5">
+      <CardTitle eyebrow="Station voice" title="How Astra sounds" subtitle="Used by the crew's chat and voice mode. Changes apply to everyone." className="mb-0" />
+
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-semibold">Presets</span>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {PRESETS.map(([name, hint, p]) => (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={activePreset === name}
+              onClick={() => setEdits({ ...p, notices: form.notices })}
+              className={cx("flex cursor-pointer flex-col items-start gap-0.5 rounded-xl border p-3 text-left",
+                activePreset === name ? "border-accent-text/60 bg-accent-soft" : "border-line bg-raised hover:border-accent-text/40")}
+            >
+              <span className="text-sm font-semibold">{name}</span>
+              <span className="text-xs text-muted">{hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div role="radiogroup" aria-label="Voice engine" className="flex flex-col gap-2">
         {ENGINES.map(([id, label, hint]) => (
           <label key={id} className={cx("flex cursor-pointer gap-3 rounded-xl border p-3.5", form.engine === id ? "border-accent-text/60 bg-accent-soft" : "border-line bg-raised")}>
-            <input type="radio" name="engine" value={id} checked={form.engine === id} onChange={() => setForm({ ...form, engine: id })} className="mt-1 accent-[var(--ah-accent)]" />
+            <input type="radio" name="engine" value={id} checked={form.engine === id} onChange={() => set({ engine: id })} className="mt-1 accent-[var(--ah-accent)]" />
             <span className="flex flex-col gap-0.5">
               <span className="text-sm font-semibold">{label}</span>
               <span className="text-xs text-muted">{hint}</span>
@@ -456,27 +530,47 @@ function VoiceSettings() {
           </label>
         ))}
       </div>
-      {form.engine === "neural" && (
+
+      {neural ? (
         <label className="flex flex-col gap-1.5 text-sm font-semibold">
-          Neural voice
-          <select className="ah-input min-h-11 bg-control" value={form.voice} onChange={(e) => setForm({ ...form, voice: e.target.value })}>
-            {(saved.data?.voices || []).map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+          Voice
+          <select aria-label="Neural voice" className="ah-input min-h-11 bg-control" value={form.voice} onChange={(e) => set({ voice: e.target.value })}>
+            <optgroup label="Female">{voices.filter((v) => v.gender === "female").map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</optgroup>
+            <optgroup label="Male">{voices.filter((v) => v.gender === "male").map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</optgroup>
           </select>
         </label>
+      ) : (
+        <Segment label="Voice" hint="the best match this computer has" options={[["female", "Female"], ["male", "Male"]]} value={form.browser_gender} onChange={(g) => set({ browser_gender: g })} />
       )}
-      <label className="flex cursor-pointer items-start gap-3 text-sm">
-        <input type="checkbox" checked={form.fx} onChange={(e) => setForm({ ...form, fx: e.target.checked })} className="mt-1 accent-[var(--ah-accent)]" />
-        <span>
-          <span className="font-semibold">Station comms effects</span>
-          <span className="block text-xs text-muted">
-            NASA Quindar beeps before and after each reply, and a soft cabin hum in voice mode.
-            {form.engine === "neural" ? " Plus the metal-cabin reverb and echo on the voice." : " (Echo needs the neural voice.)"}
-          </span>
-        </span>
-      </label>
+
+      <Segment label="Echo" options={ECHOES} value={neural ? form.echo : "off"} onChange={(e) => set({ echo: e })} disabled={!neural} hint={neural ? "" : "needs the neural voice"} />
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Switch label="Space radio" hint="A narrow, crackly radio sound." checked={neural && form.radio} onChange={(v) => set({ radio: v })} disabled={!neural} />
+        <Switch label="NASA beeps" hint="Quindar tones before and after each reply." checked={form.beeps} onChange={(v) => set({ beeps: v })} />
+        <Switch label="Cabin hum" hint="A soft hum behind voice mode." checked={form.hum} onChange={(v) => set({ hum: v })} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold">
+          Speed <span className="text-xs font-normal text-muted">{Math.round(form.rate * 100)}%</span>
+          <input type="range" aria-label="Speed" min="0.8" max="1.3" step="0.05" value={form.rate} onChange={(e) => set({ rate: Number(e.target.value) })} className="accent-[var(--ah-accent)]" />
+        </label>
+        <Segment label="Pitch" options={PITCHES} value={form.pitch} onChange={(p) => set({ pitch: p })} />
+      </div>
+
+      <Segment
+        label="Astra speaks first"
+        hint="health warnings, reminders, messages, check-ins"
+        options={NOTICES}
+        value={form.notices}
+        onChange={(n) => set({ notices: n })}
+      />
+
       <div className="flex flex-wrap gap-2">
         <Button onClick={test} disabled={testing}><Icon name="volume" size={16} />{testing ? "Playing…" : "Test voice"}</Button>
         <Button variant="primary" onClick={save} disabled={!dirty}>Save</Button>
+        {dirty && <span className="self-center text-xs text-check-fg">Not saved yet</span>}
       </div>
     </Card>
   );

@@ -19,7 +19,7 @@ from flask import Flask, jsonify, send_from_directory
 from flask_socketio import SocketIO
 
 from backend import db, seed
-from backend.logic import analysis, sessions
+from backend.logic import analysis, astra_memory, sessions
 from backend.jobs import comms, scheduler
 from backend.routes import routes, admin_routes
 from backend import config
@@ -140,7 +140,11 @@ def create_app(args):
     # without this, a Pico tap silently started a real session but never appeared
     # there, which read as "nothing happening" even though it was actually working.
     pico_bridge = PicoBridge(on_message=on_message)
-    pico_bridge.start()
+    # Tests set ASTRO_NO_PICO=1 (tests/conftest.py): each test app would otherwise leave a
+    # reader thread running that can open the real Pico on a dev machine, or a fake port
+    # meant for test_pico_bridge.py.
+    if os.environ.get("ASTRO_NO_PICO") != "1":
+        pico_bridge.start()
 
     # The React app (frontend/dist, built by `npm run build`). Real files (JS/CSS
     # bundles, fonts, 3D models) are served as-is; any other path gets index.html so
@@ -168,6 +172,7 @@ def create_app(args):
             try:
                 sessions.check_timeouts(bridge.send, socketio.emit)
                 comms.deliver_due_messages(socketio.emit)
+                astra_memory.emit_due(socketio.emit)
                 scheduler.check_and_fire(start_time, bridge.send, socketio.emit)
                 sessions.refresh_surgeon_cyd(bridge.send)
             except Exception as exc:  # the loop must never die mid-demo

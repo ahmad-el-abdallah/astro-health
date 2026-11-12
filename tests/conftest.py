@@ -1,10 +1,15 @@
 import json
+import os
 from datetime import datetime, timezone
 
 import pytest
 
 from backend import config, db
 from backend.logic import analysis, sessions
+
+# Test apps never start the Pico NFC reader thread (see app.py): it would outlive its test,
+# could open the real reader plugged into a dev laptop, and races test_pico_bridge.py.
+os.environ["ASTRO_NO_PICO"] = "1"
 
 
 @pytest.fixture(autouse=True)

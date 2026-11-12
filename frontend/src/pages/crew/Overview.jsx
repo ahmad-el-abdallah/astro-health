@@ -116,10 +116,10 @@ function SymptomCard({ summary, onReport }) {
           <span className="text-[13px] text-muted">Symptoms</span>
         </div>
         <h2 className="m-0 font-display text-[26px] font-semibold tracking-tight">How are you feeling?</h2>
-        <p className="m-0 text-sm text-ink-2">No symptoms reported today. Report anything unusual so Doctor AI and the flight surgeon can help.</p>
+        <p className="m-0 text-sm text-ink-2">No symptoms reported today. Report anything unusual so Astra and the flight surgeon can help.</p>
         <div className="mt-auto flex flex-wrap gap-2">
           <Button variant="primary" onClick={onReport}>Report a symptom</Button>
-          <Link to="/body" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-accent-text hover:underline">Talk to Doctor AI</Link>
+          <Link to="/body" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-accent-text hover:underline">Talk to Astra</Link>
         </div>
       </Card>
     );
@@ -139,7 +139,7 @@ function SymptomCard({ summary, onReport }) {
       </div>
       <h2 className="m-0 font-display text-[28px] leading-tight font-semibold tracking-tight">{labels[0]}</h2>
       {labels.length > 1 && <p className="m-0 text-sm text-ink-2">Also: {labels.slice(1).join(", ")}</p>}
-      <p className="m-0 text-sm text-ink-2">Describe it to Doctor AI or tap your digital twin to get next steps.</p>
+      <p className="m-0 text-sm text-ink-2">Describe it to Astra or tap your digital twin to get next steps.</p>
       <div className="mt-auto flex flex-wrap items-center gap-2">
         <Link
           to="/body?consult=1"

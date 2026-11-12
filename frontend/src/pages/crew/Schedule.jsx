@@ -7,6 +7,7 @@
 //   from what this astronaut actually logged (backend/jobs/scheduler.py), with a shortcut
 //   to wherever that task gets done.
 // Reminders (the "reminder" broadcast) flash the matching task and refresh the statuses.
+import { withLiveStatus } from "../../lib/schedule.js";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
@@ -59,22 +60,6 @@ function useMissionClock(plan, fetchedAt) {
   if (!plan) return null;
   const total = (plan.day - 1) * DAY + plan.day_seconds + (Math.max(0, now - fetchedAt) / 1000) * plan.time_scale;
   return { total, daySec: total % DAY, day: Math.floor(total / DAY) + 1, scale: plan.time_scale };
-}
-
-// The server decides "done" (from what was logged); the clock alone moves a task from
-// upcoming → due → missed, so apply those steps locally the moment the dial passes them
-// instead of waiting for the next refetch. Same rules as backend/jobs/scheduler.py.
-const MISSED_AFTER_S = 3 * 3600;
-function withLiveStatus(entries, daySec) {
-  return entries.map((e) => {
-    if (e.status === "done") return e;
-    const nextSame = entries.find((x) => x.kind === e.kind && x.seconds > e.seconds);
-    let status = "upcoming";
-    if (daySec >= e.seconds) {
-      status = (nextSame && daySec >= nextSame.seconds) || daySec - e.seconds > MISSED_AFTER_S ? "missed" : "due";
-    }
-    return status === e.status ? e : { ...e, status };
-  });
 }
 
 // ---- 24-hour dial ----

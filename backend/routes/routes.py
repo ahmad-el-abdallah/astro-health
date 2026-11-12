@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, sessions, health_rules, symptoms
+from backend.logic import analysis, astra_memory, sessions, health_rules, symptoms
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
@@ -205,6 +205,31 @@ def _sanitize_history(raw):
 
 # Older CYD firmware's idle timeout is 2 minutes; anything this quiet is that timeout.
 CYD_IDLE_GUESS_S = 100
+
+
+def _save_reaction(conn, astro_id, avg_ms, lapses, source, raw=None):
+    """A reaction-time reading (CYD test or Astra's voice-screen test), judged against this
+    astronaut's own baseline. Returns the level."""
+    baseline = conn.execute("SELECT baseline_reaction_ms FROM astronauts WHERE id = ?", (astro_id,)).fetchone()[0]
+    lvl = health_rules.evaluate("reaction_time", (avg_ms, lapses), baseline_reaction_ms=baseline)
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'reaction_time', ?, ?, ?)",
+        (astro_id, now, json.dumps({"avg_ms": avg_ms, "lapses": lapses}), lvl, source),
+    )
+    conn.execute(
+        "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, 'reaction', ?, ?, ?)",
+        (astro_id, now, now, json.dumps(raw or {"avg_ms": avg_ms, "lapses": lapses})),
+    )
+    return lvl
+
+
+def _save_breathing(conn, astro_id, seconds):
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, 'breathing', ?, ?, ?)",
+        (astro_id, now, now, json.dumps({"seconds": seconds})),
+    )
 
 
 def create_routes(app, socketio, bridge):
@@ -513,10 +538,13 @@ def create_routes(app, socketio, bridge):
 
     @bp.post("/astronauts/<int:astro_id>/chat")
     def doctor_ai_chat(astro_id):
-        """The crew's Doctor AI chat (typed or spoken): the AI answers from this
-        astronaut's data + latest analysis. Writes nothing -- if the reply names a body
-        region + intensity, the frontend logs it through /discomfort. 503 with no AI key,
-        502 on any AI failure; the frontend then falls back to keyword quick replies."""
+        """Astra, the crew's chat (typed or spoken): the AI answers from this astronaut's
+        data + latest analysis, and may propose actions (open a page, log mood/sleep/
+        symptoms/vitals/discomfort, a journal entry, an alert) -- validated in
+        analyst.parse_chat. Writes nothing itself: the frontend asks the astronaut to
+        confirm, then saves through the normal routes. Actions are only returned when the
+        signed-in astronaut is asking about themselves (never the surgeon on someone's
+        behalf). 503 with no AI key, 502 on any AI failure (-> keyword quick replies)."""
         body = request.get_json(force=True) or {}
         message = (body.get("message") or "").strip()[:CHAT_MSG_CHARS]
         if not message:
@@ -531,15 +559,21 @@ def create_routes(app, socketio, bridge):
             return jsonify({"error": "AI is not available"}), 503
         _, profile = comms.current_profile()
         with db.write_conn() as conn:
-            context, _, _ = analysis.build_context(conn, astro_id, profile)
+            context, _, _ = analysis.build_context(conn, astro_id, profile, for_chat=True)
             latest = analysis.latest(conn, astro_id)
         if latest:
             context += (f"\nLatest health analysis ({latest['source']}): {latest['state_label']}, "
                         f"{latest['overall_level']}. {latest['summary']}")
+        symptom_ids = [s["id"] for s in symptoms.catalog()]
+        is_self = auth.current_astronaut_id() == astro_id
         try:
-            out = analyst.chat(context, _sanitize_history(body.get("history")), message)
-        except analyst.AnalystError:
+            out = analyst.chat(context, _sanitize_history(body.get("history")), message, symptom_ids,
+                               can_act=is_self, guide_ids=list(load_content().get("measure_guides", {})))
+        except analyst.AnalystError as exc:
+            print(f"[astra] chat failed: {exc}", flush=True)  # e.g. the free plan's rate limit
             return jsonify({"error": "AI chat failed"}), 502
+        if not is_self:
+            out["actions"] = []  # belt and braces: never actions on someone else's behalf
         return jsonify({**out, "model": analyst.model_name()})
 
     @bp.post("/astronauts/<int:astro_id>/speak")
@@ -556,7 +590,8 @@ def create_routes(app, socketio, bridge):
             if err:
                 return jsonify(err[0]), err[1]
         try:
-            audio = voice.synthesize(text, voice_settings.get()["voice"])
+            vs = voice_settings.get()
+            audio = voice.synthesize(text, vs["voice"], vs["rate"], vs["pitch"])
         except voice.SpeechError:
             return jsonify({"error": "speech synthesis failed"}), 502
         return Response(audio, mimetype="audio/mpeg")
@@ -669,6 +704,8 @@ def create_routes(app, socketio, bridge):
             if not astro:
                 return jsonify({"error": "not found"}), 404
             lvl = symptoms.record(conn, astro_id, items)
+            labels = {c["id"]: c["label"] for c in symptoms.catalog()}
+            astra_memory.note_symptoms(conn, astro_id, [labels[i] for i in items if i in labels])
         symptoms.alert_if_red(astro_id, items, lvl, emit_fn)
         analysis.request(astro_id, "symptoms")
         emit_fn("cyd_event", {"type": "symptoms", "astronaut_id": astro_id, "items": items, "level": lvl})
@@ -696,6 +733,7 @@ def create_routes(app, socketio, bridge):
                 "INSERT INTO discomfort (astronaut_id, region, intensity, ts) VALUES (?, ?, ?, ?)",
                 (astro_id, region, intensity, datetime.now(timezone.utc).isoformat()),
             )
+            astra_memory.note_pain(conn, astro_id, load_content()["body_parts"][region].get("label", region), intensity)
         analysis.request(astro_id, "discomfort")
         emit_fn("cyd_event", {"type": "discomfort", "astronaut_id": astro_id, "region": region, "intensity": intensity})
         return jsonify({"ok": True, "region": region, "intensity": intensity})
@@ -754,6 +792,176 @@ def create_routes(app, socketio, bridge):
         emit_fn("alert", {"astronaut_id": astro_id, "level": "RED", "text": text})
         return jsonify({"ok": True, "level": "RED", "text": text, "deliver_at": deliver_at.isoformat()})
 
+    # ---- Astra's abilities: things only the astronaut themselves can ask her to do ----
+    def _self_only(conn, astro_id):
+        """(None, error) unless the signed-in astronaut IS astro_id (not the surgeon on
+        their behalf). 401 when nobody is signed in."""
+        viewer, err = auth.authorize_view(conn, astro_id)
+        if err:
+            return err
+        if viewer["id"] != astro_id:
+            return {"error": "only the astronaut can do this"}, 403
+        return None
+
+    @bp.post("/astronauts/<int:astro_id>/message")
+    def crew_message(astro_id):
+        """A normal (not urgent) message to the flight surgeon -- it travels with the comms
+        delay like every other report. Urgent things go through /alert instead."""
+        body = request.get_json(force=True) or {}
+        text = " ".join(str(body.get("text") or "").split())[:analyst.MAX_MESSAGE]
+        if not text:
+            return jsonify({"error": "text is required"}), 400
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+        deliver_at = comms.queue_report(astro_id, text)
+        emit_fn("message_sent", {"astronaut_id": astro_id, "deliver_at": deliver_at.isoformat()})
+        return jsonify({"ok": True, "deliver_at": deliver_at.isoformat(), "delay_s": round(comms.delay_seconds())})
+
+    @bp.post("/astronauts/<int:astro_id>/summary-report")
+    def summary_report(astro_id):
+        """Astra writes a short health summary (today / the last 7 days) and sends it to the
+        flight surgeon. The AI writes it; without the AI, the latest analysis + the 7-day
+        stats are sent instead."""
+        body = request.get_json(force=True) or {}
+        period = body.get("period") if body.get("period") in analyst.SUMMARY_PERIODS else "today"
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            _, profile = comms.current_profile()
+            context, _, _ = analysis.build_context(conn, astro_id, profile)
+            latest = analysis.latest(conn, astro_id)
+        if latest:
+            context += f"\nLatest health analysis: {latest['state_label']}, {latest['overall_level']}. {latest['summary']}"
+        source = "ai"
+        try:
+            text = analyst.summary(context, period)
+        except analyst.AnalystError as exc:
+            print(f"[astra] summary by the AI failed ({exc}), sending the rules summary", flush=True)
+            source = "rules"
+            text = _summary_fallback(context, latest)
+        label = "today" if period == "today" else "last 7 days"
+        report = f"Health summary ({label}): {text}"
+        deliver_at = comms.queue_report(astro_id, report)
+        emit_fn("message_sent", {"astronaut_id": astro_id, "deliver_at": deliver_at.isoformat()})
+        return jsonify({"ok": True, "text": report, "source": source, "deliver_at": deliver_at.isoformat(),
+                        "delay_s": round(comms.delay_seconds())})
+
+    def _summary_fallback(context, latest):
+        parts = []
+        if latest:
+            parts.append(f"{latest['state_label']} ({latest['overall_level']}). {latest['summary']}")
+        lines = context.split("\n")
+        if "Last 7 days:" in lines:
+            i = lines.index("Last 7 days:")
+            stats = [line[2:] for line in lines[i + 1:] if line.startswith("- ")][:6]
+            if stats:
+                parts.append("Last 7 days: " + "; ".join(stats) + ".")
+        return " ".join(parts) or "No readings logged yet."
+
+    @bp.post("/astronauts/<int:astro_id>/activity")
+    def voice_activity(astro_id):
+        """Sleep / workout tracking without a tag ("I'm going to bed", "I'm awake"). Uses the
+        same timers as the NFC tags, so a tag-started sleep can be stopped by voice."""
+        body = request.get_json(force=True) or {}
+        kind, action = body.get("kind"), body.get("action")
+        if kind not in ("sleep", "exercise") or action not in ("start", "stop"):
+            return jsonify({"error": "kind must be sleep/exercise and action start/stop"}), 400
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            running = sessions.running_toggle(astro_id, kind)
+            if action == "start":
+                if running:
+                    return jsonify({"ok": True, "already": True, "kind": kind})
+                label = "Sleep" if kind == "sleep" else "Workout"
+                sessions.start_toggle(conn, astro_id, kind, f"web:{astro_id}:{kind}", label, send_fn, emit_fn)
+                return jsonify({"ok": True, "kind": kind, "started": True})
+            if not running:
+                return jsonify({"error": f"no {kind} tracking is running"}), 409
+            return jsonify({"ok": True, **sessions.stop_toggle(conn, running, send_fn, emit_fn)})
+
+    @bp.post("/astronauts/<int:astro_id>/reaction")
+    def web_reaction(astro_id):
+        """The reaction test on Astra's voice screen: same reading the CYD's test saves."""
+        body = request.get_json(force=True) or {}
+        avg_ms, lapses = body.get("avg_ms"), body.get("lapses", 0)
+        if not analyst._num(avg_ms, 50, 5000) or not isinstance(lapses, int) or isinstance(lapses, bool) or not 0 <= lapses <= 20:
+            return jsonify({"error": "avg_ms must be 50-5000 and lapses 0-20"}), 400
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            lvl = _save_reaction(conn, astro_id, round(avg_ms), lapses, "manual")
+        analysis.request(astro_id, "reaction")
+        return jsonify({"ok": True, "level": lvl, "avg_ms": round(avg_ms), "lapses": lapses})
+
+    @bp.post("/astronauts/<int:astro_id>/breathing")
+    def web_breathing(astro_id):
+        body = request.get_json(force=True) or {}
+        seconds = body.get("seconds", 60)
+        if not analyst._num(seconds, 5, 3600):
+            return jsonify({"error": "seconds must be 5-3600"}), 400
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            _save_breathing(conn, astro_id, round(seconds))
+        return jsonify({"ok": True})
+
+    # ---- what Astra remembers (the astronaut's own notes; never the surgeon's view) ----
+    @bp.get("/astronauts/<int:astro_id>/memory")
+    def get_memory(astro_id):
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            data = astra_memory.due_for(conn, astro_id) if request.args.get("due") else astra_memory.list_for(conn, astro_id)
+        return jsonify(data)
+
+    @bp.post("/astronauts/<int:astro_id>/memory")
+    def add_memory(astro_id):
+        body = request.get_json(force=True) or {}
+        hours = body.get("follow_up_hours")
+        if hours is not None and not analyst._num(hours, 1, 72):
+            return jsonify({"error": "follow_up_hours must be 1-72"}), 400
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            mem_id = astra_memory.add(conn, astro_id, body.get("text"), hours)
+        if mem_id is None:
+            return jsonify({"error": "text is required"}), 400
+        emit_fn("astra_memory", {"astronaut_id": astro_id})
+        return jsonify({"ok": True, "id": mem_id})
+
+    @bp.delete("/astronauts/<int:astro_id>/memory/<int:mem_id>")
+    def delete_memory(astro_id, mem_id):
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            ok = astra_memory.delete(conn, astro_id, mem_id)
+        if not ok:
+            return jsonify({"error": "not found"}), 404
+        emit_fn("astra_memory", {"astronaut_id": astro_id})
+        return jsonify({"ok": True})
+
+    @bp.post("/astronauts/<int:astro_id>/memory/<int:mem_id>/done")
+    def memory_followed_up(astro_id, mem_id):
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            ok = astra_memory.mark_followed_up(conn, astro_id, mem_id)
+        if not ok:
+            return jsonify({"error": "not found"}), 404
+        emit_fn("astra_memory", {"astronaut_id": astro_id})
+        return jsonify({"ok": True})
+
     # ---- Mental Health tab: mood check-in + journal ----
     MOOD_SCORES = {"rough": 1, "low": 2, "okay": 3, "good": 4, "great": 5}
 
@@ -783,6 +991,7 @@ def create_routes(app, socketio, bridge):
                 "VALUES (?, ?, 'mood', ?, ?, 'manual')",
                 (astro_id, now.isoformat(), json.dumps({"mood": mood, "score": score, "note": note}), lvl),
             )
+            astra_memory.note_mood(conn, astro_id, mood)
         analysis.request(astro_id, "mood")
         emit_fn("cyd_event", {"type": "mood", "astronaut_id": astro_id, "mood": mood, "level": lvl})
         return jsonify({"mood": mood, "score": score, "level": lvl})
@@ -952,8 +1161,14 @@ def create_routes(app, socketio, bridge):
             if err:
                 return jsonify(err[0]), err[1]
             conn.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
-        # Every open doctor screen (badge, alerts list, crew cards) refreshes at once.
-        emit_fn("alert_acknowledged", {"id": alert_id})
+            row = conn.execute("SELECT astronaut_id, text FROM alerts WHERE id = ?", (alert_id,)).fetchone()
+        # Every open doctor screen (badge, alerts list, crew cards) refreshes at once. The crew
+        # member's Astra tells them too -- once the news could have crossed the comms delay.
+        deliver_at = datetime.now(timezone.utc) + timedelta(seconds=comms.delay_seconds())
+        emit_fn("alert_acknowledged", {
+            "id": alert_id, "astronaut_id": row["astronaut_id"] if row else None,
+            "text": row["text"] if row else "", "deliver_at": deliver_at.isoformat(),
+        })
         return jsonify({"ok": True})
 
     # ---- messages (flight surgeon) ----
@@ -1329,27 +1544,13 @@ def create_routes(app, socketio, bridge):
         if astro_id is None:
             return
         with db.write_conn() as conn:
-            baseline = conn.execute("SELECT baseline_reaction_ms FROM astronauts WHERE id = ?", (astro_id,)).fetchone()[0]
-            avg_ms, lapses = msg.get("avg_ms"), msg.get("lapses", 0)
-            lvl = health_rules.evaluate("reaction_time", (avg_ms, lapses), baseline_reaction_ms=baseline)
-            conn.execute(
-                "INSERT INTO readings (astronaut_id, ts, indicator, value_json, level, source) VALUES (?, ?, 'reaction_time', ?, ?, 'cyd')",
-                (astro_id, datetime.now(timezone.utc).isoformat(), json.dumps({"avg_ms": avg_ms, "lapses": lapses}), lvl),
-            )
-            conn.execute(
-                "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, 'reaction', ?, ?, ?)",
-                (astro_id, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), json.dumps(msg)),
-            )
+            _save_reaction(conn, astro_id, msg.get("avg_ms"), msg.get("lapses", 0), "cyd", msg)
 
     def _record_breathing(msg):
         astro_id = _uid_to_astro(msg.get("uid"))
         if astro_id is None:
             return
         with db.write_conn() as conn:
-            now = datetime.now(timezone.utc).isoformat()
-            conn.execute(
-                "INSERT INTO activities (astronaut_id, kind, started_at, ended_at, data_json) VALUES (?, 'breathing', ?, ?, ?)",
-                (astro_id, now, now, json.dumps({"seconds": msg.get("seconds", 60)})),
-            )
+            _save_breathing(conn, astro_id, msg.get("seconds", 60))
 
     return handle_cyd_message

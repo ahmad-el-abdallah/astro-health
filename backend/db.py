@@ -141,6 +141,19 @@ CREATE TABLE IF NOT EXISTS analyses (
     result_json TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_analyses_astro ON analyses(astronaut_id, ts);
+
+-- What Astra remembers about an astronaut (backend/logic/astra_memory.py): facts they told
+-- her, and things she should ask about again later (follow_up_at, in real UTC time).
+CREATE TABLE IF NOT EXISTS astra_memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    astronaut_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    text TEXT NOT NULL,
+    follow_up_at TEXT,
+    followed_up INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'chat'
+);
+CREATE INDEX IF NOT EXISTS idx_memory_astro ON astra_memory(astronaut_id, created_at);
 """
 
 

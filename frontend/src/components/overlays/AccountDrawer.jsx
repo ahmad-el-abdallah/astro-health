@@ -9,6 +9,39 @@ import { useAuth } from "../../auth/AuthProvider.jsx";
 import { Button, Field } from "../ui/index.jsx";
 import { Drawer } from "./Drawer.jsx";
 
+// What Astra remembers about you (things you told her, and check-ins she has planned).
+// Only you see these -- not the flight surgeon. Delete any of them here.
+function AstraMemory({ id }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["memory", id], queryFn: () => get(`/astronauts/${id}/memory`), enabled: !!id });
+  const forget = async (m) => {
+    await del(`/astronauts/${id}/memory/${m.id}`);
+    qc.invalidateQueries({ queryKey: ["memory", id] });
+  };
+  const items = q.data || [];
+  return (
+    <div className="space-y-3">
+      <h3 className="m-0 text-[15px] font-semibold">What Astra remembers</h3>
+      <p className="m-0 text-xs text-muted">Notes she keeps so she can follow up. Only you can see them.</p>
+      {q.isSuccess && items.length === 0 && <p className="m-0 text-sm text-muted">Nothing yet. Tell her something like “remember my knee hurts”.</p>}
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {items.map((m) => (
+          <li key={m.id} className="flex items-start gap-3 rounded-xl bg-raised p-3">
+            <div className="flex-1 text-sm">
+              <div>{m.text}</div>
+              <div className="text-xs text-muted">
+                {new Date(m.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                {m.follow_up_at && !m.followed_up ? " · she'll check in on this" : ""}
+              </div>
+            </div>
+            <button onClick={() => forget(m)} aria-label={`Forget: ${m.text}`} className="min-h-9 cursor-pointer rounded-lg border border-line-strong bg-control px-2.5 text-xs font-semibold text-ink-2 hover:text-ink">Forget</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Row({ label, value }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-divider py-2.5 text-sm last:border-0">
@@ -19,7 +52,7 @@ function Row({ label, value }) {
 }
 
 export function AccountDrawer({ open, onClose }) {
-  const { user } = useAuth();
+  const { user, isSurgeon } = useAuth();
   const qc = useQueryClient();
   const id = user?.astronaut_id;
   const account = useQuery({ queryKey: ["account", id], queryFn: () => get(`/astronauts/${id}/account`), enabled: open && !!id });
@@ -137,6 +170,8 @@ export function AccountDrawer({ open, onClose }) {
             <span className={`absolute top-1 left-0 h-5 w-5 rounded-full bg-white transition-transform ${liteGlass ? "translate-x-6" : "translate-x-1"}`} />
           </button>
         </div>
+
+        {!isSurgeon && open && <AstraMemory id={id} />}
 
         <div className="space-y-3">
           <h3 className="m-0 text-[15px] font-semibold">Face ID</h3>

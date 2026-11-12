@@ -82,10 +82,13 @@ def create_admin_routes(app):
             _, err = admin_auth.authorize_superuser(conn)
         if err:
             return jsonify(err[0]), err[1]
-        body = request.get_json(force=True) or {}
-        name = body.get("voice") if body.get("voice") in voice_settings.VOICES else voice_settings.get()["voice"]
+        # The card's UNSAVED form, so "Test voice" plays exactly what you're about to save.
+        settings, problem = voice_settings.validate(request.get_json(force=True) or {})
+        if problem:
+            return jsonify({"error": problem}), 400
         try:
-            audio = voice.synthesize("Station health system online. All crew vitals are being monitored.", name)
+            audio = voice.synthesize("Station health system online. All crew vitals are being monitored.",
+                                     settings["voice"], settings["rate"], settings["pitch"])
         except voice.SpeechError:
             return jsonify({"error": "speech synthesis failed"}), 502
         return Response(audio, mimetype="audio/mpeg")

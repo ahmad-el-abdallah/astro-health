@@ -9,6 +9,7 @@ import { queryClient } from "./lib/queries.js";
 import { AppShell } from "./components/layout/AppShell.jsx";
 import { SimulatorDock } from "./components/SimulatorDock.jsx";
 import { EmergencyOverlay } from "./components/overlays/EmergencyOverlay.jsx";
+import { AstraProvider } from "./components/AstraProvider.jsx";
 import { ToastProvider } from "./components/overlays/Toasts.jsx";
 import { Login } from "./pages/Login.jsx";
 import LogoCrew from "./assets/brand/logo-mark-crew.svg?react";
@@ -93,12 +94,14 @@ export default function App() {
               {/* /admin has its own superuser login, and /status-board is a read-only,
                   unauthenticated shared-display view (aggregate-only backend response) --
                   both sit outside the crew/doctor gate. */}
-              <Routes>
-                <Route path="/admin" element={<Suspense fallback={<Splash />}><Admin /></Suspense>} />
-                <Route path="/status-board" element={<Suspense fallback={<Splash />}><StatusBoard /></Suspense>} />
-                <Route path="*" element={<Gate />} />
-              </Routes>
-              <KioskOverlays />
+              <AstraProvider>
+                <Routes>
+                  <Route path="/admin" element={<Suspense fallback={<Splash />}><Admin /></Suspense>} />
+                  <Route path="/status-board" element={<Suspense fallback={<Splash />}><StatusBoard /></Suspense>} />
+                  <Route path="*" element={<Gate />} />
+                </Routes>
+                <KioskOverlays />
+              </AstraProvider>
             </ToastProvider>
           </AuthProvider>
         </BrowserRouter>

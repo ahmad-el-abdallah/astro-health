@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MIC_DENIED, pickVoice, voiceErrorMessage } from "./useVoice.js";
-import { QUINDAR_HZ, quindarFrequency } from "./stationAudio.js";
+import { echoParams, QUINDAR_HZ, quindarFrequency } from "./stationAudio.js";
 
 const v = (name, lang) => ({ name, lang });
 
@@ -39,5 +39,31 @@ describe("quindar tones", () => {
     expect(quindarFrequency("start")).toBe(2525);
     expect(quindarFrequency("end")).toBe(2475);
     expect(QUINDAR_HZ).toEqual({ start: 2525, end: 2475 });
+  });
+});
+
+describe("male browser voice", () => {
+  it("prefers a known male voice", () => {
+    const voices = [v("Microsoft Aria Online (Natural)", "en-US"), v("Google UK English Male", "en-GB"), v("Google US English", "en-US")];
+    expect(pickVoice(voices, "male").name).toBe("Google UK English Male");
+    expect(pickVoice([v("Samantha", "en-US"), v("Daniel", "en-GB")], "male").name).toBe("Daniel");
+    expect(pickVoice([v("Microsoft Guy Online (Natural)", "en-US"), v("David", "en-US")], "male").name).toMatch(/Guy/);
+  });
+  it("falls back to an English voice that isn't clearly female, then any English voice", () => {
+    expect(pickVoice([v("Samantha", "en-US"), v("Fred", "en-US")], "male").name).toBe("Fred");
+    expect(pickVoice([v("Zara", "en-US"), v("Samantha", "en-US")], "male").name).toBe("Zara");
+    expect(pickVoice([v("Samantha", "en-US")], "male").name).toBe("Samantha");
+  });
+  it("female stays the default", () => {
+    expect(pickVoice([v("Google UK English Male", "en-GB"), v("Google US English", "en-US")]).name).toBe("Google US English");
+  });
+});
+
+describe("echo levels", () => {
+  it("off is clean; light < medium < strong", () => {
+    expect(echoParams("off")).toBeNull();
+    const [l, m, s] = ["light", "medium", "strong"].map(echoParams);
+    for (const k of ["tail", "wet", "feedback", "echo"]) expect(l[k] < m[k] && m[k] < s[k]).toBe(true);
+    expect(echoParams("nonsense")).toEqual(m);
   });
 });

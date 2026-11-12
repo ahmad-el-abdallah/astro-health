@@ -1,4 +1,4 @@
-// A small drawn face for the Doctor AI chat: blinking eyes, and a mouth that opens with
+// A small drawn face for the Astra chat: blinking eyes, and a mouth that opens with
 // the AI's voice (voiceState.mouth from lib/useVoice.js -- jumps on each spoken word,
 // decays between words). The mouth is moved by a requestAnimationFrame loop that sets the
 // SVG attribute directly, so speaking never re-renders React 60 times a second.

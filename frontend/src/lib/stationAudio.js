@@ -44,6 +44,23 @@ export function quindar(kind = "start") {
   return new Promise((resolve) => setTimeout(resolve, 320));
 }
 
+/** A soft tone (the breathing exercise's phase changes). */
+export function chime(freq = 440, ms = 260, volume = 0.05) {
+  const c = audioCtx();
+  if (!c) return;
+  const t = c.currentTime + 0.01;
+  const osc = c.createOscillator();
+  osc.type = "sine";
+  osc.frequency.value = freq;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(volume, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+  osc.connect(g).connect(c.destination);
+  osc.start(t);
+  osc.stop(t + ms / 1000 + 0.05);
+}
+
 // ---- cabin hum ----
 let amb = null;
 
@@ -89,14 +106,26 @@ export function ambience(on) {
 }
 
 // ---- the neural voice, with station reverb + echo ----
-export const output = { analyser: null };
+// analyser: live loudness of the neural voice; startedAtMs/durationMs: how far into the clip
+// she is (for "what had she said when you interrupted").
+export const output = { analyser: null, startedAtMs: null, durationMs: null };
 let current = null; // { src, resolve }
-let impulse = null;
+const impulses = {};
 
-function makeImpulse(c) {
-  // ~1.4 s of decaying noise (the reverb tail) plus a few strong early reflections:
+// How much "station" is on the voice, chosen on /admin. off = clean voice.
+const ECHO = {
+  off: null,
+  light: { tail: 0.9, wet: 0.14, delay: 0.14, feedback: 0.12, echo: 0.08 },
+  medium: { tail: 1.4, wet: 0.3, delay: 0.17, feedback: 0.26, echo: 0.2 },
+  strong: { tail: 2.4, wet: 0.45, delay: 0.22, feedback: 0.4, echo: 0.32 },
+};
+/** The reverb/echo numbers for an echo level (null = no echo). Unknown -> medium. */
+export const echoParams = (level) => (level in ECHO ? ECHO[level] : ECHO.medium);
+
+function makeImpulse(c, seconds) {
+  // Decaying noise (the reverb tail) plus a few strong early reflections:
   // the "hard metal walls of a small module" sound.
-  const seconds = 1.4, rate = c.sampleRate, len = Math.floor(rate * seconds);
+  const rate = c.sampleRate, len = Math.floor(rate * seconds);
   const buf = c.createBuffer(2, len, rate);
   for (let ch = 0; ch < 2; ch++) {
     const d = buf.getChannelData(ch);
@@ -114,14 +143,38 @@ export function stopNeural() {
   const { src, resolve } = current;
   current = null;
   output.analyser = null;
+  output.startedAtMs = null;
   try { src.onended = null; src.stop(); } catch { /* not started yet */ }
   resolve();
 }
 
-/** Plays MP3/encoded audio; resolves when it has finished (or was stopped). */
-export async function playNeural(arrayBuffer, { fx = true } = {}) {
+/** Can the page make sound right now? (false until the first click after a page load) */
+export const audioUnlocked = () => !ctx || ctx.state === "running";
+
+// "Space radio": a narrow telephone-like band and a little crackle.
+function radioChain(c, input) {
+  const band = c.createBiquadFilter(); band.type = "bandpass"; band.frequency.value = 1500; band.Q.value = 0.9;
+  const hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 300;
+  const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3400;
+  const crackle = c.createWaveShaper();
+  const curve = new Float32Array(1024);
+  for (let i = 0; i < curve.length; i++) { const x = (i / (curve.length - 1)) * 2 - 1; curve[i] = Math.tanh(2.2 * x); }
+  crackle.curve = curve;
+  const gain = c.createGain(); gain.gain.value = 1.4;
+  input.connect(hp).connect(lp).connect(band).connect(crackle).connect(gain);
+  return gain;
+}
+
+/** Plays MP3/encoded audio; resolves when it has finished (or was stopped). Throws
+ *  "audio-locked" if the browser won't let the page make sound yet (no click since the page
+ *  loaded) -- a suspended AudioContext never plays, so it would otherwise wait forever. */
+export async function playNeural(arrayBuffer, { echo = "medium", radio = false } = {}) {
   const c = audioCtx();
   if (!c) throw new Error("Web Audio unavailable");
+  if (c.state !== "running") {
+    await Promise.race([c.resume().catch(() => {}), new Promise((r) => setTimeout(r, 400))]);
+    if (c.state !== "running") throw new Error("audio-locked");
+  }
   const audio = await c.decodeAudioData(arrayBuffer.slice(0));
   stopNeural();
   const src = c.createBufferSource();
@@ -129,37 +182,48 @@ export async function playNeural(arrayBuffer, { fx = true } = {}) {
   const comp = c.createDynamicsCompressor();
   const analyser = c.createAnalyser();
   analyser.fftSize = 1024;
+  const fx = echoParams(echo);
+  const voice = radio ? radioChain(c, src) : src;
   if (fx) {
     const hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 160;
     const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 6800;
     const dry = c.createGain(); dry.gain.value = 0.9;
-    impulse = impulse || makeImpulse(c);
-    const verb = c.createConvolver(); verb.buffer = impulse;
-    const wet = c.createGain(); wet.gain.value = 0.3;
-    const delay = c.createDelay(1); delay.delayTime.value = 0.17;
+    impulses[fx.tail] = impulses[fx.tail] || makeImpulse(c, fx.tail);
+    const verb = c.createConvolver(); verb.buffer = impulses[fx.tail];
+    const wet = c.createGain(); wet.gain.value = fx.wet;
+    const delay = c.createDelay(1); delay.delayTime.value = fx.delay;
     const tone = c.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 3200;
-    const feedback = c.createGain(); feedback.gain.value = 0.26;
-    const echo = c.createGain(); echo.gain.value = 0.2;
-    src.connect(hp).connect(lp);
+    const feedback = c.createGain(); feedback.gain.value = fx.feedback;
+    const echoGain = c.createGain(); echoGain.gain.value = fx.echo;
+    voice.connect(hp).connect(lp);
     lp.connect(dry).connect(comp);
     lp.connect(verb).connect(wet).connect(comp);
     lp.connect(delay);
     delay.connect(tone);
     tone.connect(feedback).connect(delay); // each repeat a little darker and quieter
-    tone.connect(echo).connect(comp);
+    tone.connect(echoGain).connect(comp);
   } else {
-    src.connect(comp);
+    voice.connect(comp);
   }
   comp.connect(analyser);
   analyser.connect(c.destination);
   output.analyser = analyser;
   return new Promise((resolve) => {
-    current = { src, resolve };
-    src.onended = () => {
-      if (current?.src !== src) return;
-      current = null;
-      setTimeout(() => { if (output.analyser === analyser) output.analyser = null; resolve(); }, fx ? 450 : 0); // let the echo ring out
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (current?.src === src) current = null;
+      output.startedAtMs = null;
+      setTimeout(() => { if (output.analyser === analyser) output.analyser = null; resolve(); }, fx ? fx.tail * 320 : 0); // let the echo ring out
     };
+    current = { src, resolve: finish };
+    src.onended = finish;
+    // Safety net: never wait longer than the clip itself (if "ended" is ever lost, e.g. the
+    // context gets suspended mid-play), so the voice screen can't freeze on "Speaking…".
+    setTimeout(finish, (audio.duration + 3) * 1000);
+    output.startedAtMs = performance.now();
+    output.durationMs = audio.duration * 1000;
     src.start();
   });
 }

@@ -68,7 +68,7 @@ no reflash needed). That idle timeout never signs the browser out.
 
 ### What's in the app
 
-- **Crew:** Overview, Doctor AI & body (3D anatomy twin, plus a Doctor AI chat you can type or talk to),
+- **Crew:** Overview, Astra & body (3D anatomy twin, plus a Astra chat you can type or talk to),
   Trends, Mind & mood, Sleep lab, Mission health, Schedule (live mission clock), Learn, and a
   thread with the Flight Surgeon on the Overview.
 - **Flight Surgeon:** Crew overview, Alerts (acknowledge), each crew member's profile (with
@@ -108,9 +108,32 @@ It uses **Groq's free plan** (no credit card):
 - The AI only sees what's logged. "Sleeping" comes from an open sleep-station tag, and
   "sick" from temperature, SpO₂, symptoms and discomfort. There's no continuous body sensor.
 
-### Talking to Doctor AI (text or voice)
+### "Astra": call the AI by name, from any page
 
-On **Doctor AI & body**, open the chat. The same Groq AI answers from your own data and
+The AI is called **Astra**. Signed in as a crew member, just say **"Astra"** on any page and
+the voice screen opens. Say **"Astra, how am I doing?"** in one breath and she answers that
+straight away. Say only "Astra" and she beeps and listens for your question.
+
+- The **Astra pill** in the top bar shows whether she's listening ("Say 'Astra'"). Click it
+  to switch her off or on; your choice is remembered in this browser.
+- **Allow the microphone** the first time. After opening or refreshing the page, **click
+  anywhere once** so the browser lets her talk back. If you call her before clicking, she
+  shows her answer as text with a **"Tap so Astra can talk"** button, which plays it aloud.
+- **One tab at a time:** only the tab you used last listens, because two tabs can't share
+  the microphone. Any other tab's pill says "Astra in another tab"; click in that tab to
+  move her there.
+- If she ever misses your call, open DevTools → Console (level "Verbose"). Every phrase she
+  heard is logged as `[astra] …`, so you can see what the browser actually understood.
+- **Chrome or Edge only**, and only with the app opened as **`http://localhost:5000`** (or
+  https). Browsers block the microphone on a plain `http://<ip>` address.
+- **Privacy:** while Astra is on, the microphone stays open, and Chrome sends what it hears
+  to Google (Edge: Microsoft) to turn it into text, not only after her name. Switch her off
+  with the pill when you don't want that.
+- The Flight Surgeon doesn't get Astra.
+
+### Talking to Astra (text or voice)
+
+On **Astra & body**, open the chat. The same Groq AI answers from your own data and
 latest health analysis ("How am I doing?", "why is my temperature flagged?"). If you
 describe pain ("my back hurts, maybe a 6"), it also logs it on the 3D model. With no AI
 available, it falls back to instant keyword replies, and the header says "Quick replies
@@ -123,6 +146,10 @@ Voice uses only the browser's built-in Web Speech API: no extra service, key or 
   answers out loud, then listens again on its own. Tap the orb to interrupt, use the mic
   button to pause listening, and the red button (or Esc) to end. Captions are off unless
   you press **CC**, and every turn is also saved in the text chat.
+- **Talk over her:** while Astra is answering, just start talking. She stops and waits for
+  you to finish, then answers your new question. She keeps the whole conversation and knows
+  where you cut her off. Saying just "stop" or "wait" makes her stop and listen. Headphones
+  help, so the mic doesn't hear her own voice.
 - **Mic button** (push-to-talk): press, speak, press again (or just stop talking). Your
   words appear live in the text box, then go to the AI like a typed message.
 - **Voice on / Muted** in the chat header: when on, every AI reply is read aloud (a small
@@ -131,21 +158,90 @@ Voice uses only the browser's built-in Web Speech API: no extra service, key or 
 - **Typing always works**, voice is only an extra. A blocked microphone shows
   "Microphone permission denied - text input still works".
 - **The station voice is chosen on `/admin` → Station voice:**
-  - **Browser voice**: works offline, using the computer's own voice (Edge's "Aria" sounds
-    best; Chrome uses "Google US English"). It can't have echo, because the browser plays
-    it directly.
-  - **Microsoft neural voice** (free, no key, **needs internet**): a much more natural voice
-    (Aria, Jenny, Guy, Sonia or Ryan), played through the station's **metal-cabin reverb
-    and echo**. It takes about 2–4 s longer per reply. If it fails, the browser voice is
-    used instead.
-  - **Station comms effects** (on/off): NASA's Apollo **Quindar beeps** (2525 Hz before and
-    2475 Hz after each reply) and a soft cabin hum in voice mode.
-  - **Test voice** plays a sample before you save.
+  - **Presets** fill everything in one click:
+    - **Station comms** (the default): Aria, medium echo, beeps and hum.
+    - **Clean**: no echo, no beeps, no hum.
+    - **Ship computer**: Jenny, light echo, a little slower.
+    - **Mission control radio**: Guy, a crackly space-radio sound, and beeps.
+    - **Captain**: Andrew, deep voice, light echo.
+  - **Engine**:
+    - **Browser voice**: works offline, using the computer's own voice. Choose
+      **Female** or **Male**, and the best matching voice on that computer is used.
+    - **Microsoft neural voice** (free, no key, **needs internet**): a much more natural
+      voice. There are 7 female and 7 male voices, American, British or Australian. Each
+      reply takes about 2–4 s longer. If it fails, the browser voice is used instead.
+  - **Echo**: Off, Light, Medium or Strong. It works with the neural voice only, because the
+    browser voice plays directly and can't be changed.
+  - **Space radio**: a narrow, crackly radio sound. Neural voice only.
+  - **NASA beeps**: Apollo **Quindar tones**, 2525 Hz before each reply and 2475 Hz after.
+  - **Cabin hum**: a soft background hum in voice mode.
+  - **Speed** (80–130%) and **Pitch** (Low / Normal / High) work with both engines.
+  - **Test voice** plays exactly what's on the card before you save.
 - **Browsers:** use Chrome or Edge. Firefox has no voice input (the mic button is disabled
   and typing works). Which voices you hear depends on the computer.
 - **Privacy note:** the AI's voice is made on this computer, but **speech recognition isn't
   fully local**. Chrome sends the microphone audio to Google's servers, and Edge to
   Microsoft's, to turn it into text.
+
+### Astra can open pages and fill things in for you
+
+Talk or type to Astra (crew only):
+
+- **Open a page:** "take me to the sleep page", "open trends", "go to the overview". On the
+  voice screen she says "Opening …", then the screen closes on that page.
+- **Fill something in:** she shows a card with exactly what she understood, and **saves
+  nothing until you say "yes"** (or press **Yes**). "No" cancels, and saying
+  something else drops it.
+  - Mood: "my mood is low, I'm stressed" (saved with the note "stressed")
+  - Sleep: "I slept from 11pm to 6am"
+  - Symptoms and pain: "I have a headache", "my back hurts, about a 6"
+  - Vitals: "my heart rate is 72 and my temperature is 37.4" (then analyzed)
+  - Journal: "write in my journal: the treadmill felt easy"
+  - Alert the flight surgeon (urgent): "tell the flight surgeon I feel dizzy"
+  - Message the flight surgeon (normal): "tell the doctor I slept well". It arrives after
+    the mission's comms delay.
+  - Health summary: "send my weekly summary to the doctor". The AI writes it from your data.
+  - Sleep and workouts: "I'm going to bed" / "I'm awake", "start my workout" / "workout
+    done". Times run on the mission clock.
+  - New vitals reading: "take my vitals". The card shows the station sensors' numbers first.
+- **Guided activities** start right away on the voice screen, with a Stop button:
+  - "guide me through a breathing exercise": box breathing, 4 rounds
+  - "let's do a reaction test": 5 taps on green, judged against your own baseline
+  - "how do I measure my blood pressure?": the steps one by one, then tell her the number
+- **Voice SOS:** "I need help now" (or "this is an emergency", "I can't breathe") starts a
+  5-second countdown. Say "cancel" or tap it if you're okay; otherwise the real emergency
+  starts.
+- **She remembers:** "remember my left knee has hurt since Tuesday". She uses it later and
+  checks in on it. Account → **What Astra remembers** lists every note, with **Forget**.
+  She also checks in by herself after a low mood, pain of 6/10 or more, or new symptoms.
+- Groq's free plan allows about 8K AI tokens a minute. Firing many requests in a row can
+  hit that for a minute; Astra then falls back to the keyword replies.
+- The Flight Surgeon can still ask about a crew member, but Astra never saves anything on
+  their behalf.
+
+### Astra speaks first
+
+Without being asked, Astra says (or shows in a small card at the bottom right):
+
+- **Health warnings**: when your health analysis gets worse (yellow or red), at most once
+  every 10 minutes. She offers to alert the flight surgeon, or says she already did.
+- **Schedule**: "It's 08:00: exercise block. Should I start tracking your workout?", and
+  "You missed the morning vitals check…" when a task is missed.
+- **The flight surgeon**: she reads their messages to you (and you can answer by voice),
+  and tells you when they've seen your alert, after the comms delay.
+- **Check-ins**: things she said she'd ask about again.
+- **Daily briefing**: the first time you open the app each day, she offers one: last sleep,
+  how you're doing, what's left today, new messages.
+
+**Answer** / **Talk** on the card opens the voice screen, with a yes/no card for anything she
+offered. She speaks out loud only when all of these are true:
+- the Astra pill is on
+- the page has been clicked
+- no call is open
+- this is the tab she's listening in
+
+She speaks out loud at most once a minute. A superuser sets **Astra speaks first** on
+`/admin` → Station voice: **Out loud**, **Card only** or **Off**.
 
 ### Superuser admin page
 
@@ -209,7 +305,7 @@ Works the same with the real hardware or in `--simulate` mode.
 3. Overview → **Take a new reading** → **Assess**. A few seconds later the **AI health
    analysis** card updates with Ahmad's state and what to do. If it's red, a report heads to
    Earth on the comms delay and an alert is raised.
-4. **Doctor AI & body**: tap a body part on the 3D twin, or open the chat and ask "How am I
+4. **Astra & body**: tap a body part on the 3D twin, or open the chat and ask "How am I
    doing?". Press **Voice mode** to just talk to it, hands-free; it answers out loud. Say "my
    back hurts, maybe a 6" and it logs that on the twin.
 5. **Log out**, then tap the **Flight Surgeon's** card. **Crew overview** shows who needs
@@ -239,8 +335,8 @@ Works the same with the real hardware or in `--simulate` mode.
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest       # 227 backend tests
-cd frontend && npm test          # 37 frontend tests
+.venv/bin/python -m pytest       # 243 backend tests
+cd frontend && npm test          # 58 frontend tests
 ```
 
 ## Troubleshooting
@@ -250,6 +346,9 @@ cd frontend && npm test          # 37 frontend tests
   else holding the port) and restart `app.py` (it also retries every 3 s on its own).
 - **CYD resets when the port opens**: normal for most ESP32 boards; it re-sends `hello` on
   boot and the laptop re-detects it within a few seconds.
+- **Astra didn't answer**: she now recovers by herself (no refresh). If it happens often,
+  open the browser's DevTools console and look for lines starting with `[astra]`. They say
+  what went wrong (AI busy / free limit, audio locked until you click, mic restarted).
 - **A card tap did nothing**: the login screen says "Reconnecting to the station…" while
   the page can't reach the laptop; a tap made then is still picked up when it reconnects.
   If taps never register, check the `app.py` terminal for a scan line (if none, it's the
@@ -263,7 +362,7 @@ cd frontend && npm test          # 37 frontend tests
 
 ## What's built vs. not hardware-verified
 
-Built and tested (227 backend + 37 frontend unit tests, and every page clicked through in a
+Built and tested (243 backend + 58 frontend unit tests, and every page clicked through in a
 headless browser at desktop and phone width): the backend (sessions, rules engine, comms
 delay, mission clock, serial/Wi-Fi bridges, simulation, login/access control, AI analysis with
 its rules fallback),

@@ -9,7 +9,7 @@ export const CREW_NAV = [
   {
     group: "Health",
     items: [
-      { to: "/body", label: "Doctor AI & body", eyebrow: "Digital twin", icon: "doctor-ai" },
+      { to: "/body", label: "Astra & body", eyebrow: "Digital twin", icon: "doctor-ai" },
       { to: "/trends", label: "Trends", eyebrow: "Health analytics", icon: "trends" },
       { to: "/mind", label: "Mind & mood", eyebrow: "Crew wellness", icon: "mind" },
       { to: "/sleep", label: "Sleep lab", eyebrow: "Sleep lab", icon: "sleep" },
@@ -37,7 +37,7 @@ export const DOCTOR_NAV = [
     group: "Crew data",
     items: [
       { to: "/", label: "Live overview", title: "Mission overview", eyebrow: "Crew health · Live", icon: "overview", end: true },
-      { to: "/body", label: "Body & Doctor AI", icon: "doctor-ai" },
+      { to: "/body", label: "Body & Astra", icon: "doctor-ai" },
       { to: "/trends", label: "Trends", icon: "trends" },
       { to: "/mind", label: "Mind & mood", icon: "mind" },
       { to: "/sleep", label: "Sleep lab", icon: "sleep" },

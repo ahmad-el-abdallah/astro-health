@@ -1,4 +1,4 @@
-// Doctor AI consultation, as a drawer that slides in over the Body dashboard (the user's
+// Astra consultation, as a drawer that slides in over the Body dashboard (the user's
 // layout choice: the skeleton dashboard keeps the full page, the chat comes in on top).
 // Quick chips, message input, Analyze symptoms, Send. This drawer is the TEXT chat: every
 // voice button here (Voice mode, the mic) closes it and opens the full-screen voice screen
@@ -11,7 +11,9 @@ import { Icon } from "../../../components/ui/Icon.jsx";
 import { StatusChip, cx } from "../../../components/ui/index.jsx";
 import { VoiceFace } from "../../../components/VoiceFace.jsx";
 import { useVoice } from "../../../lib/useVoice.js";
+import { describeAction } from "../../../lib/astraActions.js";
 import { audioCtx } from "../../../lib/stationAudio.js";
+import { EmergencyCountdown } from "../../../components/astra/EmergencyCountdown.jsx";
 
 const CHIPS = ["How am I doing?", "Severe headache", "Back pain 6", "I have a fever", "Can't sleep"];
 
@@ -23,11 +25,37 @@ const MODE_CHIP = {
 
 function sourceLine(source) {
   if (source?.kind === "quick") return "Quick replies (AI offline)";
-  if (source?.kind === "ai" && source.model) return `Doctor AI · ${source.model.split("/").pop()}`;
-  return "Doctor AI";
+  if (source?.kind === "ai" && source.model) return `Astra · ${source.model.split("/").pop()}`;
+  return "Astra";
 }
 
-function Bubble({ m }) {
+const CARD_STATUS = {
+  saving: ["Saving…", "text-muted"],
+  saved: ["Saved ✓", "text-good-fg"],
+  partly: ["Some of it couldn't be saved", "text-check-fg"],
+  cancelled: ["Not saved", "text-muted"],
+  dismissed: ["Skipped", "text-muted"],
+};
+
+// What Astra proposes to save: nothing is saved until "Yes" (or a spoken "yes").
+function ConfirmCard({ confirm, onAnswer }) {
+  const [label, tone] = CARD_STATUS[confirm.status] || [];
+  return (
+    <span className="mt-2.5 flex flex-col gap-2 rounded-xl border border-line-strong bg-input p-3">
+      {confirm.actions.map((a, i) => <span key={i} className="block text-[13px] text-ink">{describeAction(a)}</span>)}
+      {confirm.status === "pending" ? (
+        <span className="flex gap-2">
+          <button onClick={() => onAnswer(true)} className="min-h-9 cursor-pointer rounded-lg bg-accent px-3 text-[13px] font-bold text-accent-on hover:bg-accent-hover">Yes</button>
+          <button onClick={() => onAnswer(false)} className="min-h-9 cursor-pointer rounded-lg border border-line-strong bg-control px-3 text-[13px] font-semibold">No</button>
+        </span>
+      ) : (
+        <span className={cx("text-xs font-semibold", tone)}>{label}</span>
+      )}
+    </span>
+  );
+}
+
+function Bubble({ m, onAnswer }) {
   const mine = m.who === "user";
   return (
     <motion.div
@@ -50,6 +78,7 @@ function Bubble({ m }) {
         >
           {m.text}
           {m.note && <span className="mt-1.5 block text-xs text-muted">{m.note}</span>}
+          {m.confirm && <ConfirmCard confirm={m.confirm} onAnswer={onAnswer} />}
           {m.analysis && (
             <span className="mt-2 flex flex-col gap-1.5">
               {m.analysis.map((a) => (
@@ -61,7 +90,7 @@ function Bubble({ m }) {
             </span>
           )}
         </div>
-        <span className={cx("text-[11px] text-subtle", mine && "text-right")}>{mine ? "You" : "Doctor AI"} · {m.time}</span>
+        <span className={cx("text-[11px] text-subtle", mine && "text-right")}>{mine ? "You" : "Astra"} · {m.time}</span>
       </div>
     </motion.div>
   );
@@ -75,8 +104,14 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
 
   const ask = useCallback(async (v) => {
     const reply = await submit(v);
-    if (reply?.text) speakRef.current(reply.text); // only speaks when voice is on
-  }, [submit]);
+    if (reply?.text && !reply.activity) speakRef.current(reply.text); // only speaks when voice is on
+    if (reply?.navigate) consultation.goTo(reply.navigate); // "take me to …"
+  }, [submit, consultation]);
+
+  const answerCard = useCallback(async (yes) => {
+    const r = yes ? await consultation.confirm() : consultation.cancel();
+    if (r?.text && !r.activity) speakRef.current(r.text); // an activity opens the voice screen
+  }, [consultation]);
 
   const voice = useVoice({ astroId });
   const { cancel, abortListening, speak } = voice;
@@ -104,7 +139,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
   const chip = MODE_CHIP[mode];
 
   return (
-    <Drawer open={open} onClose={closeDrawer} title="Doctor AI consultation" width={520}>
+    <Drawer open={open} onClose={closeDrawer} title="Astra consultation" width={520}>
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
         <VoiceFace mode={mode} />
         <div className="min-w-0 flex-1">
@@ -116,14 +151,16 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
           </h2>
           <span className={cx("block truncate text-xs", source?.kind === "quick" ? "text-check-fg" : "text-muted")}>{sourceLine(source)}</span>
         </div>
-        <button
-          onClick={openVoiceMode}
-          title="Voice mode: a hands-free conversation"
-          aria-label="Voice mode"
-          className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-accent px-3 text-[13px] font-semibold text-accent-on hover:bg-accent-hover"
-        >
-          <Icon name="waveform" size={16} /><span className="max-sm:hidden">Voice mode</span>
-        </button>
+        {onVoiceMode && (
+          <button
+            onClick={openVoiceMode}
+            title="Voice mode: a hands-free conversation"
+            aria-label="Voice mode"
+            className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-accent px-3 text-[13px] font-semibold text-accent-on hover:bg-accent-hover"
+          >
+            <Icon name="waveform" size={16} /><span className="max-sm:hidden">Voice mode</span>
+          </button>
+        )}
         {voice.support.tts && (
           <button
             onClick={() => { audioCtx(); voice.toggleVoice(); }}
@@ -141,11 +178,17 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
 
       <div ref={logRef} className="flex flex-1 flex-col gap-3.5 overflow-y-auto bg-input px-5 py-5">
         <AnimatePresence initial={false}>
-          {messages.map((m) => <Bubble key={m.id} m={m} />)}
+          {messages.map((m) => <Bubble key={m.id} m={m} onAnswer={answerCard} />)}
         </AnimatePresence>
       </div>
 
       <div className="flex flex-col gap-3 border-t border-line px-5 py-4">
+        {consultation.emergency && (
+          <EmergencyCountdown
+            emergency={consultation.emergency}
+            onCancel={() => { const r = consultation.cancelEmergency?.(); if (r?.text) speakRef.current(r.text); }}
+          />
+        )}
         <div className="flex flex-wrap gap-2">
           {CHIPS.map((c) => (
             <motion.button
@@ -164,17 +207,19 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Ask anything, or describe how you feel…"
-            aria-label="Message to Doctor AI"
+            aria-label="Message to Astra"
           />
-          <button
-            type="button"
-            onClick={openVoiceMode}
-            aria-label="Talk to Doctor AI"
-            title="Talk instead: opens the voice screen"
-            className="flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-control text-sm font-semibold hover:border-accent-text/60"
-          >
-            <Icon name="mic" size={18} />
-          </button>
+          {onVoiceMode && (
+            <button
+              type="button"
+              onClick={openVoiceMode}
+              aria-label="Talk to Astra"
+              title="Talk instead: opens the voice screen"
+              className="flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-control text-sm font-semibold hover:border-accent-text/60"
+            >
+              <Icon name="mic" size={18} />
+            </button>
+          )}
           <button type="button" onClick={onAnalyze} className="min-h-12 cursor-pointer rounded-xl border border-line-strong bg-control px-4 text-sm font-semibold hover:border-accent-text/60">
             Analyze symptoms
           </button>

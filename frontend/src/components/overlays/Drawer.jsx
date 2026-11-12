@@ -1,4 +1,4 @@
-// Generic right-hand slide-in panel (Account, the Body page's Doctor AI chat) and a
+// Generic right-hand slide-in panel (Account, the Body page's Astra chat) and a
 // centered Modal. Spring slide, backdrop fade, Esc / backdrop click to close.
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";

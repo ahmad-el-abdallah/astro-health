@@ -115,4 +115,6 @@ export const EVENT_INVALIDATIONS = {
   message_sent: [["messages"], ["thread"]],
   mission_changed: [["mission"]],
   unknown_tag: [["admin-unknown"]],
+  astra_memory: [["memory"]],
+  astra_followup: [["memory"]],
 };

@@ -164,9 +164,11 @@ def _open_toggle(astro_id):
     return None
 
 
-def build_context(conn, astro_id, profile=None):
+def build_context(conn, astro_id, profile=None, for_chat=False):
     """Returns (text for the AI, indicator ids with a reading in the last 24 h, facts).
-    Kept compact on purpose: Groq's free plan limits tokens per minute and per day."""
+    Kept compact on purpose: Groq's free plan limits tokens per minute and per day.
+    for_chat adds what only Astra's chat needs: the latest messages with the flight surgeon,
+    today's alerts (seen or not) and what she remembers about this astronaut."""
     now = datetime.now(timezone.utc)
     rules = load_rules()["indicators"]
     content_cfg = load_content()
@@ -214,10 +216,10 @@ def build_context(conn, astro_id, profile=None):
     ]
     if toggle:
         mission_min = round((time.time() - toggle["started_at"]) * TIME_SCALE / 60)
-        what = "ASLEEP: sleep-station tag is open" if toggle["kind"] == "sleep" else "EXERCISING: a workout tag is open"
+        what = "ASLEEP: sleep tracking is running" if toggle["kind"] == "sleep" else "EXERCISING: workout tracking is running"
         lines.append(f"Right now: {what} (started {scheduler.to_mission_hhmm(toggle['started_iso'])}, {mission_min} mission minutes ago).")
     else:
-        lines.append("Right now: no sleep or workout tag is open.")
+        lines.append("Right now: no sleep or workout tracking is running.")
     lines.append(f"CYD session open: {'yes' if astro_id in sessions.active_sessions else 'no'}. "
                  f"Emergency: {'ACTIVE - ' + sessions.emergency.get('text', '') if sessions.emergency.get('active') else 'none'}.")
 
@@ -240,6 +242,8 @@ def build_context(conn, astro_id, profile=None):
                  + (", ".join(f"{k} {v}" for k, v in discomfort.items()) if discomfort else "none") + ".")
     if plan:
         lines.append("Today's routine: " + "; ".join(f"{e['time']} {e['text']} ({e['status']})" for e in plan["entries"]) + ".")
+    if for_chat:
+        lines += _chat_lines(conn, astro_id, now)
     ref = [line for line in (_ranges_line(ind, rules[ind]) for ind in by_ind if ind in rules) if line]
     if ref:
         lines.append("Reference ranges (general adult ranges, placeholder, guidance only):")
@@ -250,6 +254,36 @@ def build_context(conn, astro_id, profile=None):
         "symptoms": dict(sym) if sym else None, "toggle": toggle, "discomfort": discomfort,
     }
     return "\n".join(lines), list(by_ind.keys()), facts
+
+
+def _chat_lines(conn, astro_id, now):
+    from backend.logic import astra_memory  # small module, imported here to keep startup order simple
+    out = []
+    now_iso = now.isoformat()
+    msgs = conn.execute(
+        "SELECT from_role, body, sent_at FROM messages WHERE astronaut_id = ? AND deliver_at <= ? "
+        "ORDER BY sent_at DESC LIMIT 3", (astro_id, now_iso),
+    ).fetchall()
+    if msgs:
+        out.append("Latest messages with the flight surgeon (newest first):")
+        for m in msgs:
+            who = "Flight surgeon" if m["from_role"] == "surgeon" else "Astronaut"
+            out.append(f"- {who} at {scheduler.to_mission_hhmm(m['sent_at'])}: {' '.join(m['body'].split())[:150]}")
+    else:
+        out.append("Messages with the flight surgeon: none yet.")
+    since24 = (now - timedelta(hours=24)).isoformat()
+    alerts = conn.execute(
+        "SELECT ts, text, acknowledged FROM alerts WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 3",
+        (astro_id, since24),
+    ).fetchall()
+    if alerts:
+        out.append("Alerts sent to the flight surgeon today: " + "; ".join(
+            f"{scheduler.to_mission_hhmm(a['ts'])} \"{a['text'][:80]}\" ({'seen by the surgeon' if a['acknowledged'] else 'not seen yet'})"
+            for a in alerts) + ".")
+    memories = astra_memory.context_lines(conn, astro_id)
+    out.append("What you remember about this astronaut (use the #number to forget one): "
+               + ("; ".join(memories) if memories else "nothing yet") + ".")
+    return out
 
 
 # ---------------------------------------------------------------- the rules fallback
@@ -401,7 +435,7 @@ def apply(astro_id, result, source, trigger, model=None, error=None, facts=None)
     public = to_public({"id": row_id, "astronaut_id": astro_id, "ts": now.isoformat(), "source": source, "model": model,
                         "trigger": trigger, "state": result["state"], "overall_level": result["overall_level"],
                         "result_json": json.dumps(stored)})
-    _emit_fn("analysis", public)
+    _emit_fn("analysis", {**public, "alerted": fire})
     return public
 
 

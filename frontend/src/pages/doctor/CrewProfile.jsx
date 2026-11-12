@@ -3,7 +3,7 @@
 // jump (and follow the scroll): Physical, Mental, Sleep, Mission risk, Messages.
 // - header: status ring, today's status, role · mission · last reading, live-on-CYD badge,
 //   the most important flag inline, CSV export, and shortcuts into the crew pages
-//   (Trends / Body & Doctor AI / Schedule) already pointed at this crew member;
+//   (Trends / Body & Astra / Schedule) already pointed at this crew member;
 // - Physical: six vital tiles + a trend chart (indicator + range);
 // - Mental: wellbeing ring, mood, mission risk for the mind, 7-day mood direction;
 // - Sleep: last night with the (illustrative) stage bar;
@@ -118,7 +118,7 @@ function Header({ person, summary, mission, onJump }) {
         )}
       </div>
       <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-        {[["/trends", "trends", "Trends"], ["/body", "doctor-ai", "Body & Doctor AI"], ["/schedule", "schedule", "Schedule"]].map(([to, icon, label]) => (
+        {[["/trends", "trends", "Trends"], ["/body", "doctor-ai", "Body & Astra"], ["/schedule", "schedule", "Schedule"]].map(([to, icon, label]) => (
           <button key={to} onClick={() => open(to)} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl bg-raised px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-control hover:text-ink">
             <Icon name={icon} size={15} /> {label}
           </button>
