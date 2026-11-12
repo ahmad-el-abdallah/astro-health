@@ -239,7 +239,7 @@ Works the same with the real hardware or in `--simulate` mode.
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest       # 225 backend tests
+.venv/bin/python -m pytest       # 227 backend tests
 cd frontend && npm test          # 37 frontend tests
 ```
 
@@ -250,6 +250,10 @@ cd frontend && npm test          # 37 frontend tests
   else holding the port) and restart `app.py` (it also retries every 3 s on its own).
 - **CYD resets when the port opens**: normal for most ESP32 boards; it re-sends `hello` on
   boot and the laptop re-detects it within a few seconds.
+- **A card tap did nothing**: the login screen says "Reconnecting to the station…" while
+  the page can't reach the laptop; a tap made then is still picked up when it reconnects.
+  If taps never register, check the `app.py` terminal for a scan line (if none, it's the
+  reader/USB, not the page).
 - **USB messages come through garbled**: a cable/port signal-integrity issue, not software.
   Try a shorter cable and a direct port (no hub). The Wi-Fi path above is a reliable fallback.
 - **Windows and the CH340 chip**: install the CH340 driver; pass the port as `--port COMx`.
@@ -259,7 +263,7 @@ cd frontend && npm test          # 37 frontend tests
 
 ## What's built vs. not hardware-verified
 
-Built and tested (225 backend + 37 frontend unit tests, and every page clicked through in a
+Built and tested (227 backend + 37 frontend unit tests, and every page clicked through in a
 headless browser at desktop and phone width): the backend (sessions, rules engine, comms
 delay, mission clock, serial/Wi-Fi bridges, simulation, login/access control, AI analysis with
 its rules fallback),

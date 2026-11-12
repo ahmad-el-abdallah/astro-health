@@ -43,6 +43,21 @@ emergency = {"active": False, "text": ""}
 UNKNOWN_BACKLOG_MAX = 50
 unknown_tag_backlog = {}
 
+# The most recent known-card scan: {"uid", "at" (epoch s)}. A browser whose live
+# connection was down at that moment asks for it on reconnect (GET /api/recent-scan), so a
+# tap made during a brief disconnect isn't silently lost -- see docs/CLAUDE.md
+# "Lost NFC scans". In-memory like everything else here.
+last_scan = {}
+RECENT_SCAN_S = 30
+
+
+def recent_scan():
+    """The last scan if it's under RECENT_SCAN_S old: {"uid", "age_s"}, else {}."""
+    if not last_scan:
+        return {}
+    age = time.time() - last_scan["at"]
+    return {"uid": last_scan["uid"], "age_s": round(age, 2)} if age <= RECENT_SCAN_S else {}
+
 # The login page's "Also sign in my CYD" / "This browser only" choice
 # (docs/CLAUDE.md "web-only login"), as a *global* current mode rather than
 # a per-tap flag -- a real physical tap (the Pico, the only NFC reader this
@@ -526,6 +541,7 @@ def handle_scan(uid, send_fn, emit_fn, web_only=None):
             send_fn(protocol.unknown_tag(uid))
             emit_fn("unknown_tag", {"uid": uid})
             return
+        last_scan.update({"uid": uid, "at": time.time()})
         emit_fn("scan", {"uid": uid, "type": tag["type"], "label": tag["label"]})
         if web_only:
             return

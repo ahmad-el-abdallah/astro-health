@@ -75,7 +75,7 @@ firmware/esp32s3_nfc_reader/ dead hardware, kept for reference only -- see "Pico
                              replaces the dead ESP32-S3" below, do not try to revive this board
 firmware/pico_nfc_reader/   the live NFC reader: Pico + PN532, USB-straight-to-laptop
 firmware/existing/          reference-only copies of Lifeline's lock sketch + nfc_link.h
-tests/                      pytest (225) -- flat, one test_<module>.py per backend module, plus
+tests/                      pytest (227) -- flat, one test_<module>.py per backend module, plus
                              test_spa.py (SPA serving), test_cyd_logout.py, test_scheduler.py
 docs/build-prompt.md        the original 16-section spec
 docs/CLAUDE.md              these notes (root CLAUDE.md only imports this)
@@ -2554,9 +2554,44 @@ be able to **choose either engine on /admin**.
   when `/speak` fails. **Not yet heard through real speakers / a real mic** -- the user judges
   the sound in real Chrome/Edge.
 
+## Voice means the voice screen, never the chat (2026-11-12)
+
+User: "when I use the voice option ... show a screen like ChatGPT, I don't want to see the
+chat". `VoiceMode` moved up to `Body.jsx` (`voiceOpen` state): the Body page's primary button
+is now **Talk to Doctor AI** (opens the voice screen directly, closes the chat), the old button
+became **Chat**, and inside the chat both the Voice mode button and the mic call
+`onVoiceMode` (close the drawer, open the voice screen). The chat no longer does push-to-talk
+dictation into the text box; its useVoice only reads typed replies aloud (Voice on/Muted).
+Ending a call returns to the Body page. Browser-checked 4/4 on an isolated copy.
+
+## Lost NFC scans: "I scan and nothing happens until I hard-refresh" (2026-11-12)
+
+Found three real causes in the browser/laptop path (the Pico reader itself was fine):
+1. **A scan during a live-connection gap was lost forever.** Reproduced on an isolated copy:
+   restart the server under an open login page, tap right away -> nothing. Fix: the server
+   remembers the last known-card scan for 30 s (`sessions.last_scan`, `GET /api/recent-scan`);
+   `lib/socket.js` reports how long the connection was down (`onReconnect(gapSeconds)`), and
+   `AuthProvider` replays a scan newer than the gap. Reconnects are also faster (backoff
+   0.4-2 s instead of up to 5 s), and immediate when the tab becomes visible / the network
+   returns; an "io server disconnect" is reconnected by hand (socket.io won't).
+2. **A silently expired web login (1 h) swallowed every scan.** The page still thought someone
+   was signed in, and the old handler ignored scans while `user` was set. Now a scan re-checks
+   `/auth/me` first, and any 401 from the API (outside /admin and /auth) re-checks too; an
+   expired login drops back to the login screen and the tap signs the new person in.
+   A tap while *really* signed in still never switches the login.
+3. **The login page's scan-mode choice was lost on a server restart** (it lives in server
+   memory) until the page reloaded. It's now re-sent on every reconnect.
+
+The login screen shows "Reconnecting to the station…" while offline. Verified on an isolated
+:5057 copy (8/8 checks: normal tap, tap during a restart replayed, scan-mode re-sent, expired
+login + tap signs in, live login untouched, offline indicator on/off); 227 backend + 37
+frontend tests. **Not yet confirmed with the real Pico + a real card** -- if a tap is still
+ever lost, check the server's terminal for the scan line to tell a reader/USB problem from a
+browser one.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 225 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 227 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
 - `cd frontend && npm test` — 37 Vitest tests (format, trends stats, alert feed, report text, voice);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.

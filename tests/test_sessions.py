@@ -491,3 +491,20 @@ def test_surgeon_payload_is_resent_on_a_fresh_session(fresh_db):
     sessions.handle_scan("S9000001", send_fn, emit_fn)  # tap back in -- same data, must still send
     types = [protocol.decode(s)["type"] for s in sent if protocol.decode(s)]
     assert types == ["session", "led", "crew_list", "alerts_list", "inbox_list"]
+
+
+def test_a_scan_is_remembered_briefly_for_a_reconnecting_browser(fresh_db, monkeypatch):
+    with db.write_conn() as conn:
+        seed_minimal(conn)
+    sessions.handle_scan("A0000001", lambda line: None, lambda e, d: None, web_only=True)
+    recent = sessions.recent_scan()
+    assert recent["uid"] == "A0000001" and recent["age_s"] < 1
+    monkeypatch.setattr(sessions.time, "time", lambda: sessions.last_scan["at"] + sessions.RECENT_SCAN_S + 1)
+    assert sessions.recent_scan() == {}
+
+
+def test_an_unknown_card_is_not_remembered_as_a_login_scan(fresh_db):
+    with db.write_conn() as conn:
+        seed_minimal(conn)
+    sessions.handle_scan("NOPE0000", lambda line: None, lambda e, d: None)
+    assert sessions.recent_scan() == {}

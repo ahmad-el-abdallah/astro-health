@@ -10,7 +10,7 @@ import { post } from "../lib/api.js";
 import { captureDescriptor, startCamera, stopCamera } from "../lib/faceId.js";
 import { useMission } from "../lib/queries.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
-import { loginScanModeStore, setLoginScanMode, useStore } from "../lib/socket.js";
+import { connectionStore, loginScanModeStore, setLoginScanMode, useStore } from "../lib/socket.js";
 import { Icon } from "../components/ui/Icon.jsx";
 import { cx } from "../components/ui/index.jsx";
 import { EASE_ENTER } from "../components/ui/motion.js";
@@ -80,6 +80,7 @@ export function Login() {
   const { signIn } = useAuth();
   const mission = useMission();
   const scanMode = useStore(loginScanModeStore); // "cyd" | "web" -- see socket.js
+  const connection = useStore(connectionStore); // a tap can't reach this page while offline
   const [method, setMethod] = useState(null); // null | "password" | "face"
   const [contactOpen, setContactOpen] = useState(false);
 
@@ -205,10 +206,17 @@ export function Login() {
                 <small className="block text-xs text-muted">Tap your card on the CYD reader, or use the Simulator</small>
               </div>
             </div>
-            <p className="m-0 flex items-center gap-2 text-[13px] text-accent-text" role="status">
-              <span className="h-2 w-2 rounded-full bg-accent-text animate-[ah-pulse-dot_1.2s_ease-in-out_infinite]" />
-              Waiting for a card tap…
-            </p>
+            {connection === "offline" ? (
+              <p className="m-0 flex items-center gap-2 text-[13px] text-check-fg" role="status">
+                <span className="h-2 w-2 rounded-full bg-check-fg animate-[ah-pulse-dot_0.8s_ease-in-out_infinite]" />
+                Reconnecting to the station… a card tapped now will still sign you in.
+              </p>
+            ) : (
+              <p className="m-0 flex items-center gap-2 text-[13px] text-accent-text" role="status">
+                <span className="h-2 w-2 rounded-full bg-accent-text animate-[ah-pulse-dot_1.2s_ease-in-out_infinite]" />
+                Waiting for a card tap…
+              </p>
+            )}
             {/* Only affects a tap made from the web (the Simulator's NFC buttons) -- a
                 real physical tap on actual hardware always signs in its own CYD too,
                 since there's no way for real hardware to know this browser's choice. */}

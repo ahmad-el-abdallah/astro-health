@@ -1121,6 +1121,14 @@ def create_routes(app, socketio, bridge):
     # unauthenticated, same as every other pre-login route (nfc_login,
     # tags reads, etc.) -- this is set from the login screen, before
     # anyone's signed in. ----
+    @bp.get("/recent-scan")
+    def recent_scan():
+        """The last card scan if it's under 30 s old ({"uid", "age_s"}, else {}). A browser
+        asks right after its live connection comes back, so a tap made while it was
+        reconnecting still signs it in. Same exposure as the "scan" broadcast itself
+        (unauthenticated, like the login screen that needs it)."""
+        return jsonify(sessions.recent_scan())
+
     @bp.post("/scan-mode")
     def set_scan_mode():
         body = request.get_json(force=True) or {}

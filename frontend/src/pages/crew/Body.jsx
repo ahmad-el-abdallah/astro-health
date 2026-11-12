@@ -22,6 +22,8 @@ import { REGIONS } from "../../three/anatomy/regions.js";
 import { STRINGS } from "../../strings.js";
 import { WebGLBoundary } from "../../three/webgl.jsx";
 import { ChatDrawer } from "./body/ChatDrawer.jsx";
+import { VoiceMode } from "./body/VoiceMode.jsx";
+import { audioCtx } from "../../lib/stationAudio.js";
 import { useConsultation } from "./body/useConsultation.js";
 import { LAB_INDICATORS, LabTile, LogReadingCard, ProfileCard, RegionCard, Timeline } from "./body/Panels.jsx";
 
@@ -86,6 +88,8 @@ function BodyFor({ astroId }) {
   const [layers, setLayers] = useState({ skin: true, muscles: false, bones: true, organs: true });
   const [resetSignal, setResetSignal] = useState(0);
   const [chatOpen, setChatOpen] = useState(params.get("consult") === "1");
+  const [voiceOpen, setVoiceOpen] = useState(false); // the full-screen voice screen, chat hidden
+  const openVoice = () => { audioCtx(); setChatOpen(false); setVoiceOpen(true); };
 
   const s = summary.data;
   const today = useMemo(() => s?.today || {}, [s?.today]);
@@ -178,8 +182,11 @@ function BodyFor({ astroId }) {
         <p className="m-0 mr-auto max-w-2xl text-[15px] text-ink-2">
           Describe how you feel or tap your twin — Doctor AI compares it with your own baseline and tells you what to do next.
         </p>
-        <Button variant="primary" onClick={() => setChatOpen(true)}>
-          <Icon name="doctor-ai" size={17} /> Doctor AI
+        <Button onClick={() => setChatOpen(true)}>
+          <Icon name="doctor-ai" size={17} /> Chat
+        </Button>
+        <Button variant="primary" onClick={openVoice}>
+          <Icon name="waveform" size={17} /> Talk to Doctor AI
         </Button>
       </motion.div>
 
@@ -269,7 +276,16 @@ function BodyFor({ astroId }) {
         consultation={consultation}
         onAnalyze={analyze}
         astroId={astroId}
+        onVoiceMode={openVoice}
       />
+      {voiceOpen && (
+        <VoiceMode
+          onClose={() => setVoiceOpen(false)}
+          astroId={astroId}
+          submit={consultation.submit}
+          thinking={consultation.thinking}
+        />
+      )}
     </>
   );
 }

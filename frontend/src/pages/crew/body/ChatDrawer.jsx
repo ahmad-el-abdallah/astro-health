@@ -1,9 +1,9 @@
 // Doctor AI consultation, as a drawer that slides in over the Body dashboard (the user's
 // layout choice: the skeleton dashboard keeps the full page, the chat comes in on top).
-// Quick chips, message input, Analyze symptoms, Send -- plus voice (lib/useVoice.js, the
-// browser's Web Speech API): a push-to-talk mic whose live transcript fills the input, the
-// AI's replies spoken aloud when voice is on, a Voice on / Muted toggle, a talking face, and
-// a Ready / Listening / Thinking chip. Typing always works; voice is only an extra.
+// Quick chips, message input, Analyze symptoms, Send. This drawer is the TEXT chat: every
+// voice button here (Voice mode, the mic) closes it and opens the full-screen voice screen
+// instead (VoiceMode, owned by Body.jsx) -- the user doesn't want to see the chat while
+// talking. Typed replies can still be read aloud (Voice on / Muted).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Drawer } from "../../../components/overlays/Drawer.jsx";
@@ -12,7 +12,6 @@ import { StatusChip, cx } from "../../../components/ui/index.jsx";
 import { VoiceFace } from "../../../components/VoiceFace.jsx";
 import { useVoice } from "../../../lib/useVoice.js";
 import { audioCtx } from "../../../lib/stationAudio.js";
-import { VoiceMode } from "./VoiceMode.jsx";
 
 const CHIPS = ["How am I doing?", "Severe headache", "Back pain 6", "I have a fever", "Can't sleep"];
 
@@ -68,9 +67,8 @@ function Bubble({ m }) {
   );
 }
 
-export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) {
+export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, onVoiceMode }) {
   const [text, setText] = useState("");
-  const [voiceMode, setVoiceMode] = useState(false);
   const logRef = useRef(null);
   const { messages, submit, thinking, source } = consultation;
   const speakRef = useRef(() => {});
@@ -80,11 +78,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) 
     if (reply?.text) speakRef.current(reply.text); // only speaks when voice is on
   }, [submit]);
 
-  const voice = useVoice({
-    astroId,
-    onInterim: setText, // the live transcript shows in the input box
-    onFinal: (heard) => { setText(""); ask(heard); }, // then goes to the AI like a typed message
-  });
+  const voice = useVoice({ astroId });
   const { cancel, abortListening, speak } = voice;
   useEffect(() => { speakRef.current = speak; }, [speak]);
 
@@ -92,7 +86,8 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) 
   useEffect(() => {
     if (!open) { cancel(); abortListening(); }
   }, [open, cancel, abortListening]);
-  const closeDrawer = () => { setVoiceMode(false); onClose(); };
+  const closeDrawer = () => onClose();
+  const openVoiceMode = () => { audioCtx(); cancel(); abortListening(); onVoiceMode(); };
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
@@ -105,7 +100,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) 
     ask(v);
   };
 
-  const mode = voice.listening ? "listening" : thinking ? "thinking" : "ready";
+  const mode = thinking ? "thinking" : "ready";
   const chip = MODE_CHIP[mode];
 
   return (
@@ -122,7 +117,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) 
           <span className={cx("block truncate text-xs", source?.kind === "quick" ? "text-check-fg" : "text-muted")}>{sourceLine(source)}</span>
         </div>
         <button
-          onClick={() => { audioCtx(); cancel(); abortListening(); setVoiceMode(true); }}
+          onClick={openVoiceMode}
           title="Voice mode: a hands-free conversation"
           aria-label="Voice mode"
           className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-accent px-3 text-[13px] font-semibold text-accent-on hover:bg-accent-hover"
@@ -168,18 +163,15 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) 
             className="ah-input min-h-12 flex-[1_1_200px]"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={voice.listening ? "Listening… speak now" : "Ask anything, or describe how you feel…"}
+            placeholder="Ask anything, or describe how you feel…"
             aria-label="Message to Doctor AI"
           />
           <button
             type="button"
-            onClick={voice.listening ? voice.stopListening : voice.startListening}
-            disabled={!voice.support.stt}
-            aria-pressed={voice.listening}
-            aria-label={voice.listening ? "Stop listening" : "Talk to Doctor AI"}
-            title={voice.support.stt ? (voice.listening ? "Stop listening" : "Press and speak") : "Voice input isn't available in this browser"}
-            className={cx("flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl border text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50",
-              voice.listening ? "animate-pulse border-alert-fg bg-alert-bg text-alert-fg" : "border-line-strong bg-control hover:border-accent-text/60")}
+            onClick={openVoiceMode}
+            aria-label="Talk to Doctor AI"
+            title="Talk instead: opens the voice screen"
+            className="flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-control text-sm font-semibold hover:border-accent-text/60"
           >
             <Icon name="mic" size={18} />
           </button>
@@ -190,16 +182,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) 
             Send <Icon name="send" size={16} />
           </button>
         </form>
-        {voice.error && <p role="alert" className="m-0 text-xs text-check-fg">{voice.error}</p>}
       </div>
-      {voiceMode && (
-        <VoiceMode
-          onClose={() => setVoiceMode(false)}
-          astroId={astroId}
-          submit={consultation.submit}
-          thinking={consultation.thinking}
-        />
-      )}
     </Drawer>
   );
 }

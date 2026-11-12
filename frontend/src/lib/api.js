@@ -17,6 +17,11 @@ export async function api(path, options = {}) {
   });
   const ct = res.headers.get("content-type") || "";
   const body = ct.includes("json") ? await res.json().catch(() => null) : await res.text();
+  // 401 = not signed in (403 is "signed in, but not allowed"). Outside the separate /admin
+  // login and the auth routes themselves, it means the crew/surgeon login expired.
+  if (res.status === 401 && !path.startsWith("/admin") && !path.startsWith("/auth/") && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("ah:unauthorized"));
+  }
   if (!res.ok) throw new ApiError(path, res.status, body);
   return body;
 }
