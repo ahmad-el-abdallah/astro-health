@@ -2280,6 +2280,47 @@ was checked first: what happens if the boot-time reconnect attempt simply *fails
   isn't stuck, not just silently either-connected-or-not.
 - `arduino-cli compile` clean (35%/15%, unchanged).
 
+## Real UTC clock on the Idle screen, replacing the uptime counter (2026-11-12)
+
+The Idle screen used to show `millis()/1000` as "H:M:S" -- time since boot, resetting to 0 on
+every reboot, with no relationship to the real time of day. User called this "random time" and
+asked for a real UTC clock instead, shown once the CYD can actually get one, styled as a clean
+digital readout (chosen over an analog clock face after being shown both options).
+
+- **`configTime(0, 0, "pool.ntp.org", "time.nist.gov")`** (UTC directly, no timezone/DST) is
+  kicked off the moment Join-Wi-Fi actually connects (`wifi_setup.ino`'s `pollWifiConnect()`
+  success branch, alongside the already-existing `startTcpServer()`/mDNS calls). AP mode never
+  calls this at all -- no internet to sync from -- so it naturally keeps the old uptime fallback
+  with no special-casing needed.
+- **`ntpLooksSynced()`** (`astro_cyd.ino`): NTP sync happens in the background with no callback
+  used here -- `time(nullptr)` reads as a small near-zero epoch value until it completes, so
+  "looks like a real date, not 1970" (`> 1700000000`, ~Nov 2023) is a simpler and just as
+  reliable check as inspecting `struct tm` fields directly.
+- **`screens.ino`'s new `drawIdleClock()`** draws into its own small region (y 60-125) of the
+  Idle screen, not the whole screen -- three states: the real clock (`HH : MM : SS` built from
+  `struct tm` fields directly, not `strftime`, specifically so the colons can be drawn in the
+  accent color `U_CREW` while the digits stay `U_TEXT` -- matches the approved preview) plus a
+  dim `UTC` label and a `strftime(..., "%a %d %b %Y", ...)` date line, once `staMode &&
+  WL_CONNECTED && ntpLooksSynced()`; a plain `"Syncing time..."` once connected but not yet
+  synced (never shows a wrong/epoch time); the original uptime counter otherwise (AP mode, or
+  not yet connected). `drawIdleScreen()` calls it once as part of its normal full draw.
+- **Keeping it ticking**: nothing in this firmware redrew Idle on a timer at all before this --
+  only specific triggers (a laptop reconnect, a toast expiring). Added a small periodic tick to
+  `updateScreenTimers()`: while `screen == SCR_IDLE`, call `drawIdleClock()` once a second --
+  deliberately *not* a full `drawIdleScreen()`, so the tiles/hint text/status lines below the
+  clock never flicker just because a second passed. This also finally makes the uptime-fallback
+  case visibly count up live, a small bonus consistency fix that fell out of the same mechanism,
+  not separate scope.
+- **A real diagnostic, not debug cruft left behind**: `wifi_setup.ino`'s new `pollNtpAnnounce()`
+  prints a one-time `[ntp] synced: <real date/time> UTC` Serial line the moment sync completes --
+  nothing else in this protocol ever reports real time, and it's the only way to confirm the
+  clock actually got a plausible value without looking at the physical screen.
+- `arduino-cli compile` clean (36% flash / 16% RAM, up from 35%/15% -- the C library's time/NTP
+  code pulled in some real size, expected for this feature). Flashed; **verify the real screen
+  shows a correct, ticking UTC time once connected** -- the Serial diagnostic above confirms the
+  *value* is right, but the on-screen layout (three lines where there used to be one, colored
+  colons, no overlap with the hint text below it) can only be judged by actually looking at it.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 236 tests (rules engine, protocol, sessions, REST API, symptoms,

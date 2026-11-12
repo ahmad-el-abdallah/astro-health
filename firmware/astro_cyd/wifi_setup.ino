@@ -298,6 +298,7 @@ void pollWifiConnect() {
     wifiConnectPending = false;
     startTcpServer();  // wifi_bridge.ino -- same server either Wi-Fi mode ends up using
     if (MDNS.begin("astro-cyd")) MDNS.addService("astro-health", "tcp", TCP_PORT);
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC directly -- 0 offset, 0 DST
     Serial.printf("[wifi] joined \"%s\", IP %s, port %u (also at astro-cyd.local)\n",
                   wifiSelectedSsid.c_str(), WiFi.localIP().toString().c_str(), TCP_PORT);
     if (wifiConnectIsSetupFlow) {
@@ -340,6 +341,22 @@ void pollWifiConnect() {
 
 void pollWifiRestart() {
   if (wifiRestartAtMs && millis() > wifiRestartAtMs) { wifiRestartAtMs = 0; ESP.restart(); }
+}
+
+// One-time Serial confirmation the moment NTP sync actually completes --
+// useful on its own (no other message in this protocol ever reports real
+// time), and the only way to confirm the clock got a plausible real value
+// without looking at the physical screen.
+void pollNtpAnnounce() {
+  static bool announced = false;
+  if (announced || !ntpLooksSynced()) return;
+  announced = true;
+  time_t now = time(nullptr);
+  struct tm t;
+  gmtime_r(&now, &t);
+  char buf[32];
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S UTC", &t);
+  Serial.printf("[ntp] synced: %s\n", buf);
 }
 
 void drawWifiConnectingScreen() {

@@ -82,6 +82,55 @@ void drawSosTile(int x, int y, int w, int h) {
 bool pointInSos(int x, int y) { return hitRect(sosX, sosY, sosW, sosH, x, y); }
 
 // ---- screen: Idle ----
+// ---- idle screen's own clock region (y 60-125): a real UTC clock once
+// Join Wi-Fi actually has internet and NTP has synced (astro_cyd.ino's
+// ntpLooksSynced(), set rolling via configTime() in wifi_setup.ino's
+// pollWifiConnect()); the uptime-since-boot counter otherwise (AP mode,
+// not yet connected, or connected but still syncing -- never shows a
+// wrong/epoch time). Its own function, separate from the rest of
+// drawIdleScreen(), so the 1s tick that keeps it ticking (updateScreenTimers())
+// only ever repaints this one band, never the tiles/hint text/status lines
+// below it. ----
+void drawIdleClock() {
+  int cx0 = U_PAD + U_COL_W + U_PAD, cw = SCRW - U_PAD - cx0, mid = cx0 + cw / 2;
+  tft.fillRect(cx0, 60, cw, 65, U_BG);
+  if (staMode && WiFi.status() == WL_CONNECTED && ntpLooksSynced()) {
+    time_t now = time(nullptr);
+    struct tm t;
+    gmtime_r(&now, &t);
+    char hh[3], mm[3], ss[3];
+    snprintf(hh, sizeof(hh), "%02d", t.tm_hour);
+    snprintf(mm, sizeof(mm), "%02d", t.tm_min);
+    snprintf(ss, sizeof(ss), "%02d", t.tm_sec);
+    int wHh = tft.textWidth(hh, 4), wColon = tft.textWidth(":", 4);
+    int wMm = tft.textWidth(mm, 4), wSs = tft.textWidth(ss, 4);
+    int x = mid - (wHh + wColon + wMm + wColon + wSs) / 2;
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(U_TEXT, U_BG); tft.drawString(hh, x, 75, 4); x += wHh;
+    tft.setTextColor(U_CREW, U_BG); tft.drawString(":", x, 75, 4); x += wColon;
+    tft.setTextColor(U_TEXT, U_BG); tft.drawString(mm, x, 75, 4); x += wMm;
+    tft.setTextColor(U_CREW, U_BG); tft.drawString(":", x, 75, 4); x += wColon;
+    tft.setTextColor(U_TEXT, U_BG); tft.drawString(ss, x, 75, 4);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(U_DIM, U_BG);
+    tft.drawString("UTC", mid, 95, 1);
+    char dateBuf[24];
+    strftime(dateBuf, sizeof(dateBuf), "%a %d %b %Y", &t);
+    tft.drawString(dateBuf, mid, 112, 2);
+  } else if (staMode && WiFi.status() == WL_CONNECTED) {
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(U_DIM, U_BG);
+    tft.drawString("Syncing time...", mid, 92, 2);
+  } else {
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(U_TEXT, U_BG);
+    char up[16];
+    uint32_t s = millis() / 1000;
+    snprintf(up, sizeof(up), "%lu:%02lu:%02lu", (unsigned long)(s / 3600), (unsigned long)((s / 60) % 60), (unsigned long)(s % 60));
+    tft.drawString(up, mid, 92, 4);
+  }
+}
+
 void drawIdleScreen() {
   clearScreen();
   drawHeader("ASTRO HEALTH", "", false, "", 0);
@@ -98,12 +147,8 @@ void drawIdleScreen() {
   // either wrapped or font-4 rather than the old font-7 clock/long
   // sentence that only fit when this had the whole 320px to itself.
   int cx0 = U_PAD + U_COL_W + U_PAD, cw = SCRW - U_PAD - cx0, mid = cx0 + cw / 2;
+  drawIdleClock();
   tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(U_TEXT, U_BG);
-  char up[16];
-  uint32_t s = millis() / 1000;
-  snprintf(up, sizeof(up), "%lu:%02lu:%02lu", (unsigned long)(s / 3600), (unsigned long)((s / 60) % 60), (unsigned long)(s % 60));
-  tft.drawString(up, mid, 100, 4);
   tft.setTextColor(U_DIM, U_BG);
   drawWrapped("Tap your crew card on the reader", mid, 140, cw - 10, 16, 2);
   String laptopTxt = laptopOnline ? "Laptop online" : "Laptop offline";
@@ -1048,6 +1093,17 @@ void checkSosButton() {
 // ---- per-frame updates for anything timed ----
 void updateScreenTimers() {
   uint32_t now = millis();
+
+  // Keeps the Idle screen's clock (real UTC once synced, the uptime
+  // fallback otherwise) actually ticking -- nothing else here redraws Idle
+  // on a timer at all, only on specific triggers (a laptop reconnect, a
+  // toast expiring). Only this one small region repaints, not the whole
+  // screen, so the tiles/hint text/status lines below it never flicker
+  // just because a second passed.
+  if (screen == SCR_IDLE && now - lastIdleClockDrawMs >= 1000) {
+    lastIdleClockDrawMs = now;
+    drawIdleClock();
+  }
 
   if (toastUntilMs && now > toastUntilMs) {
     toastUntilMs = 0;

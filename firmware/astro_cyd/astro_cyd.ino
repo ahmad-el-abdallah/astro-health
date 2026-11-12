@@ -72,6 +72,7 @@ typedef void (*IconFn)(int cx, int cy, float s, uint16_t color, uint16_t bg);
 #include <SD.h>
 #include <Preferences.h>
 #include <ESPmDNS.h>
+#include <time.h>
 #include "nfc_link.h"
 
 // ---- persistent pairing (docs/CLAUDE.md "CYD pairing") ----
@@ -272,6 +273,18 @@ uint32_t wifiRestartAtMs = 0;  // 0 = no restart scheduled
 String wifiConnectError = "";
 static const uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
 
+// Real UTC time, only ever reachable once Join Wi-Fi actually has internet
+// (configTime() is kicked off on a successful connect, wifi_setup.ino).
+// NTP sync happens in the background with no explicit "done" callback used
+// here -- time(nullptr) reads as a small near-zero epoch value until it
+// completes, so "looks like a real date, not 1970" is a simpler and just as
+// reliable check as inspecting struct tm fields. AP mode never calls
+// configTime() at all (no uplink to sync from), so this is naturally always
+// false there -- no special-casing needed on top.
+static const time_t NTP_SYNCED_EPOCH_FLOOR = 1700000000;  // ~Nov 2023
+bool ntpLooksSynced() { return time(nullptr) > NTP_SYNCED_EPOCH_FLOOR; }
+uint32_t lastIdleClockDrawMs = 0;
+
 // reaction test (10 trials; see docs/build-prompt.md section 10, screen 5)
 static const int REACTION_TRIALS = 10;
 int reactionTrial = 0;
@@ -369,6 +382,7 @@ void loop() {
   pollWifiScan();        // wifi_setup.ino: async network scan (never blocks loop())
   pollWifiConnect();     // wifi_setup.ino: async Wi-Fi join (never blocks loop())
   pollWifiRestart();     // wifi_setup.ino: the delayed restart after a successful new join
+  pollNtpAnnounce();     // wifi_setup.ino: one-time Serial line once the real UTC clock syncs
   handleLink();          // nfc.ino: drain ESP-NOW frames from the S3
   handleTouch();         // screens.ino
   updateScreenTimers();  // screens.ino: toasts, reaction test, breathing, timeouts
