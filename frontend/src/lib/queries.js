@@ -30,6 +30,9 @@ export const useCrew = (enabled = true) => useQuery({ queryKey: ["crew"], queryF
 export const useMission = () => useQuery({ queryKey: ["mission"], queryFn: () => get("/mission") });
 export const useContent = () => useQuery({ queryKey: ["content"], queryFn: () => get("/content"), ...staticOpts });
 export const useHealthRules = () => useQuery({ queryKey: ["rules"], queryFn: () => get("/health-rules"), ...staticOpts });
+// Station voice (engine/voice/effects), chosen on /admin.
+export const useVoiceSettings = () =>
+  useQuery({ queryKey: ["voice-settings"], queryFn: () => get("/voice-settings"), staleTime: 15_000 });
 export const useSymptomCatalog = () =>
   useQuery({ queryKey: ["symptomCatalog"], queryFn: () => get("/symptoms/catalog"), ...staticOpts });
 export const useRoutine = () => useQuery({ queryKey: ["routine"], queryFn: () => get("/routine"), ...staticOpts });

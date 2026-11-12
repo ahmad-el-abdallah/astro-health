@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend import db
-from backend.logic import sessions
+from backend import config, db
+from backend.logic import analysis, sessions
 
 
 @pytest.fixture(autouse=True)
@@ -17,6 +17,28 @@ def reset_sessions_state():
     sessions.unknown_tag_backlog.clear()
     sessions.current_scan_mode = "cyd"
     yield
+
+
+ANALYSIS_TEST_MODULES = {"test_api", "test_analysis"}
+
+
+@pytest.fixture(autouse=True)
+def no_real_ai(monkeypatch, request):
+    """Tests never call a real AI: no key (even if data/ai_api_key exists on this
+    machine), so every analysis uses the rules fallback unless a test mocks the AI.
+    Analysis runs right away instead of after the demo's debounce. Outside the modules
+    that test it, queuing an analysis is a no-op, so the background worker can never
+    write into another test's database."""
+    monkeypatch.setattr(config, "ai_api_key", lambda: None)
+    monkeypatch.setattr(analysis, "DEBOUNCE_S", 0)
+    monkeypatch.setattr(analysis, "MIN_INTERVAL_S", 0)
+    if request.module.__name__.split(".")[-1] not in ANALYSIS_TEST_MODULES:
+        monkeypatch.setattr(analysis, "request", lambda *a, **k: None)
+    analysis.reset()
+    yield
+    if analysis._worker_started:
+        analysis.wait_idle(5)
+    analysis.reset()
 
 
 @pytest.fixture()

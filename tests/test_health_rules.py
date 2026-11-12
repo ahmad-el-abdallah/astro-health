@@ -23,6 +23,20 @@ def test_sleep_uses_minimum_thresholds():
     assert hr.evaluate("sleep", 5.0) == hr.RED
 
 
+def test_oxygen_saturation_higher_is_better():
+    assert hr.evaluate("oxygen_saturation", 98) == hr.GREEN
+    assert hr.evaluate("oxygen_saturation", 95) == hr.GREEN
+    assert hr.evaluate("oxygen_saturation", 92) == hr.YELLOW
+    assert hr.evaluate("oxygen_saturation", 88) == hr.RED
+
+
+def test_sample_vitals_oxygen_is_a_real_percentage_and_matches_its_level():
+    for _ in range(300):
+        spo2 = hr.sample_vitals()["oxygen_saturation"]
+        assert isinstance(spo2, int) and 70 <= spo2 <= 100
+        assert hr.evaluate("oxygen_saturation", spo2) in (hr.GREEN, hr.YELLOW, hr.RED)
+
+
 def test_mood_low_is_bad():
     assert hr.evaluate("mood", 5) == hr.GREEN
     assert hr.evaluate("mood", 3) == hr.YELLOW

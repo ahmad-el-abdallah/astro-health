@@ -1,15 +1,32 @@
 // Doctor AI consultation, as a drawer that slides in over the Body dashboard (the user's
 // layout choice: the skeleton dashboard keeps the full page, the chat comes in on top).
-// Chips, message input, Analyze symptoms, Send, and Face to Face -- same features as
-// the old Body tab's chat panel, same conversation whether typed or spoken.
-import { useEffect, useRef, useState } from "react";
+// Quick chips, message input, Analyze symptoms, Send -- plus voice (lib/useVoice.js, the
+// browser's Web Speech API): a push-to-talk mic whose live transcript fills the input, the
+// AI's replies spoken aloud when voice is on, a Voice on / Muted toggle, a talking face, and
+// a Ready / Listening / Thinking chip. Typing always works; voice is only an extra.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Drawer } from "../../../components/overlays/Drawer.jsx";
 import { Icon } from "../../../components/ui/Icon.jsx";
 import { StatusChip, cx } from "../../../components/ui/index.jsx";
-import { getSharedAudioCtx } from "./FaceToFace.jsx";
+import { VoiceFace } from "../../../components/VoiceFace.jsx";
+import { useVoice } from "../../../lib/useVoice.js";
+import { audioCtx } from "../../../lib/stationAudio.js";
+import { VoiceMode } from "./VoiceMode.jsx";
 
-const CHIPS = ["Severe headache", "Back pain 6", "My heart is racing", "I have a fever", "Can't sleep"];
+const CHIPS = ["How am I doing?", "Severe headache", "Back pain 6", "I have a fever", "Can't sleep"];
+
+const MODE_CHIP = {
+  ready: { label: "Ready", cls: "bg-none-bg text-none-fg", dot: "bg-none-fg" },
+  listening: { label: "Listening", cls: "bg-alert-bg text-alert-fg", dot: "bg-alert-fg animate-[ah-pulse-dot_1s_ease-in-out_infinite]" },
+  thinking: { label: "Thinking", cls: "bg-accent-soft text-accent-text", dot: "bg-accent-text animate-[ah-pulse-dot_1s_ease-in-out_infinite]" },
+};
+
+function sourceLine(source) {
+  if (source?.kind === "quick") return "Quick replies (AI offline)";
+  if (source?.kind === "ai" && source.model) return `Doctor AI · ${source.model.split("/").pop()}`;
+  return "Doctor AI";
+}
 
 function Bubble({ m }) {
   const mine = m.who === "user";
@@ -34,23 +51,6 @@ function Bubble({ m }) {
         >
           {m.text}
           {m.note && <span className="mt-1.5 block text-xs text-muted">{m.note}</span>}
-          {(m.extras || []).map((x, i) =>
-            x.kind === "result" ? (
-              <span key={i} className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <StatusChip level={x.level} label="Result" /> <span className="text-muted">{x.text}</span>
-              </span>
-            ) : x.kind === "breathing" ? (
-              <motion.span
-                key={i}
-                aria-label="Breathing pacer: breathe in as it grows, out as it shrinks"
-                className="mt-3 block h-14 w-14 rounded-full border-2 border-accent-text bg-accent-soft"
-                animate={{ scale: [0.8, 1.15, 1.15, 0.8], opacity: [0.7, 1, 1, 0.7] }}
-                transition={{ duration: 8, times: [0, 0.4, 0.55, 1], repeat: Infinity, ease: "easeInOut" }}
-              />
-            ) : (
-              <span key={i} className="mt-1.5 block text-xs text-muted">{x.text}</span>
-            ),
-          )}
           {m.analysis && (
             <span className="mt-2 flex flex-col gap-1.5">
               {m.analysis.map((a) => (
@@ -68,10 +68,31 @@ function Bubble({ m }) {
   );
 }
 
-export function ChatDrawer({ open, onClose, consultation, onAnalyze, onFaceToFace, aiAvailable }) {
+export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId }) {
   const [text, setText] = useState("");
+  const [voiceMode, setVoiceMode] = useState(false);
   const logRef = useRef(null);
-  const { messages, submit } = consultation;
+  const { messages, submit, thinking, source } = consultation;
+  const speakRef = useRef(() => {});
+
+  const ask = useCallback(async (v) => {
+    const reply = await submit(v);
+    if (reply?.text) speakRef.current(reply.text); // only speaks when voice is on
+  }, [submit]);
+
+  const voice = useVoice({
+    astroId,
+    onInterim: setText, // the live transcript shows in the input box
+    onFinal: (heard) => { setText(""); ask(heard); }, // then goes to the AI like a typed message
+  });
+  const { cancel, abortListening, speak } = voice;
+  useEffect(() => { speakRef.current = speak; }, [speak]);
+
+  // Closing the drawer stops talking and listening.
+  useEffect(() => {
+    if (!open) { cancel(); abortListening(); }
+  }, [open, cancel, abortListening]);
+  const closeDrawer = () => { setVoiceMode(false); onClose(); };
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
@@ -81,27 +102,46 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, onFaceToFac
     const v = (t ?? text).trim();
     if (!v) return;
     setText("");
-    submit(v);
+    ask(v);
   };
 
+  const mode = voice.listening ? "listening" : thinking ? "thinking" : "ready";
+  const chip = MODE_CHIP[mode];
+
   return (
-    <Drawer open={open} onClose={onClose} title="Doctor AI consultation" width={520}>
+    <Drawer open={open} onClose={closeDrawer} title="Doctor AI consultation" width={520}>
       <div className="flex items-center gap-3 border-b border-line px-5 py-4">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-text"><Icon name="doctor-ai" size={20} /></span>
+        <VoiceFace mode={mode} />
         <div className="min-w-0 flex-1">
-          <h2 className="m-0 text-base font-semibold">Consultation</h2>
-          <span className={cx("flex items-center gap-1.5 text-xs", aiAvailable ? "text-good-fg" : "text-check-fg")}>
-            <span className={cx("h-1.5 w-1.5 rounded-full", aiAvailable ? "bg-good-fg" : "bg-check-fg")} />
-            {aiAvailable ? "Doctor AI available" : "Offline mode -- keyword matching"}
-          </span>
+          <h2 className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold">
+            Consultation
+            <span role="status" aria-live="polite" className={cx("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold", chip.cls)}>
+              <span className={cx("h-1.5 w-1.5 rounded-full", chip.dot)} />{chip.label}
+            </span>
+          </h2>
+          <span className={cx("block truncate text-xs", source?.kind === "quick" ? "text-check-fg" : "text-muted")}>{sourceLine(source)}</span>
         </div>
         <button
-          onClick={() => { getSharedAudioCtx(); onFaceToFace(); }}
-          className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-line-strong bg-control px-3.5 text-[13px] font-semibold hover:border-accent-text/60"
+          onClick={() => { audioCtx(); cancel(); abortListening(); setVoiceMode(true); }}
+          title="Voice mode: a hands-free conversation"
+          aria-label="Voice mode"
+          className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-accent px-3 text-[13px] font-semibold text-accent-on hover:bg-accent-hover"
         >
-          <Icon name="video" size={16} /> Face to face
+          <Icon name="waveform" size={16} /><span className="max-sm:hidden">Voice mode</span>
         </button>
-        <button onClick={onClose} aria-label="Close consultation" className="min-h-11 cursor-pointer rounded-xl px-2 text-ink-2 hover:bg-raised">✕</button>
+        {voice.support.tts && (
+          <button
+            onClick={() => { audioCtx(); voice.toggleVoice(); }}
+            aria-pressed={voice.voiceOn}
+            aria-label={voice.voiceOn ? "Voice on: replies are read aloud. Click to mute." : "Muted: click to hear replies."}
+            title={voice.voiceOn ? "Voice on: replies are read aloud. Click to mute." : "Muted: click to hear replies."}
+            className={cx("flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border",
+              voice.voiceOn ? "border-accent-text/50 bg-accent-soft text-accent-text" : "border-line-strong bg-control text-ink-2")}
+          >
+            <Icon name={voice.voiceOn ? "volume" : "volume-off"} size={18} />
+          </button>
+        )}
+        <button onClick={closeDrawer} aria-label="Close consultation" className="min-h-11 cursor-pointer rounded-xl px-2 text-ink-2 hover:bg-raised">✕</button>
       </div>
 
       <div ref={logRef} className="flex flex-1 flex-col gap-3.5 overflow-y-auto bg-input px-5 py-5">
@@ -124,7 +164,25 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, onFaceToFac
           ))}
         </div>
         <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); send(); }}>
-          <input className="ah-input min-h-12 flex-[1_1_220px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type your symptoms here…" aria-label="Message to Doctor AI" />
+          <input
+            className="ah-input min-h-12 flex-[1_1_200px]"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={voice.listening ? "Listening… speak now" : "Ask anything, or describe how you feel…"}
+            aria-label="Message to Doctor AI"
+          />
+          <button
+            type="button"
+            onClick={voice.listening ? voice.stopListening : voice.startListening}
+            disabled={!voice.support.stt}
+            aria-pressed={voice.listening}
+            aria-label={voice.listening ? "Stop listening" : "Talk to Doctor AI"}
+            title={voice.support.stt ? (voice.listening ? "Stop listening" : "Press and speak") : "Voice input isn't available in this browser"}
+            className={cx("flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-xl border text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50",
+              voice.listening ? "animate-pulse border-alert-fg bg-alert-bg text-alert-fg" : "border-line-strong bg-control hover:border-accent-text/60")}
+          >
+            <Icon name="mic" size={18} />
+          </button>
           <button type="button" onClick={onAnalyze} className="min-h-12 cursor-pointer rounded-xl border border-line-strong bg-control px-4 text-sm font-semibold hover:border-accent-text/60">
             Analyze symptoms
           </button>
@@ -132,7 +190,16 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, onFaceToFac
             Send <Icon name="send" size={16} />
           </button>
         </form>
+        {voice.error && <p role="alert" className="m-0 text-xs text-check-fg">{voice.error}</p>}
       </div>
+      {voiceMode && (
+        <VoiceMode
+          onClose={() => setVoiceMode(false)}
+          astroId={astroId}
+          submit={consultation.submit}
+          thinking={consultation.thinking}
+        />
+      )}
     </Drawer>
   );
 }

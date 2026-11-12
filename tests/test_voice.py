@@ -33,3 +33,11 @@ def test_synthesize_wraps_unexpected_errors(monkeypatch):
     monkeypatch.setattr(voice.edge_tts, "Communicate", lambda text, v: _Boom())
     with pytest.raises(voice.SpeechError):
         voice.synthesize("hello")
+
+
+def test_synthesize_uses_the_requested_voice(monkeypatch):
+    seen = []
+    monkeypatch.setattr(voice.edge_tts, "Communicate",
+                        lambda text, v: seen.append(v) or _FakeCommunicate([{"type": "audio", "data": b"x"}]))
+    voice.synthesize("hello", "en-GB-SoniaNeural")
+    assert seen == ["en-GB-SoniaNeural"]

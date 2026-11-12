@@ -86,7 +86,7 @@ def evaluate(indicator, value, baseline_reaction_ms=None, rules=None):
     if indicator == "reaction_time":
         avg_ms, lapses = value
         return evaluate_reaction_time(cfg, avg_ms, baseline_reaction_ms or 350, lapses)
-    if indicator in ("sleep", "exercise", "water"):
+    if "green_min" in cfg:  # "higher is better": sleep, exercise, water, oxygen_saturation
         return evaluate_min(cfg, value)
     return evaluate_simple(cfg, value)
 
@@ -166,9 +166,20 @@ def _sample_simple(cfg, level):
     return outer_hi + random.uniform(1, span)
 
 
+def _sample_min(cfg, level):
+    """Same idea as _sample_simple, for a "higher is better" indicator
+    ({"green_min":x, "yellow_min":y}, optional "max" cap, e.g. SpO2 <= 100%)."""
+    top = cfg.get("max", cfg["green_min"] * 1.2)
+    if level == GREEN:
+        return random.uniform(cfg["green_min"], top)
+    if level == YELLOW:
+        return random.uniform(cfg["yellow_min"], cfg["green_min"] - 0.5)
+    return random.uniform(cfg["yellow_min"] * 0.92, cfg["yellow_min"] - 0.5)
+
+
 def sample_vitals(rules=None):
     """A plausible stand-in reading for heart rate / blood pressure / blood
-    sugar / temperature -- used so the Live tab doesn't need a human to type
+    sugar / temperature / blood oxygen -- used so the Live tab doesn't need a human to type
     believable numbers by hand. Still placeholder data, same as everything
     else (see docs/CLAUDE.md)."""
     rules = rules or load_rules()
@@ -190,4 +201,5 @@ def sample_vitals(rules=None):
         "blood_pressure": {"systolic": round(systolic), "diastolic": round(diastolic)},
         "blood_sugar": round(_sample_simple(ind["blood_sugar"], _pick_level())),
         "temperature": round(_sample_simple(ind["temperature"], _pick_level()), 1),
+        "oxygen_saturation": round(_sample_min(ind["oxygen_saturation"], _pick_level())),
     }

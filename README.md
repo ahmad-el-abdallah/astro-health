@@ -68,7 +68,7 @@ no reflash needed). That idle timeout never signs the browser out.
 
 ### What's in the app
 
-- **Crew:** Overview, Doctor AI & body (3D anatomy twin, AI chat, Face to Face voice),
+- **Crew:** Overview, Doctor AI & body (3D anatomy twin, plus a Doctor AI chat you can type or talk to),
   Trends, Mind & mood, Sleep lab, Mission health, Schedule (live mission clock), Learn, and a
   thread with the Flight Surgeon on the Overview.
 - **Flight Surgeon:** Crew overview, Alerts (acknowledge), each crew member's profile (with
@@ -77,6 +77,75 @@ no reflash needed). That idle timeout never signs the browser out.
 - **Look:** frosted glass over a space backdrop. If scrolling feels heavy on a weak laptop,
   **Account → Reduce glass effects**. The sidebar collapses to an icon rail (edge button or
   Ctrl/⌘+B); on a phone it's a ☰ menu.
+
+### AI health analysis
+
+An AI looks at each astronaut's data as a whole and decides what's going on: a state
+(doing well, sleeping, exercising, fatigued, stressed, possibly sick, unwell, emergency…),
+the level of each reading, an overall level, a short explanation and advice, and whether
+the Flight Surgeon should be alerted. It runs a few seconds after any new data (a reading,
+a CYD check-in, a symptom, a sleep or workout tag), and there's an **Analyze now** button.
+The result is on the crew Overview, each crew profile, and the Flight Surgeon's crew cards.
+
+It uses **Groq's free plan** (no credit card):
+
+1. Sign up at **console.groq.com** → **API Keys** → create a key.
+2. Save it on the laptop, in the prompt or a terminal (the file is gitignored):
+   `printf '%s' 'gsk_your_key_here' > data/ai_api_key` (or set the `AI_API_KEY` env var).
+3. Restart `app.py`.
+
+- **Free limits**: about 30 requests/minute and 1,000/day, but also about 200K tokens/day.
+  One analysis is roughly 2K tokens, so that's around 100 analyses a day. Each astronaut is
+  analyzed at most once every 20 s.
+- **No key, no internet, or the limit is used up?** The app falls back to the threshold
+  rules in `config/health_rules.json`, and the card says **"AI offline · checked by
+  the rules"**. Alerts, the CYD screen and the LED keep working.
+- **Change the AI's behaviour** in `config/ai_analyst.json` (its states and instructions).
+  No code change or restart needed.
+- **Use another provider** (any OpenAI-compatible API) with `AI_BASE_URL`, `AI_MODEL` and
+  `AI_API_KEY`. For example, Hugging Face is `AI_BASE_URL=https://router.huggingface.co/v1`
+  with an `hf_` token, but it isn't free.
+- The AI only sees what's logged. "Sleeping" comes from an open sleep-station tag, and
+  "sick" from temperature, SpO₂, symptoms and discomfort. There's no continuous body sensor.
+
+### Talking to Doctor AI (text or voice)
+
+On **Doctor AI & body**, open the chat. The same Groq AI answers from your own data and
+latest health analysis ("How am I doing?", "why is my temperature flagged?"). If you
+describe pain ("my back hurts, maybe a 6"), it also logs it on the 3D model. With no AI
+available, it falls back to instant keyword replies, and the header says "Quick replies
+(AI offline)".
+
+Voice uses only the browser's built-in Web Speech API: no extra service, key or install.
+
+- **Voice mode** (the button in the chat header): a full-screen, hands-free conversation
+  like ChatGPT's voice mode. A glowing orb listens (it reacts to your voice), thinks and
+  answers out loud, then listens again on its own. Tap the orb to interrupt, use the mic
+  button to pause listening, and the red button (or Esc) to end. Captions are off unless
+  you press **CC**, and every turn is also saved in the text chat.
+- **Mic button** (push-to-talk): press, speak, press again (or just stop talking). Your
+  words appear live in the text box, then go to the AI like a typed message.
+- **Voice on / Muted** in the chat header: when on, every AI reply is read aloud (a small
+  face moves its mouth while it talks). Muting also stops the current reply.
+- The chip shows **Ready**, **Listening** (red) or **Thinking** (blue).
+- **Typing always works**, voice is only an extra. A blocked microphone shows
+  "Microphone permission denied - text input still works".
+- **The station voice is chosen on `/admin` → Station voice:**
+  - **Browser voice**: works offline, using the computer's own voice (Edge's "Aria" sounds
+    best; Chrome uses "Google US English"). It can't have echo, because the browser plays
+    it directly.
+  - **Microsoft neural voice** (free, no key, **needs internet**): a much more natural voice
+    (Aria, Jenny, Guy, Sonia or Ryan), played through the station's **metal-cabin reverb
+    and echo**. It takes about 2–4 s longer per reply. If it fails, the browser voice is
+    used instead.
+  - **Station comms effects** (on/off): NASA's Apollo **Quindar beeps** (2525 Hz before and
+    2475 Hz after each reply) and a soft cabin hum in voice mode.
+  - **Test voice** plays a sample before you save.
+- **Browsers:** use Chrome or Edge. Firefox has no voice input (the mic button is disabled
+  and typing works). Which voices you hear depends on the computer.
+- **Privacy note:** the AI's voice is made on this computer, but **speech recognition isn't
+  fully local**. Chrome sends the microphone audio to Google's servers, and Edge to
+  Microsoft's, to turn it into text.
 
 ### Superuser admin page
 
@@ -137,10 +206,12 @@ Works the same with the real hardware or in `--simulate` mode.
 
 1. Tap **Ahmad's** card (Simulator, or his real card): you land on his **Overview**.
 2. Simulator → "Reaction: slow". The reaction-time tile turns yellow/red, live.
-3. Overview → **Take a new reading** → **Assess**. If it comes back red, a report heads to
+3. Overview → **Take a new reading** → **Assess**. A few seconds later the **AI health
+   analysis** card updates with Ahmad's state and what to do. If it's red, a report heads to
    Earth on the comms delay and an alert is raised.
-4. **Doctor AI & body**: tap a body part on the 3D twin, or tell Doctor AI how you feel. It
-   can log vitals and symptoms, start a breathing exercise, or alert the Flight Surgeon.
+4. **Doctor AI & body**: tap a body part on the 3D twin, or open the chat and ask "How am I
+   doing?". Press **Voice mode** to just talk to it, hands-free; it answers out loud. Say "my
+   back hurts, maybe a 6" and it logs that on the twin.
 5. **Log out**, then tap the **Flight Surgeon's** card. **Crew overview** shows who needs
    attention first. Open **Alerts**, acknowledge one, then **Open profile** for Ahmad.
 6. In the profile's **Messages**, reply. Switch the mission to **Mars transit** first (top bar
@@ -153,6 +224,8 @@ Works the same with the real hardware or in `--simulate` mode.
 ## Replacing fake data with real data
 
 - Thresholds: `config/health_rules.json` (every indicator's GREEN/YELLOW/RED ranges).
+  Vitals: heart rate, blood pressure, blood sugar, temperature and blood oxygen (SpO2,
+  placeholder bands: 95%+ good, 90-94% check, below 90% alert).
 - Plain-language text (hazards, body parts, measurement guides, Learn cards): `config/content.json`.
 - Mission profiles and comms delays: `config/missions.json`; per-mission body risks and
   checks: `config/mission_health.json`.
@@ -166,8 +239,8 @@ Works the same with the real hardware or in `--simulate` mode.
 ## Testing
 
 ```bash
-.venv/bin/python -m pytest       # 196 backend tests
-cd frontend && npm test          # 29 frontend tests
+.venv/bin/python -m pytest       # 225 backend tests
+cd frontend && npm test          # 37 frontend tests
 ```
 
 ## Troubleshooting
@@ -186,9 +259,10 @@ cd frontend && npm test          # 29 frontend tests
 
 ## What's built vs. not hardware-verified
 
-Built and tested (196 backend + 29 frontend unit tests, and every page clicked through in a
+Built and tested (225 backend + 37 frontend unit tests, and every page clicked through in a
 headless browser at desktop and phone width): the backend (sessions, rules engine, comms
-delay, mission clock, serial/Wi-Fi bridges, simulation, login/access control, AI consult),
+delay, mission clock, serial/Wi-Fi bridges, simulation, login/access control, AI analysis with
+its rules fallback),
 and the whole React app for crew, Flight Surgeon and `/admin`.
 
 **Hardware:**

@@ -430,6 +430,7 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
             send_fn(protocol.sleep("stop", hours))
             send_fn(protocol.toast(f"Slept {hours} h"))
             emit_fn("cyd_event", {"type": "sleep_stop", "astronaut_id": astronaut_id, "hours": hours})
+        _request_analysis(astronaut_id, f"{kind}_stop")
         return
 
     if kind in ("exercise", "sleep"):
@@ -446,6 +447,7 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
             send_fn(protocol.sleep("start", 0))
             send_fn(protocol.toast("Good night"))
         emit_fn("cyd_event", {"type": f"{kind}_start", "astronaut_id": astronaut_id})
+        _request_analysis(astronaut_id, f"{kind}_start")
         return
 
     # one-shot object tags: meal, medicine, bp_guide
@@ -465,9 +467,18 @@ def _handle_object_tag(conn, tag, send_fn, emit_fn):
                      (astronaut_id, "medicine", _now_iso(), _now_iso(), json.dumps({"tag": tag["uid"], "label": tag["label"]})))
         send_fn(protocol.toast(f"Logged: {tag['label']}"))
         emit_fn("cyd_event", {"type": "medicine", "astronaut_id": astronaut_id, "label": tag["label"]})
+        _request_analysis(astronaut_id, "medicine")
     elif kind == "bp_guide":
         send_fn(protocol.toast("Check the blood pressure guide on the laptop"))
         emit_fn("cyd_event", {"type": "open_guide", "astronaut_id": astronaut_id, "indicator": "blood_pressure"})
+
+
+def _request_analysis(astronaut_id, trigger):
+    """Queue an AI health analysis (backend/logic/analysis.py). Imported lazily: analysis
+    imports this module. Queued, not run here -- we're inside handle_scan's write_conn,
+    and the worker only runs it a few seconds later, after this transaction commits."""
+    from backend.logic import analysis
+    analysis.request(astronaut_id, trigger)
 
 
 def _remember_unknown_tag(uid):

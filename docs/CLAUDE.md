@@ -50,8 +50,9 @@ backend/                    grouped by concern (see "Backend reorganized into fo
                                create_superuser.py (CLI)
   hardware/                   talks to physical boards — protocol.py (wire format) plus
                                serial_bridge.py/wifi_bridge.py/pico_bridge.py (the 3 bridges)
-  services/                   external AI integrations — consult.py (NVIDIA chat), voice.py (edge-tts)
-  logic/                      core domain rules — sessions.py, health_rules.py, symptoms.py
+  services/                   analyst.py (the AI analyst + chat, Groq by default), voice.py (edge-tts neural voice)
+  logic/                      core domain rules — sessions.py, analysis.py (AI analysis pipeline),
+                               health_rules.py (now reference ranges + the offline fallback), symptoms.py
   jobs/                       background/time-based work — scheduler.py (mission clock, reminders,
                                Schedule statuses), comms.py (delayed messages)
 config/*.json               every PLACEHOLDER value (thresholds, text, missions, schedule, symptoms)
@@ -64,17 +65,17 @@ frontend/                   the React app (Vite + React 19 + Tailwind v4 + motio
   src/pages/admin/Admin.jsx    /admin (its own superuser login)
   src/components/              shared UI (ui/, charts/, layout/ incl. Sidebar + DoctorTools,
                                 overlays/, Thread.jsx, VitalTile, TrendCard, RiskMeter…)
-  src/three/                   anatomy/ (3D twin), faceAvatar/ (Face to Face), planet3d.js
+  src/three/                   anatomy/ (3D twin), planet3d.js
   src/lib/                     api.js, socket.js (+ EVENT_INVALIDATIONS), queries.js, format.js,
                                 levels.js, reportText.js, faceId.js
   scripts/build-anatomy.mjs    one-off pipeline that produced public/models/anatomy.glb
-  public/                      anatomy.glb, the TalkingHead avatar, face-api.js + its models
+  public/                      anatomy.glb, face-api.js + its models
 firmware/astro_cyd/         the CYD sketch (TFT_eSPI + XPT2046, not LovyanGFX like Lifeline)
 firmware/esp32s3_nfc_reader/ dead hardware, kept for reference only -- see "Pico NFC reader
                              replaces the dead ESP32-S3" below, do not try to revive this board
 firmware/pico_nfc_reader/   the live NFC reader: Pico + PN532, USB-straight-to-laptop
 firmware/existing/          reference-only copies of Lifeline's lock sketch + nfc_link.h
-tests/                      pytest (196) -- flat, one test_<module>.py per backend module, plus
+tests/                      pytest (225) -- flat, one test_<module>.py per backend module, plus
                              test_spa.py (SPA serving), test_cyd_logout.py, test_scheduler.py
 docs/build-prompt.md        the original 16-section spec
 docs/CLAUDE.md              these notes (root CLAUDE.md only imports this)
@@ -222,6 +223,8 @@ The React files say in their header comment which old file they were ported from
 - Narration in these videos uses `edge-tts` (Microsoft Edge's TTS); videos are built with a
   self-contained HTML/CSS/JS "scene" page + Playwright `recordVideo`, muxed with a bootstrapped
   `imageio-ffmpeg` static binary (no sudo available on this machine, no system `ffmpeg`).
+  `edge-tts` is no longer in `requirements.txt` (removed with Face to Face, 2026-11-12) --
+  `pip install edge-tts` into the venv first if a video ever needs re-narrating.
 
 ## Auto-simulated vitals (2026-11-03)
 
@@ -685,6 +688,9 @@ real**, not just as frontend state.
 
 ## Consultation chat: real NVIDIA-hosted AI, Body tab only (2026-11-05)
 
+> **Superseded 2026-11-12** -- the NVIDIA AI and Face to Face were removed entirely; see
+> "NVIDIA Consultation AI and Face to Face removed" near the end of this file.
+
 - The Consultation chat's keyword-matching ("I think you mean X region") is now backed by a real
   NVIDIA-hosted model call when a key is configured — **scoped to this one chat panel only**,
   nothing else in the app calls out to the internet, and the keyword table is kept (not deleted)
@@ -822,6 +828,9 @@ Four concrete improvements shipped, one explicitly scoped as a live-verify-don't
   isolated throwaway copy again, not the user's live db.
 
 ## Face to Face: a voice conversation with an animated avatar (2026-11-05)
+
+> **Superseded 2026-11-12** -- the NVIDIA AI and Face to Face were removed entirely; see
+> "NVIDIA Consultation AI and Face to Face removed" near the end of this file.
 
 User asked for a "face to face" voice mode for the Consultation AI: push a button, talk to it,
 hear it answer immediately in its own voice, with an animated avatar — specifically asking for a
@@ -1220,6 +1229,9 @@ historically accurate, not as current paths.
 
 ## Consultation AI gains real tool-calling: vitals, surgeon alerts, symptoms, breathing, emergency (2026-11-06)
 
+> **Superseded 2026-11-12** -- the NVIDIA AI and Face to Face were removed entirely; see
+> "NVIDIA Consultation AI and Face to Face removed" near the end of this file.
+
 User wanted the Consultation chat to become a genuinely more capable agent, not just a symptom
 classifier -- settled through two rounds of `AskUserQuestion` (alert severity: always treated as
 urgent; vitals: write immediately, no confirm click; then a follow-up brainstorm of further
@@ -1466,10 +1478,10 @@ vanilla app was deleted once the last page was ported.
   into `public/models/anatomy.glb` (~2.4 MB: skeleton, wire, muscles, skin, brain, eyes, heart,
   lungs→immune, stomach). Loaded with `useGLTF(url, false, true)` (draco off, meshopt on).
   No WebGL → `three/webgl.jsx`'s fallback instead of a crash.
-- **Face to Face**: TalkingHead bundled from `src/vendor/talkinghead/` with
-  `lipsyncModules: []` and `head.lipsync.en = new LipsyncEn()` set directly — this avoids the
-  dynamic-import 404 trap from 2026-11-05. The AudioContext is still created synchronously in
-  the click handler.
+- **Face to Face**: removed 2026-11-12 (see "NVIDIA Consultation AI and Face to Face
+  removed" below). It used TalkingHead bundled from `src/vendor/talkinghead/` with
+  `lipsyncModules: []` + a statically imported `LipsyncEn` -- reuse that trick if a voice
+  avatar ever comes back.
 - **Sessions**: web login lasts 1 h (`session.permanent`, `LOGIN_LIFETIME` in app.py). CYD
   idle time comes from the laptop (`SESSION_IDLE_S`, default 600 s) and only "Done" signs the
   browser out (see the CYD entries in "How it works").
@@ -2321,11 +2333,232 @@ digital readout (chosen over an analog clock face after being shown both options
   *value* is right, but the on-screen layout (three lines where there used to be one, colored
   colons, no overlap with the hint text below it) can only be judged by actually looking at it.
 
+## NVIDIA Consultation AI and Face to Face removed (2026-11-12)
+
+User is switching to a different AI agent later, so asked to remove the NVIDIA AI "from
+everywhere" and have the Consultation chat "only respond to quick messages for now." Decided with
+the user: keep the chips **and** the text box, with every message getting the instant keyword
+reply (what used to be the no-key fallback); remove Face to Face too; delete the key file.
+
+- **Deleted**: `backend/services/` (`consult.py`, `voice.py` -- the package is gone),
+  `tests/test_consult.py`, `tests/test_voice.py`, `frontend/src/pages/crew/body/FaceToFace.jsx`,
+  `frontend/src/three/faceAvatar/`, `frontend/src/vendor/talkinghead/`,
+  `frontend/public/avatars/brunette.glb`, and the user's real key at `data/nvidia_api_key` (plus
+  its `.gitignore` line). `edge-tts` dropped from `requirements.txt`.
+- **Backend**: `/astronauts/<id>/consult` and `/astronauts/<id>/speak` are gone, along with the
+  prompt-only helpers in `routes.py` (`_elevated_today_lines`, `_recent_trend_summary`,
+  `_TREND_INDICATORS`, `_sanitize_chat_history`) and `config.py`'s `nvidia_api_key()` /
+  `MAX_CONSULT_HISTORY_*`. **Kept**: `POST /astronauts/<id>/alert` (a normal crew-alert route,
+  also used by the CYD ack-alert test), and `_compute_body_levels`/`_latest_discomfort`/
+  `_discomfort_band` (used by `/summary` and `/discomfort/report`).
+- **Frontend**: `useConsultation.js` now answers every message synchronously with `quickReply()`
+  (`REGION_KEYWORDS` from `three/anatomy/regions.js` -> region + intensity -> the same
+  `POST /discomfort` the slider uses -> that region's `what_to_do`, plus a mission-hazard note).
+  No "Thinking…" bubble, no history sent anywhere. `ChatDrawer.jsx`'s header says "Quick
+  replies"; the Face to Face button and the AI-only extras (result chip, breathing pacer) are
+  gone. The "Doctor AI" name stays in the nav/pages -- that's where the new agent will plug in:
+  swap `quickReply()` in `useConsultation.js` for a call to the new backend route.
+- **The app is now fully offline again** -- nothing calls an external AI/voice service. (Face ID's
+  face-api.js was always vendored/local.)
+- **Verified**: 170/170 backend tests, 29/29 frontend tests, lint clean, `frontend/dist` rebuilt.
+  Live against an isolated copy on :5057 with a fake test card (`A1000001`), headless Chromium:
+  the "Back pain 6" chip logged skeleton 6/10, typed "headache" logged brain 5/10 (both confirmed
+  in `/summary`'s `discomfort`), gibberish got the "couldn't tell which body part" reply, no Face
+  to Face button, no `/consult` or `/speak` calls, zero console errors. Server killed afterward.
+
+## Blood oxygen (SpO2) added as a vital (2026-11-12)
+
+User looked at a Hugging Face dataset (`infinite-dataset-hub/HealthVitalSigns`) -- judged not
+worth importing (100 AI-generated rows, Fahrenheit, labels that contradict this app's own rules,
+e.g. HR 95 labelled "critical") -- but its one useful idea, SpO2, was added as a real vital.
+
+- **Config only for the rules**: `config/health_rules.json` `oxygen_saturation` is a
+  "higher is better" indicator (`green_min` 95, `yellow_min` 90, new optional `max` 100 --
+  PLACEHOLDER, general adult ranges), `body_part` `immune` (the lungs mesh on the twin).
+  `content.json` adds it to the immune region's `indicators` plus a pulse-oximeter
+  `measure_guides` entry; `mission_health.json` monitors it on the station (cabin air / CO2
+  scrubbers) and rover (suit work) profiles.
+- **Rules engine**: `health_rules.evaluate()` now picks `evaluate_min` by config shape
+  (`"green_min" in cfg`) instead of a hard-coded `("sleep","exercise","water")` tuple -- so
+  any future "higher is better" indicator is config-only. `sample_vitals()` gained a
+  `_sample_min()` helper that respects `max` (simulated SpO2 never exceeds 100%).
+- **`/assess`** accepts `oxygen_saturation` and 400s anything outside 0-100 (checked before the
+  DB transaction opens, so a bad value never leaves partial rows).
+- **Frontend**: one new entry in `lib/format.js`'s `INDICATORS` (which also feeds the Trends
+  picker via `TREND_INDICATORS`), `levels.js`'s `bandsFor()` caps the normal band at `cfg.max`,
+  plus the per-page lists -- Overview tiles + reading form (+ simulated fill), Body lab tiles +
+  "Log a reading" (normal/abnormal fills), Trends icon, CrewProfile tiles + trend picker, the
+  doctor feed's units. New stroke icon `src/assets/icons/lungs.svg`.
+- **CYD firmware untouched** -- its crew home/detail screens keep their 4 fixed vitals; SpO2 is
+  web-only for now.
+- 4 new backend tests (rules bands, sampler range, assess records it, assess rejects 120/0/text);
+  174/174 passing, 29/29 frontend, lint clean, dist rebuilt. Live-verified on an isolated :5057
+  copy with a fake card: simulated fill gave 98, 88 assessed RED ("RED: oxygen saturation"), the
+  Body tile + immune region went red, Trends showed the 95-100 / 90-95 bands. Zero console errors.
+
+## AI health analyst: the AI decides, the rules are only the fallback (2026-11-12)
+
+User didn't want hard-coded thresholds deciding everyone's health: "use an AI agent that can
+analyze and decide what is going on -- is he sleeping? is he sick?" -- for free. Hugging Face
+gives free accounts no API credit any more, so the default is **Groq's free plan**
+(`openai/gpt-oss-120b`, OpenAI-compatible). Decided with the user: the AI makes the calls,
+the old rules are kept only as a fallback (no key / no internet / limit reached), it runs on
+new data (debounced) plus an "Analyze now" button, and **no AI chat for the Flight Surgeon**
+(the crew's Doctor AI chat keeps its keyword quick replies).
+
+- **`backend/services/analyst.py`**: one POST to `{AI_BASE_URL}/chat/completions` with
+  `response_format: json_object` (+ `reasoning_effort: low` for gpt-oss), urllib only, 20 s
+  timeout. `parse()` validates everything (state in `config/ai_analyst.json`, levels, only
+  indicators that were sent, only the 7 regions, capped text, `alert_surgeon` a real bool).
+  One retry on a malformed answer, none on network/429; a 429 backs off (Retry-After).
+- **`backend/logic/analysis.py`**: `request()` queues (5 s debounce, at most once per 20 s per
+  astronaut); one worker thread (`start_worker()`, from `app.py`) runs `run_now()`, which builds
+  a compact text context (24 h readings, 7-day stats, symptoms, discomfort, open sleep/workout
+  tag, CYD session, emergency, mission + hazards, mission clock, today's routine statuses,
+  health_rules ranges as *reference only*), calls the AI **outside the DB write lock**, and
+  `apply()`s the verdict: latest reading per indicator gets the AI's level (so tiles, Trends,
+  the doctor feed and the CYD follow it with no other changes), an `analyses` row is saved,
+  the surgeon is alerted once per transition into RED (or when the AI sets `alert_surgeon`;
+  re-alerts after 6 h), the CYD gets status/led, and an `analysis` Socket.IO event goes out.
+  `rules_result()` is the fallback (state: emergency > RED "unwell" > open sleep tag
+  "sleeping" > workout "exercising" > ...). No data at all is never sent to the AI.
+- **Escalation moved**: `assess()` no longer raises the RED alert or sends status/led itself
+  -- it saves the rules' quick first pass and calls `analysis.request(..., delay=0)`; the
+  pipeline does the rest (AI or rules). Symptom red-flag reports, discomfort reports, the
+  manual `/alert` route and the emergency path are unchanged (a person asked for those).
+- **Hooks**: assess, web symptoms/discomfort/mood/sleep, CYD mood/symptoms/reaction/breathing
+  (one hook after dispatch in `handle_cyd_message`), sleep/workout tag start + stop and
+  medicine (`sessions._request_analysis`, lazy import -- it runs inside handle_scan's
+  write_conn, which is fine because it only queues).
+- **Routes/data**: `POST /astronauts/<id>/analyze` (self-or-surgeon); `/summary` and `/crew`
+  carry `analysis`, `analysis_current`, `analysis_pending`, and `status`/`overall_level` prefer
+  the analysis when it has seen the newest reading. AI `body_levels` overlay the twin.
+  New `analyses` table (`db.py`, a new table so no migration needed).
+- **Frontend**: `components/AiAnalysisCard.jsx` (state chip, level, summary, Why, What to do,
+  "Analyzed by AI · model · time" or "AI offline · checked by the rules", Analyze now) on the
+  crew Overview and the doctor CrewProfile; `StateChip` + summary on CrewOverview cards; the
+  Overview hero uses the analysis' status and summary; `analysis`/`analysis_pending` socket
+  events invalidate summary/crew/history/alerts.
+- **Key**: `data/ai_api_key` (gitignored) or `AI_API_KEY`; `AI_BASE_URL`/`AI_MODEL` switch
+  provider. The user pasted their Groq key in chat -- the auto-mode classifier blocked using it
+  from a command, so they save the file themselves; advise rotating it after the hackathon.
+- **Free-tier reality**: Groq's free plan also caps tokens (~8K/min, ~200K/day for
+  gpt-oss-120b), so the context is deliberately compact (~1.5-2K tokens/analysis, ~100/day).
+- **Tests**: `conftest.py`'s `no_real_ai` fixture forces no key (even if `data/ai_api_key`
+  exists), zero debounce, and makes `analysis.request` a no-op outside `test_api`/
+  `test_analysis` so the shared worker thread can't write into another module's test DB.
+  29 new tests (`test_analyst.py`, `test_analysis.py`, 3 in `test_api.py`); 203 passing.
+- **Verified** (isolated :5057 copy, fake card + fake sleep tag, no key): Assess 39.2 °C ->
+  card "AI offline · checked by the rules", Unwell/RED, surgeon alert + report; sleep tag ->
+  "Sleeping"; doctor crew card shows the state chip. That run caught the fallback ranking
+  "sleeping" above a RED fever -- fixed (RED wins).
+- **Live-verified against Groq (same day)**. First real call failed with 403 "error code: 1010"
+  -- *not* a bad key: Groq's Cloudflare front door blocks Python's default `Python-urllib`
+  User-Agent. Fixed by sending `USER_AGENT` (`analyst.py`, with a test). If a key ever "fails",
+  check the 403 body for 1010 before suspecting the key. Model comparison on 3 scenarios
+  (all valid JSON, ~1 s each): **gpt-oss-120b** got all three right (healthy -> well/GREEN;
+  fever 38.6 + SpO2 92 + headache -> possibly sick, fever RED; asleep with HR 54 -> sleeping,
+  HR GREEN); gpt-oss-20b rated the fever only YELLOW and flagged a normal sleeping HR. Default
+  stays `openai/gpt-oss-120b`. Full app + real AI in a browser: the card updated by itself
+  1.4 s after Assess. Note the AI isn't fully deterministic (temperature 0.2): the same fever
+  case came back "Possibly sick" once and "Needs a check" once, both YELLOW.
+
+## Doctor AI chat answered by the AI, with voice (Web Speech API) and a talking face (2026-11-12)
+
+User supplied a voice spec (browser Web Speech API only: no external speech service, keys or
+dependencies; push-to-talk; Ready/Listening/Thinking chip; a shared `{speaking, listening,
+mouth}` state for an optional talking avatar). Since the crew chat had no AI behind it, the
+user chose to have **the Groq AI answer the chat** (still no AI chat on the surgeon side) and
+a **simple SVG face**, not a 3D avatar. Supersedes "the crew chat keeps keyword quick
+replies" in the two entries above -- those replies are now only the offline fallback.
+
+- **Backend**: `analyst.chat(context, history, message)` + `parse_chat()` (JSON
+  `{reply, region, intensity}`; reply capped at 600 chars = the spoken limit; a bad region or
+  intensity -- incl. a bool -- drops both). `_call_once()` takes `max_tokens`. Instructions in
+  `config/ai_analyst.json` `chat_instructions` (spoken aloud -> 1-3 plain sentences, use the
+  data, don't diagnose, suggest the surgeon). `POST /astronauts/<id>/chat` (self-or-surgeon):
+  context = `analysis.build_context()` + the latest analysis line; `_sanitize_history()` keeps 8
+  turns, roles user/assistant only, 500 chars; 503 no key / 502 AI failure; writes nothing (the
+  frontend logs discomfort via `/discomfort`, which re-triggers the health analysis).
+- **`frontend/src/lib/useVoice.js`**: the spec's hook. `pickVoice()` (en-US/en-GB +
+  female|samantha|zira|google, else any en*, else default; re-chosen on `voiceschanged`),
+  rate 1.02, pitch 1, 600 chars, `cancel()` before each reply; SpeechRecognition (unprefixed
+  first, then webkit) en-US / interim / not continuous; errors -> `voiceErrorMessage()`;
+  exported mutable `voiceState` (mouth = 1 per word boundary, decays per frame + a small
+  oscillation while speaking); Voice on/off remembered in localStorage `ah-voice`; cleanup on
+  unmount and when the drawer closes (`abortListening` never sends a half transcript).
+- **ChatDrawer** owns the hook: interim transcript -> the input box, final -> `submit()` like a
+  typed message, AI replies spoken when voice is on (typed ones too). `useConsultation.submit()`
+  is async (Thinking bubble -> `/chat`, keyword `quickReply()` on any error) and exposes
+  `thinking` and `source` ("Doctor AI · gpt-oss-120b" / "Quick replies (AI offline)").
+  `components/VoiceFace.jsx` sets the mouth's `ry` from `voiceState` in a rAF loop (no React
+  re-render per frame), blinks via the `ah-blink` keyframe, red ring listening / blue thinking.
+- **Not fully local**: Chrome sends recognition audio to Google, Edge to Microsoft (README says
+  so). Firefox: no SpeechRecognition -> mic shown disabled + "Voice input unavailable".
+- **Headless testing gotcha**: Chrome's `window.speechSynthesis` (and the recognition
+  constructors) are read-only, so a test fake must use `Object.defineProperty`, not plain
+  assignment -- and Chromium has the *unprefixed* `SpeechRecognition` natively, so fake both.
+- **Verified**: 215 backend + 35 frontend tests (12 + 6 new), lint clean, dist rebuilt. Live on
+  an isolated :5057 copy with the real Groq key and fake speech objects -- 18/18 checks: Ready ->
+  Listening with the live interim transcript -> Thinking -> a real AI reply spoken (Google US
+  English, 1.02/1, <=600 chars), word boundaries move the mouth, Mute cancels + stops
+  auto-speaking, "my lower back hurts, maybe a 6" logged skeleton 6, denied mic message + typing
+  still works, key removed -> "Quick replies (AI offline)", no SpeechRecognition -> unavailable
+  message with the mic disabled. **Not yet heard/spoken through a real mic and speakers** --
+  the user needs to try it in real Chrome and Edge.
+
+## Voice mode (ChatGPT-style) + a station voice with two engines chosen on /admin (2026-11-12)
+
+User: talking to the AI should show "another thing, not the text" (like ChatGPT's voice mode),
+and the voice should sound "perfect for an astro station, with echoes". The browser's
+speechSynthesis can never get echo (the page never receives its sound), so the user asked to
+be able to **choose either engine on /admin**.
+
+- **Engines** (`backend/voice_settings.py`, `settings` key `voice`, defaults browser /
+  `en-US-AriaNeural` / fx on; reset demo data -> defaults):
+  - `browser`: speechSynthesis, offline; `pickVoice()` now prefers `aria|jenny` (Edge's
+    "Aria Online (Natural)") before the spec's female/Samantha/Zira/Google rule.
+  - `neural`: edge-tts restored (`backend/services/voice.py` from git, now
+    `synthesize(text, voice)`, retry once, 12 s timeout; `edge-tts==7.3.1` back in
+    requirements) via `POST /astronauts/<id>/speak`; the page plays the MP3 through Web Audio.
+    Falls back to the browser voice on any failure. ~2-4 s extra per reply.
+  - Routes: `GET /api/voice-settings` (open), `GET/PUT /api/admin/voice-settings` and
+    `POST /api/admin/voice-test` (superuser).
+- **`frontend/src/lib/stationAudio.js`**: shared AudioContext (created inside a click);
+  `quindar()` = NASA's Apollo Quindar tones (2525 Hz start / 2475 Hz end, 250 ms);
+  `ambience()` = brown-noise + 60 Hz cabin hum; `playNeural()` = band-pass -> convolver reverb
+  (impulse generated in code: decaying noise + "metal wall" early reflections) + a feedback
+  echo (170 ms, darker each repeat) -> compressor -> analyser (the orb/mouth read real
+  loudness); `micMeter` (getUserMedia level, measured only, never played back).
+- **`useVoice.speak()`** returns a promise (resolves when done), follows the admin settings
+  (fetch neural audio while still "Thinking", then beep -> voice -> beep), exposes
+  `preparing`; options `alwaysSpeak` (voice mode ignores the Muted toggle), `handsFree`
+  (silence isn't an error), `onNoSpeech`. A `tokenRef` drops anything from an older reply
+  after `cancel()` (barge-in).
+- **`pages/crew/body/VoiceMode.jsx`** (portal, mounted only while open -- fresh state per
+  call): `components/VoiceOrb.jsx` canvas orb (listening = teal, follows the mic level;
+  thinking = blue/violet swirl; speaking = cyan/white, follows the voice), one status word,
+  CC captions off by default, mic mute, red end / Esc, tap the orb to interrupt, auto-listen
+  after each reply and after silence. Turns also land in the text chat. The status word swaps
+  instantly (an `AnimatePresence mode="wait"` version lagged and could skip "Listening").
+- **Chat header**: Voice mode button (icon-only on phones) + an icon-only Voice on/Muted toggle
+  (the text version overflowed the 520 px drawer and covered the title on phones).
+- **Admin**: "Station voice" card (engine radios, neural voice dropdown, effects checkbox,
+  Test voice, Save).
+- **Verified**: 225 backend + 37 frontend tests, lint clean, dist rebuilt; real edge-tts Aria +
+  Sonia synthesized (2.3 s / 3.8 s). Isolated :5057 copy, real Groq key, fake mic + fake
+  browser voice, Web Audio instrumented -- 24/24 checks, 3 runs in a row: Listening -> Thinking
+  -> a real AI reply -> Speaking, Quindar 2525/2475 Hz, orb animates, CC, tap-to-interrupt,
+  hands-free re-listen after silence and after a reply, end closes, turns in the chat, admin
+  Test voice + Save, neural `/speak` played through the convolver, fallback to the browser voice
+  when `/speak` fails. **Not yet heard through real speakers / a real mic** -- the user judges
+  the sound in real Chrome/Edge.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 236 tests (rules engine, protocol, sessions, REST API, symptoms,
-  login/access control, consult, voice, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 29 Vitest tests (format, trends stats, alert feed, report text);
+- `.venv/bin/python -m pytest` — 225 tests (rules engine, protocol, sessions, REST API, symptoms,
+  login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
+- `cd frontend && npm test` — 37 Vitest tests (format, trends stats, alert feed, report text, voice);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

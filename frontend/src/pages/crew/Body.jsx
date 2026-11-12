@@ -14,7 +14,7 @@ import { useAstronautPicker } from "../../auth/AuthProvider.jsx";
 import { post } from "../../lib/api.js";
 import { formatIndicatorValue, INDICATORS } from "../../lib/format.js";
 import { blendedLevel, LEVEL_WORD, worstOf } from "../../lib/levels.js";
-import { useContent, useHealthRules, useHistory, useMission, useSummary, useSymptomCatalog } from "../../lib/queries.js";
+import { useContent, useHealthRules, useHistory, useMission, useSummary } from "../../lib/queries.js";
 import { useToast } from "../../components/overlays/Toasts.jsx";
 import { Button, cx } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
@@ -22,7 +22,6 @@ import { REGIONS } from "../../three/anatomy/regions.js";
 import { STRINGS } from "../../strings.js";
 import { WebGLBoundary } from "../../three/webgl.jsx";
 import { ChatDrawer } from "./body/ChatDrawer.jsx";
-import { FaceToFace } from "./body/FaceToFace.jsx";
 import { useConsultation } from "./body/useConsultation.js";
 import { LAB_INDICATORS, LabTile, LogReadingCard, ProfileCard, RegionCard, Timeline } from "./body/Panels.jsx";
 
@@ -38,6 +37,7 @@ function useLabHistories(id) {
     blood_pressure: useHistory(id, "blood_pressure", 7),
     blood_sugar: useHistory(id, "blood_sugar", 7),
     temperature: useHistory(id, "temperature", 7),
+    oxygen_saturation: useHistory(id, "oxygen_saturation", 7),
     sleep: useHistory(id, "sleep", 7),
     mood: useHistory(id, "mood", 7),
   };
@@ -79,7 +79,6 @@ function BodyFor({ astroId }) {
   const content = useContent();
   const mission = useMission();
   const rules = useHealthRules();
-  const catalog = useSymptomCatalog();
   const histories = useLabHistories(astroId);
 
   const [selected, setSelected] = useState(null);
@@ -87,7 +86,6 @@ function BodyFor({ astroId }) {
   const [layers, setLayers] = useState({ skin: true, muscles: false, bones: true, organs: true });
   const [resetSignal, setResetSignal] = useState(0);
   const [chatOpen, setChatOpen] = useState(params.get("consult") === "1");
-  const [faceOpen, setFaceOpen] = useState(false);
 
   const s = summary.data;
   const today = useMemo(() => s?.today || {}, [s?.today]);
@@ -101,10 +99,6 @@ function BodyFor({ astroId }) {
     if (s?.symptoms_today?.level) l.push(s.symptoms_today.level);
     return l.length ? worstOf([...l, ...Object.values(levels)]) : s?.overall_level || "GRAY";
   }, [today, levels, s]);
-
-  const refresh = useCallback(() => {
-    ["summary", "history", "crew"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-  }, [qc]);
 
   const persistDiscomfort = useCallback(async (region, intensity) => {
     setDraft((d) => ({ ...d, [region]: intensity }));
@@ -120,11 +114,8 @@ function BodyFor({ astroId }) {
     astroId,
     content: content.data,
     mission: mission.data,
-    symptomCatalog: catalog.data,
     persistDiscomfort,
     selectRegion: setSelected,
-    toast,
-    refresh,
   });
   const { ensureConversation } = consultation;
   useEffect(() => { if (s?.astronaut) ensureConversation(s.astronaut.name); }, [s?.astronaut, ensureConversation]);
@@ -277,10 +268,8 @@ function BodyFor({ astroId }) {
         onClose={() => setChatOpen(false)}
         consultation={consultation}
         onAnalyze={analyze}
-        onFaceToFace={() => setFaceOpen(true)}
-        aiAvailable={consultation.aiAvailable}
+        astroId={astroId}
       />
-      <FaceToFace open={faceOpen} onClose={() => setFaceOpen(false)} astroId={astroId} submit={consultation.submit} />
     </>
   );
 }

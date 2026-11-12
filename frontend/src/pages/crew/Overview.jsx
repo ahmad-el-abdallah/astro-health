@@ -23,14 +23,16 @@ import { SymptomReporter } from "../../components/SymptomReporter.jsx";
 import { Thread } from "../../components/Thread.jsx";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { STRINGS } from "../../strings.js";
+import { AiAnalysisCard } from "../../components/AiAnalysisCard.jsx";
 
-const MAIN_TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "sleep", "mood"];
+const MAIN_TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "oxygen_saturation", "sleep", "mood"];
 const EXTRA_TILES = ["reaction_time", "exercise", "water"];
 const RING = { GREEN: "border-good-fg", YELLOW: "border-check-fg", RED: "border-alert-fg", GRAY: "border-line-strong" };
 const RISK_TEXT = { HIGH: "text-alert-fg", MEDIUM: "text-check-fg", LOW: "text-good-fg" };
 
 // "Heart rate and mood need attention. One symptom is flagged for review."
 function statusLine(summary) {
+  if (summary?.analysis && summary.analysis_current) return summary.analysis.summary; // the AI's own words
   const today = summary?.today || {};
   const flagged = Object.entries(today)
     .filter(([, r]) => r.level === "RED" || r.level === "YELLOW")
@@ -55,6 +57,7 @@ function Row({ children, className = "" }) {
 // Today's status: the worst of today's readings and any reported symptom. Falls back to
 // the last assessment when nothing has been measured today.
 function heroLevel(summary) {
+  if (summary?.status) return summary.status; // the AI's verdict (or the rules') when it's up to date
   const today = Object.values(summary?.today || {}).map((r) => r.level);
   if (summary?.symptoms_today?.level) today.push(summary.symptoms_today.level);
   return today.length ? worstOf(today) : summary?.overall_level || "GRAY";
@@ -221,12 +224,13 @@ const FIELDS = [
   { key: "blood_pressure", label: "Blood pressure", unit: "mmHg" },
   { key: "blood_sugar", label: "Blood sugar, fasting", unit: "mg/dL", placeholder: "e.g. 90" },
   { key: "temperature", label: "Temperature", unit: "°C", placeholder: "e.g. 36.8", step: "0.1" },
+  { key: "oxygen_saturation", label: "Blood oxygen (SpO2)", unit: "%", placeholder: "e.g. 98", min: 1, max: 100 },
 ];
 
 function NewReading({ astroId }) {
   const qc = useQueryClient();
   const content = useContent();
-  const [v, setV] = useState({ heart_rate: "", sys: "", dia: "", blood_sugar: "", temperature: "" });
+  const [v, setV] = useState({ heart_rate: "", sys: "", dia: "", blood_sugar: "", temperature: "", oxygen_saturation: "" });
   const [guide, setGuide] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -238,6 +242,7 @@ function NewReading({ astroId }) {
     setV({
       heart_rate: String(s.heart_rate), sys: String(s.blood_pressure.systolic), dia: String(s.blood_pressure.diastolic),
       blood_sugar: String(s.blood_sugar), temperature: String(s.temperature),
+      oxygen_saturation: String(s.oxygen_saturation),
     });
   }
 
@@ -252,6 +257,7 @@ function NewReading({ astroId }) {
     if (v.sys && v.dia) body.blood_pressure = { systolic: Number(v.sys), diastolic: Number(v.dia) };
     if (v.blood_sugar) body.blood_sugar = Number(v.blood_sugar);
     if (v.temperature) body.temperature = Number(v.temperature);
+    if (v.oxygen_saturation) body.oxygen_saturation = Number(v.oxygen_saturation);
     if (!Object.keys(body).length) { setResult({ empty: true }); return; }
     setBusy(true);
     try {
@@ -289,6 +295,8 @@ function NewReading({ astroId }) {
                 className="ah-input"
                 type="number"
                 step={f.step}
+                min={f.min}
+                max={f.max}
                 inputMode="decimal"
                 placeholder={f.placeholder}
                 aria-label={f.label}
@@ -333,8 +341,9 @@ function NewReading({ astroId }) {
         <AnimatePresence mode="wait">
           {result?.overall_level ? (
             <motion.div key="r" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="flex flex-wrap items-center gap-2 text-sm">
-              <StatusChip level={result.overall_level} label="Result" />
+              <StatusChip level={result.overall_level} label="Quick check" />
               <span className="text-ink-2">{result.note}</span>
+              {result.analysis_pending && <span className="text-accent-text">· the AI is analyzing, see the AI card above</span>}
             </motion.div>
           ) : (
             <motion.span key="h" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-[13px] text-muted">
@@ -414,6 +423,8 @@ export default function Overview() {
         <Hero summary={s} />
         <SymptomCard summary={s} onReport={() => setReporting(true)} />
       </Row>
+
+      <AiAnalysisCard astroId={id} summary={s} />
 
       <motion.section variants={rise} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">

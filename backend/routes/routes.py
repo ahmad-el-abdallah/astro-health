@@ -11,16 +11,16 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import sessions, health_rules, symptoms
+from backend.logic import analysis, sessions, health_rules, symptoms
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
-from backend.services import consult, voice
+from backend.services import analyst, voice
+from backend import voice_settings
 from backend.config import (
     content as load_content, missions as load_missions,
     mission_health as load_mission_health,
     routine as load_routine,
-    MAX_CONSULT_HISTORY_TURNS, MAX_CONSULT_HISTORY_MSG_CHARS,
 )
 
 
@@ -42,8 +42,7 @@ def _valid_descriptor(d):
     return (
         isinstance(d, list) and len(d) == 128
         and all(isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) for x in d)
-        # isinstance(x, bool) check: isinstance(True, int) is True in Python, the same trap
-        # backend/services/consult.py's parse_model_output() already had to guard against.
+        # isinstance(x, bool) check: isinstance(True, int) is True in Python.
     )
 
 
@@ -111,7 +110,20 @@ def _compute_body_levels(conn, astro_id):
     for part in body_cfg:
         part_levels = [lvl for ind, lvl in today_levels.items() if health_rules.body_part_for(ind) == part]
         body_levels[part] = health_rules.overall_level(part_levels) if part_levels else "GRAY"
+    latest = analysis.latest(conn, astro_id)
+    if latest and latest["source"] == "ai" and _analysis_is_current(conn, astro_id, latest):
+        body_levels.update({k: v for k, v in latest["body_levels"].items() if k in body_levels})
     return body_levels
+
+
+def _analysis_is_current(conn, astro_id, latest):
+    """True when the analysis already saw the newest reading/symptom (so it can be shown
+    as today's verdict); False while a newer reading is still waiting to be analyzed."""
+    newest = conn.execute(
+        "SELECT MAX(t) AS t FROM (SELECT MAX(ts) AS t FROM readings WHERE astronaut_id = ? "
+        "UNION ALL SELECT MAX(ts) FROM symptoms WHERE astronaut_id = ?)", (astro_id, astro_id),
+    ).fetchone()["t"]
+    return newest is None or latest["ts"] >= newest
 
 
 def _today_snapshot(conn, astro_id):
@@ -132,10 +144,21 @@ def _today_snapshot(conn, astro_id):
     ).fetchone()
     symptoms_today = {"items": json.loads(sym["items_json"]), "level": sym["level"], "ts": sym["ts"]} if sym else None
     levels = [v["level"] for v in today.values()] + ([symptoms_today["level"]] if symptoms_today else [])
+    latest = analysis.latest(conn, astro_id)
+    current = bool(latest) and _analysis_is_current(conn, astro_id, latest)
+    if not levels:
+        status = "GRAY"
+    elif current:
+        status = latest["overall_level"]  # the AI's (or the fallback's) whole-picture verdict
+    else:
+        status = health_rules.overall_level(levels)
     return {
         "today": today,
         "symptoms_today": symptoms_today,
-        "status": health_rules.overall_level(levels) if levels else "GRAY",
+        "status": status,
+        "analysis": latest,
+        "analysis_current": current,
+        "analysis_pending": analysis.is_pending(astro_id),
     }
 
 
@@ -161,73 +184,22 @@ def _discomfort_band(intensity):
     return health_rules.GREEN
 
 
-def _elevated_today_lines(conn, astro_id, content_cfg):
-    """Region labels + level for whatever's currently YELLOW/RED (blending
-    vitals with discomfort, same as /discomfort/report), formatted for the
-    Consultation AI's system prompt -- GREEN/GRAY are never included, so the
-    model isn't handed a wall of "all clear" noise to work around."""
-    vitals = _compute_body_levels(conn, astro_id)
-    discomfort = _latest_discomfort(conn, astro_id)
-    labels = content_cfg["body_parts"]
-    lines = []
-    for region, vlevel in vitals.items():
-        vlevel = health_rules.GREEN if vlevel == "GRAY" else vlevel
-        blended = health_rules.worse(vlevel, _discomfort_band(discomfort.get(region, 0)))
-        if blended != health_rules.GREEN:
-            lines.append(f"{labels[region]['label']}: {blended} today")
-    return lines
+CHAT_HISTORY_TURNS = 8
+CHAT_MSG_CHARS = 500
 
 
-# Indicator -> (unit, decimal places), for formatting a trend line -- units/precision match
-# config/health_rules.json's own (heart_rate bpm, temperature is Celsius not Fahrenheit,
-# blood_sugar mg/dL). blood_pressure is deliberately excluded here to keep this simple (it's a
-# pair, not a single number to average).
-_TREND_INDICATORS = {
-    "heart_rate": ("bpm", 0),
-    "temperature": ("°C", 1),
-    "blood_sugar": ("mg/dL", 0),
-}
-
-
-def _recent_trend_summary(conn, astro_id, indicator, days=7):
-    """One formatted line like "Heart rate, last 7 days: avg 78 bpm (range
-    65-95)." for the Consultation AI's context, or None if there's no data
-    in the window -- confirmed no existing summarizer does this; reuses the
-    exact same query astronaut_history() already runs, just aggregated."""
-    unit, decimals = _TREND_INDICATORS[indicator]
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    data = conn.execute(
-        "SELECT value_json FROM readings WHERE astronaut_id = ? AND indicator = ? AND ts >= ? ORDER BY ts ASC",
-        (astro_id, indicator, since),
-    ).fetchall()
-    values = [v for v in (json.loads(r["value_json"]) for r in data) if isinstance(v, (int, float))]
-    if not values:
-        return None
-    avg = sum(values) / len(values)
-    label = indicator.replace("_", " ").capitalize()
-    return (
-        f"{label}, last {days} days: avg {avg:.{decimals}f} {unit} "
-        f"(range {min(values):.{decimals}f}-{max(values):.{decimals}f})"
-    )
-
-
-def _sanitize_chat_history(raw):
-    """The client's own cap (MAX_CONSULT_HISTORY_TURNS) is advisory only --
-    this is the real trust boundary. Drops anything malformed rather than
-    400ing (matches this app's degrade-gracefully posture), and critically
-    whitelists role to user/assistant only: a direct API call could try to
-    smuggle a fake {"role": "system", ...} turn to override the real system
-    prompt, which this silently strips."""
+def _sanitize_history(raw):
+    """The real trust boundary for chat history: last CHAT_HISTORY_TURNS turns, roles
+    exactly user/assistant (a smuggled {"role": "system"} turn is dropped), capped text."""
     if not isinstance(raw, list):
         return []
     out = []
-    for item in raw[-MAX_CONSULT_HISTORY_TURNS:]:
+    for item in raw[-CHAT_HISTORY_TURNS:]:
         if not isinstance(item, dict):
             continue
         role, content = item.get("role"), item.get("content")
-        if role not in ("user", "assistant") or not isinstance(content, str) or not content.strip():
-            continue
-        out.append({"role": role, "content": content.strip()[:MAX_CONSULT_HISTORY_MSG_CHARS]})
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            out.append({"role": role, "content": content.strip()[:CHAT_MSG_CHARS]})
     return out
 
 
@@ -243,6 +215,8 @@ def create_routes(app, socketio, bridge):
 
     def emit_fn(event, data):
         socketio.emit(event, data)
+
+    analysis.configure(send_fn, emit_fn)
 
     # ---- auth: NFC-card login (the main method), plus username/password and
     # Face ID as real, working alternatives. All three funnel into the same
@@ -485,10 +459,19 @@ def create_routes(app, socketio, bridge):
             ).fetchone()
             body_levels = _compute_body_levels(conn, astro_id)
             discomfort = _latest_discomfort(conn, astro_id)
+        latest = snap["analysis"]
+        if latest and (not last_assessment or latest["ts"] >= last_assessment["ts"]):
+            overall_level = latest["overall_level"]
+        else:
+            overall_level = last_assessment["overall_level"] if last_assessment else "GRAY"
         return jsonify({
             "astronaut": row(astro),
             "today": snap["today"],
-            "overall_level": last_assessment["overall_level"] if last_assessment else "GRAY",
+            "analysis": latest,
+            "analysis_current": snap["analysis_current"],
+            "analysis_pending": snap["analysis_pending"],
+            "status": snap["status"],
+            "overall_level": overall_level,
             "last_check": last_assessment["ts"] if last_assessment else None,
             "body_levels": body_levels,
             "discomfort": discomfort,
@@ -515,6 +498,73 @@ def create_routes(app, socketio, bridge):
             for r in data
         ])
 
+    @bp.post("/astronauts/<int:astro_id>/analyze")
+    def analyze_now(astro_id):
+        """The "Analyze now" button: runs the analysis immediately (the AI, or the
+        rules if it can't be reached) and returns the result."""
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+        result = analysis.run_now(astro_id, "manual")
+        if result is None:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(result)
+
+    @bp.post("/astronauts/<int:astro_id>/chat")
+    def doctor_ai_chat(astro_id):
+        """The crew's Doctor AI chat (typed or spoken): the AI answers from this
+        astronaut's data + latest analysis. Writes nothing -- if the reply names a body
+        region + intensity, the frontend logs it through /discomfort. 503 with no AI key,
+        502 on any AI failure; the frontend then falls back to keyword quick replies."""
+        body = request.get_json(force=True) or {}
+        message = (body.get("message") or "").strip()[:CHAT_MSG_CHARS]
+        if not message:
+            return jsonify({"error": "message is required"}), 400
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
+                return jsonify({"error": "not found"}), 404
+        if not analyst.available():
+            return jsonify({"error": "AI is not available"}), 503
+        _, profile = comms.current_profile()
+        with db.write_conn() as conn:
+            context, _, _ = analysis.build_context(conn, astro_id, profile)
+            latest = analysis.latest(conn, astro_id)
+        if latest:
+            context += (f"\nLatest health analysis ({latest['source']}): {latest['state_label']}, "
+                        f"{latest['overall_level']}. {latest['summary']}")
+        try:
+            out = analyst.chat(context, _sanitize_history(body.get("history")), message)
+        except analyst.AnalystError:
+            return jsonify({"error": "AI chat failed"}), 502
+        return jsonify({**out, "model": analyst.model_name()})
+
+    @bp.post("/astronauts/<int:astro_id>/speak")
+    def speak(astro_id):
+        """The "Microsoft neural voice" engine: Doctor AI's reply as MP3 (edge-tts), in the
+        voice chosen on /admin. The page adds the station effects and falls back to the
+        browser voice on any failure (502)."""
+        body = request.get_json(force=True) or {}
+        text = (body.get("text") or "").strip()[:600]
+        if not text:
+            return jsonify({"error": "text is required"}), 400
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+        try:
+            audio = voice.synthesize(text, voice_settings.get()["voice"])
+        except voice.SpeechError:
+            return jsonify({"error": "speech synthesis failed"}), 502
+        return Response(audio, mimetype="audio/mpeg")
+
+    @bp.get("/voice-settings")
+    def get_voice_settings():
+        return jsonify(voice_settings.public())
+
     @bp.get("/astronauts/<int:astro_id>/simulate_vitals")
     def simulate_vitals(astro_id):
         return jsonify(health_rules.sample_vitals())
@@ -522,6 +572,13 @@ def create_routes(app, socketio, bridge):
     @bp.post("/astronauts/<int:astro_id>/assess")
     def assess(astro_id):
         body = request.get_json(force=True) or {}
+        if "oxygen_saturation" in body:
+            try:
+                spo2 = float(body["oxygen_saturation"])
+            except (TypeError, ValueError):
+                spo2 = -1
+            if not 0 < spo2 <= 100:
+                return jsonify({"error": "oxygen_saturation must be a percentage between 0 and 100"}), 400
         now = datetime.now(timezone.utc)
         levels = []
         details = {}
@@ -555,10 +612,13 @@ def create_routes(app, socketio, bridge):
             if "temperature" in body:
                 v = float(body["temperature"])
                 record("temperature", v, health_rules.evaluate("temperature", v))
+            if "oxygen_saturation" in body:
+                v = float(body["oxygen_saturation"])
+                record("oxygen_saturation", v, health_rules.evaluate("oxygen_saturation", v))
 
             # Fold in whatever the CYD already reported today (sleep, mood, reaction, symptoms).
             # indicator_levels tracks every indicator considered for this assessment (name,
-            # level), not just the 4 manual vitals -- so the note below can name ALL of them
+            # level), not just the manual vitals -- so the note below can name ALL of them
             # that are flagged, not just whichever one happened to be recorded first.
             indicator_levels = [(indicator, d["level"]) for indicator, d in details.items()]
             since = (now - timedelta(hours=18)).isoformat()
@@ -584,17 +644,13 @@ def create_routes(app, socketio, bridge):
                 "INSERT INTO assessments (astronaut_id, ts, overall_level, note, details_json) VALUES (?, ?, ?, ?, ?)",
                 (astro_id, now.isoformat(), overall, note, json.dumps(details)),
             )
-            if overall == "RED":
-                conn.execute("INSERT INTO alerts (astronaut_id, ts, level, text, acknowledged) VALUES (?, ?, 'RED', ?, 0)",
-                             (astro_id, now.isoformat(), note))
 
-        if overall == "RED":
-            comms.queue_report(astro_id, f"RED assessment: {note}")
-            emit_fn("alert", {"astronaut_id": astro_id, "level": "RED", "text": note})
-        bridge.send(protocol.status(astro["name"], overall, note))
-        bridge.send(protocol.led(overall))
+        # The levels above are the rules' quick first pass. The real verdict -- and any
+        # surgeon alert, CYD status screen and LED -- comes from the analysis pipeline
+        # (the AI, or the same rules if the AI can't be reached), a moment later.
+        analysis.request(astro_id, "assess", delay=0)
         emit_fn("assessment", {"astronaut_id": astro_id, "overall_level": overall, "note": note, "details": details})
-        return jsonify({"overall_level": overall, "note": note, "details": details})
+        return jsonify({"overall_level": overall, "note": note, "details": details, "analysis_pending": True})
 
     # ---- symptoms (manual reporting from the web app) ----
     @bp.get("/symptoms/catalog")
@@ -614,6 +670,7 @@ def create_routes(app, socketio, bridge):
                 return jsonify({"error": "not found"}), 404
             lvl = symptoms.record(conn, astro_id, items)
         symptoms.alert_if_red(astro_id, items, lvl, emit_fn)
+        analysis.request(astro_id, "symptoms")
         emit_fn("cyd_event", {"type": "symptoms", "astronaut_id": astro_id, "items": items, "level": lvl})
         return jsonify({"level": lvl})
 
@@ -639,6 +696,7 @@ def create_routes(app, socketio, bridge):
                 "INSERT INTO discomfort (astronaut_id, region, intensity, ts) VALUES (?, ?, ?, ?)",
                 (astro_id, region, intensity, datetime.now(timezone.utc).isoformat()),
             )
+        analysis.request(astro_id, "discomfort")
         emit_fn("cyd_event", {"type": "discomfort", "astronaut_id": astro_id, "region": region, "intensity": intensity})
         return jsonify({"ok": True, "region": region, "intensity": intensity})
 
@@ -676,9 +734,7 @@ def create_routes(app, socketio, bridge):
         above, both of which recompute their own condition and refuse to
         fire if it isn't actually met). Here the astronaut's own explicit
         request IS the trigger -- the same trust level log_discomfort()
-        already gives the intensity slider. Reached from the Consultation
-        AI's alert_surgeon/alert_text decision, but is a normal REST route
-        like any other, usable directly too."""
+        already gives the intensity slider."""
         body = request.get_json(force=True) or {}
         text = (body.get("text") or "").strip()[:200]
         if not text:
@@ -711,7 +767,7 @@ def create_routes(app, socketio, bridge):
         score = MOOD_SCORES[mood]
         # Real rules engine, not a hardcoded score<=2 guess -- stays in sync with
         # config/health_rules.json's mood bands (and with every other mood-aware
-        # display: elevated-today lines, Trends, the Consultation AI's context)
+        # display, e.g. Trends)
         # if those thresholds are ever retuned.
         lvl = health_rules.evaluate("mood", score)
         now = datetime.now(timezone.utc)
@@ -727,6 +783,7 @@ def create_routes(app, socketio, bridge):
                 "VALUES (?, ?, 'mood', ?, ?, 'manual')",
                 (astro_id, now.isoformat(), json.dumps({"mood": mood, "score": score, "note": note}), lvl),
             )
+        analysis.request(astro_id, "mood")
         emit_fn("cyd_event", {"type": "mood", "astronaut_id": astro_id, "mood": mood, "level": lvl})
         return jsonify({"mood": mood, "score": score, "level": lvl})
 
@@ -799,79 +856,9 @@ def create_routes(app, socketio, bridge):
                 (astro_id, now.isoformat(),
                  json.dumps({"hours": hours, "bedtime": body["bedtime"], "wake_time": body["wake_time"]}), lvl),
             )
+        analysis.request(astro_id, "sleep")
         emit_fn("cyd_event", {"type": "sleep", "astronaut_id": astro_id, "hours": hours, "level": lvl})
         return jsonify({"hours": hours, "level": lvl})
-
-    # ---- Body tab's Consultation chat: an NVIDIA-hosted AI agent, optional
-    # (falls back client-side to keyword matching with no key configured).
-    # Gives the AI more than a reply to work with: elevated_today/
-    # trend_lines/schedule_lines (with each task's live status) are read
-    # fresh from the DB every call -- but consult_chat() itself still
-    # performs zero writes. Every action the AI decides on (vital, symptom,
-    # alert, breathing, emergency) is persisted by the FRONTEND calling an
-    # already-existing route (or the one new /alert route above) after the
-    # fact, the same "AI decides, a separate call persists it" pattern this
-    # chat has used since it only logged discomfort. ----
-    @bp.post("/astronauts/<int:astro_id>/consult")
-    def consult_chat(astro_id):
-        body = request.get_json(force=True) or {}
-        message = (body.get("message") or "").strip()
-        if not message:
-            return jsonify({"error": "message is required"}), 400
-        if not consult.available():
-            return jsonify({"error": "AI consultation is not configured"}), 503
-        history = _sanitize_chat_history(body.get("history"))
-        content_cfg = load_content()
-        with db.write_conn() as conn:
-            _, err = auth.authorize_view(conn, astro_id)
-            if err:
-                return jsonify(err[0]), err[1]
-            astro = conn.execute("SELECT * FROM astronauts WHERE id = ?", (astro_id,)).fetchone()
-            if not astro:
-                return jsonify({"error": "not found"}), 404
-            elevated_today = _elevated_today_lines(conn, astro_id, content_cfg)
-            plan = scheduler.day_plan(conn, astro_id)
-            schedule_lines = [f"{e['time']} - {e['text']} ({e['status']})" for e in plan["entries"]]
-            trend_lines = [
-                line for line in (
-                    _recent_trend_summary(conn, astro_id, ind)
-                    for ind in ("heart_rate", "temperature", "blood_sugar")
-                ) if line
-            ]
-        profile_id, profile = comms.current_profile()
-        hazard_lines = []
-        for region, info in content_cfg["body_parts"].items():
-            match = next((h for h in info.get("hazards", []) if h in profile.get("main_concerns", [])), None)
-            if match:
-                hazard_lines.append(f"{info['label']}: {content_cfg['hazards'][match]['summary']}")
-        try:
-            decision = consult.ask(
-                message, astro["name"], profile["label"], hazard_lines, content_cfg["body_parts"],
-                symptoms.catalog(), history=history, elevated_today=elevated_today,
-                schedule_lines=schedule_lines, trend_lines=trend_lines,
-            )
-        except consult.ConsultError:
-            return jsonify({"error": "AI consultation failed"}), 502
-        return jsonify(decision)
-
-    # ---- Face to Face mode: speaks the Consultation AI's reply out loud
-    # (edge-tts, optional -- a failure here degrades gracefully, the text
-    # reply already showed independently of this call) ----
-    @bp.post("/astronauts/<int:astro_id>/speak")
-    def speak(astro_id):
-        body = request.get_json(force=True) or {}
-        text = (body.get("text") or "").strip()[:1000]
-        if not text:
-            return jsonify({"error": "text is required"}), 400
-        with db.write_conn() as conn:
-            _, err = auth.authorize_view(conn, astro_id)
-            if err:
-                return jsonify(err[0]), err[1]
-        try:
-            audio = voice.synthesize(text)
-        except voice.SpeechError:
-            return jsonify({"error": "speech synthesis failed"}), 502
-        return Response(audio, mimetype="audio/mpeg")
 
     # ---- crew ----
     @bp.get("/crew")
@@ -896,6 +883,7 @@ def create_routes(app, socketio, bridge):
                     "session_active": a["id"] in sessions.active_sessions,
                     # Crew overview cards: today's status, latest vitals, flags.
                     "status": snap["status"], "today": snap["today"], "symptoms_today": snap["symptoms_today"],
+                    "analysis": snap["analysis"],
                     "open_alert": row(open_alert), "last_reading": last_reading,
                 })
         return jsonify(out)
@@ -1258,6 +1246,8 @@ def create_routes(app, socketio, bridge):
             _ack_alert_from_cyd(msg.get("id"))
         elif mtype == "quick_reply":
             _quick_reply_from_cyd(msg.get("astro_id"), msg.get("text"))
+        if mtype in ("mood", "symptoms", "reaction", "breathing_done"):
+            analysis.request(_uid_to_astro(msg.get("uid")), f"cyd_{mtype}")
         if mtype == "active":
             return  # the CYD's once-a-minute "someone's still using me" ping: no browser refresh
         emit_fn("cyd_event", {"type": mtype, **{k: v for k, v in msg.items() if k != "type"}})

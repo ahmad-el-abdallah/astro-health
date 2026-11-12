@@ -81,7 +81,7 @@
       "what_it_does": "Fights infection and manages inflammation; shown here as a whole-body glow.",
       "space_effects": "Radiation and a sealed, recycled-air habitat can both affect immune function and body temperature regulation.",
       "what_to_do": "Report fever or feeling unwell early; keep the habitat clean and follow hygiene routines.",
-      "indicators": ["temperature"],
+      "indicators": ["temperature", "oxygen_saturation"],
       "hazards": ["space_radiation", "hostile_environment"]
     }
   },
@@ -117,6 +117,14 @@
         "Use the thermometer as shown in the kit.",
         "Wait for the reading to settle.",
         "Enter the number in °C."
+      ]
+    },
+    "oxygen_saturation": {
+      "title": "How to measure blood oxygen (SpO2)",
+      "steps": [
+        "Sit still and rest your hand for a minute.",
+        "Clip the pulse oximeter onto a fingertip (warm hand, no nail polish).",
+        "Wait until the number stops changing, then enter it in %."
       ]
     }
   },

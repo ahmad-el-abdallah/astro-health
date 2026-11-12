@@ -9,8 +9,8 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // Which way is "better" (for coloring a change). null = neither: for vitals a move in
 // either direction can matter, so the change is shown neutrally.
-export const BETTER = { sleep: "up", exercise: "up", water: "up", mood: "up", reaction_time: "down" };
-export const UNIT = { heart_rate: "bpm", blood_pressure: "mmHg", blood_sugar: "mg/dL", temperature: "°C", exercise: "min", water: "ml", reaction_time: "ms" };
+export const BETTER = { oxygen_saturation: "up", sleep: "up", exercise: "up", water: "up", mood: "up", reaction_time: "down" };
+export const UNIT = { heart_rate: "bpm", blood_pressure: "mmHg", blood_sugar: "mg/dL", temperature: "°C", oxygen_saturation: "%", exercise: "min", water: "ml", reaction_time: "ms" };
 
 const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
 const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;

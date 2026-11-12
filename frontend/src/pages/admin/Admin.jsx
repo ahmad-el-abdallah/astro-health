@@ -7,6 +7,9 @@
 // - Card registry: every assigned card/tag, with delete (two-step).
 // - Crew accounts: role, card, sign-in status, set a username/password, clear Face ID,
 //   and add a crew member. Account recovery only -- the secrets are never shown.
+// - Station voice: which engine speaks Doctor AI's replies (browser voice, offline, no echo
+//   / Microsoft neural voice, needs internet, station reverb + echo), which neural voice,
+//   station effects on/off, and "Test voice" to hear it before saving.
 import { useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
@@ -18,6 +21,8 @@ import { Icon } from "../../components/ui/Icon.jsx";
 import { SpaceBackdrop } from "../../components/layout/SpaceBackdrop.jsx";
 import { useToast } from "../../components/overlays/Toasts.jsx";
 import LogoCrew from "../../assets/brand/logo-mark-crew.svg?react";
+import { audioCtx, playNeural, quindar } from "../../lib/stationAudio.js";
+import { pickVoice } from "../../lib/useVoice.js";
 
 const KINDS = [
   ["astronaut", "Crew member card"], ["surgeon", "Flight Surgeon card"], ["exercise", "Exercise equipment"],
@@ -380,6 +385,103 @@ function Accounts({ astronauts }) {
   );
 }
 
+const ENGINES = [
+  ["browser", "Browser voice", "Works offline. The computer's own voice (best: Edge \"Aria\" / Chrome \"Google US English\"). Station beeps, but no echo."],
+  ["neural", "Microsoft neural voice", "Natural voice with the station reverb + echo. Needs internet; falls back to the browser voice."],
+];
+const SAMPLE = "Station health system online. All crew vitals are being monitored.";
+
+function VoiceSettings() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const saved = useQuery({ queryKey: ["admin-voice"], queryFn: () => get("/admin/voice-settings") });
+  const [edits, setEdits] = useState(null); // unsaved changes; null = show what's saved
+  const [testing, setTesting] = useState(false);
+  if (!saved.data) return null;
+  const form = edits || { engine: saved.data.engine, voice: saved.data.voice, fx: saved.data.fx };
+  const setForm = setEdits;
+  const dirty = saved.data && (form.engine !== saved.data.engine || form.voice !== saved.data.voice || form.fx !== saved.data.fx);
+
+  async function save() {
+    const out = await put("/admin/voice-settings", form);
+    qc.setQueryData(["admin-voice"], out);
+    setEdits(null);
+    qc.invalidateQueries({ queryKey: ["voice-settings"] });
+    toast("Station voice saved.", "success");
+  }
+
+  async function test() {
+    audioCtx(); // unlock sound inside this click
+    setTesting(true);
+    try {
+      if (form.fx) await quindar("start");
+      let played = false;
+      if (form.engine === "neural") {
+        const res = await fetch("/api/admin/voice-test", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voice: form.voice }),
+        });
+        if (res.ok) { await playNeural(await res.arrayBuffer(), { fx: form.fx }); played = true; }
+        else toast("The neural voice didn't answer (no internet?) -- this is the browser voice instead.", "warn");
+      }
+      if (!played && window.speechSynthesis) {
+        await new Promise((resolve) => {
+          const u = new window.SpeechSynthesisUtterance(SAMPLE);
+          const v = pickVoice(window.speechSynthesis.getVoices());
+          if (v) { u.voice = v; u.lang = v.lang; }
+          u.rate = 1.02;
+          u.onend = resolve;
+          u.onerror = resolve;
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(u);
+        });
+      }
+      if (form.fx) await quindar("end");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <Card className="flex flex-col gap-4">
+      <CardTitle eyebrow="Station voice" title="How Doctor AI sounds" subtitle="Used by the crew's chat and voice mode. Changes apply to everyone." />
+      <div role="radiogroup" aria-label="Voice engine" className="flex flex-col gap-2">
+        {ENGINES.map(([id, label, hint]) => (
+          <label key={id} className={cx("flex cursor-pointer gap-3 rounded-xl border p-3.5", form.engine === id ? "border-accent-text/60 bg-accent-soft" : "border-line bg-raised")}>
+            <input type="radio" name="engine" value={id} checked={form.engine === id} onChange={() => setForm({ ...form, engine: id })} className="mt-1 accent-[var(--ah-accent)]" />
+            <span className="flex flex-col gap-0.5">
+              <span className="text-sm font-semibold">{label}</span>
+              <span className="text-xs text-muted">{hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {form.engine === "neural" && (
+        <label className="flex flex-col gap-1.5 text-sm font-semibold">
+          Neural voice
+          <select className="ah-input min-h-11 bg-control" value={form.voice} onChange={(e) => setForm({ ...form, voice: e.target.value })}>
+            {(saved.data?.voices || []).map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+          </select>
+        </label>
+      )}
+      <label className="flex cursor-pointer items-start gap-3 text-sm">
+        <input type="checkbox" checked={form.fx} onChange={(e) => setForm({ ...form, fx: e.target.checked })} className="mt-1 accent-[var(--ah-accent)]" />
+        <span>
+          <span className="font-semibold">Station comms effects</span>
+          <span className="block text-xs text-muted">
+            NASA Quindar beeps before and after each reply, and a soft cabin hum in voice mode.
+            {form.engine === "neural" ? " Plus the metal-cabin reverb and echo on the voice." : " (Echo needs the neural voice.)"}
+          </span>
+        </span>
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={test} disabled={testing}><Icon name="volume" size={16} />{testing ? "Playing…" : "Test voice"}</Button>
+        <Button variant="primary" onClick={save} disabled={!dirty}>Save</Button>
+      </div>
+    </Card>
+  );
+}
+
 function Console({ username }) {
   const qc = useQueryClient();
   const astronauts = useAdminAstronauts(true);
@@ -407,7 +509,10 @@ function Console({ username }) {
             <UnknownCards astronauts={list} />
             <Registry astronauts={list} />
           </div>
-          <Accounts astronauts={list} />
+          <div className="flex min-w-0 flex-col gap-[18px]">
+            <Accounts astronauts={list} />
+            <VoiceSettings />
+          </div>
         </div>
       </div>
     </div>

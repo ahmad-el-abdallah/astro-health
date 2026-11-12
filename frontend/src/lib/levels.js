@@ -43,7 +43,7 @@ export function bandsFor(rules, indicator) {
     return bands;
   }
   if (cfg.green_min != null) {
-    const bands = [{ lo: cfg.green_min, hi: Infinity, kind: "normal" }];
+    const bands = [{ lo: cfg.green_min, hi: cfg.max ?? Infinity, kind: "normal" }];
     if (cfg.yellow_min != null) bands.push({ lo: cfg.yellow_min, hi: cfg.green_min, kind: "caution" });
     return bands;
   }

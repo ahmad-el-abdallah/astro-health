@@ -126,6 +126,21 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     FOREIGN KEY (astronaut_id) REFERENCES astronauts(id)
 );
 CREATE INDEX IF NOT EXISTS idx_journal_astro ON journal_entries(astronaut_id, created_at);
+
+-- One row per health analysis (backend/logic/analysis.py): the AI's verdict, or the
+-- threshold rules' fallback when the AI couldn't be reached (source = 'ai' | 'rules').
+CREATE TABLE IF NOT EXISTS analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    astronaut_id INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    source TEXT NOT NULL,
+    model TEXT,
+    trigger TEXT NOT NULL,
+    state TEXT NOT NULL,
+    overall_level TEXT NOT NULL,
+    result_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_analyses_astro ON analyses(astronaut_id, ts);
 """
 
 

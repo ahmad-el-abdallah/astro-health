@@ -7,9 +7,10 @@ blueprint because this is an entirely separate access-control domain with
 no astronaut/Flight-Surgeon session involved -- see docs/CLAUDE.md's
 "Superuser admin page".
 """
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
-from backend import db
+from backend import db, voice_settings
+from backend.services import voice
 from backend.auth import admin_auth
 from backend.logic import sessions
 
@@ -52,6 +53,42 @@ def create_admin_routes(app):
                 "FROM astronauts a ORDER BY a.id"
             ).fetchall()
         return jsonify([{**dict(r), "has_password": bool(r["has_password"]), "has_face_id": bool(r["has_face_id"])} for r in data])
+
+    # ---- station voice: which engine speaks Doctor AI's replies ----
+    @bp.get("/voice-settings")
+    def admin_voice_settings():
+        with db.write_conn() as conn:
+            _, err = admin_auth.authorize_superuser(conn)
+        if err:
+            return jsonify(err[0]), err[1]
+        return jsonify(voice_settings.public())
+
+    @bp.put("/voice-settings")
+    def admin_set_voice_settings():
+        with db.write_conn() as conn:
+            _, err = admin_auth.authorize_superuser(conn)
+        if err:
+            return jsonify(err[0]), err[1]
+        settings, problem = voice_settings.validate(request.get_json(force=True))
+        if problem:
+            return jsonify({"error": problem}), 400
+        voice_settings.save(settings)
+        return jsonify(voice_settings.public())
+
+    @bp.post("/voice-test")
+    def admin_voice_test():
+        """'Test voice' on the admin card: a sample line in the chosen neural voice."""
+        with db.write_conn() as conn:
+            _, err = admin_auth.authorize_superuser(conn)
+        if err:
+            return jsonify(err[0]), err[1]
+        body = request.get_json(force=True) or {}
+        name = body.get("voice") if body.get("voice") in voice_settings.VOICES else voice_settings.get()["voice"]
+        try:
+            audio = voice.synthesize("Station health system online. All crew vitals are being monitored.", name)
+        except voice.SpeechError:
+            return jsonify({"error": "speech synthesis failed"}), 502
+        return Response(audio, mimetype="audio/mpeg")
 
     @bp.get("/unknown-tags")
     def admin_unknown_tags():

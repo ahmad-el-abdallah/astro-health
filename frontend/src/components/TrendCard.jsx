@@ -23,7 +23,7 @@ export function useTrendSeries(astroId, indicator, days) {
   }, [history.data, history.isLoading, rules.data, indicator]);
 }
 
-const UNIT = { heart_rate: "bpm", blood_pressure: "mmHg", blood_sugar: "mg/dL", temperature: "°C", sleep: "h", exercise: "min", water: "ml", reaction_time: "ms" };
+const UNIT = { heart_rate: "bpm", blood_pressure: "mmHg", blood_sugar: "mg/dL", temperature: "°C", oxygen_saturation: "%", sleep: "h", exercise: "min", water: "ml", reaction_time: "ms" };
 
 export function TrendChart({ astroId, indicator, days, height = 300 }) {
   const { points, secondary, bands } = useTrendSeries(astroId, indicator, days);

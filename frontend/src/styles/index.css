@@ -294,6 +294,7 @@
    which repaints every frame (one of the causes of the old login screen's lag). */
 @keyframes ah-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @keyframes ah-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+@keyframes ah-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
 
 /* Lite glass: same material (rim, grain, light) minus the live blur. */
 html[data-glass="lite"] .ah-glass,

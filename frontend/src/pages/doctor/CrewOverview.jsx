@@ -10,6 +10,7 @@ import { fmtTime, formatIndicatorValue } from "../../lib/format.js";
 import { useAlerts, useCrew } from "../../lib/queries.js";
 import { AnimatedNumber, Avatar, Card, Shimmer, StatusChip, cx } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
+import { StateChip } from "../../components/AiAnalysisCard.jsx";
 import { buildFeed, cardFlag, sortCrew } from "./feed.js";
 
 const STATS = [
@@ -83,6 +84,14 @@ function CrewCard({ c }) {
         </div>
         <StatusChip level={c.status} text={c.status === "GRAY" ? "No data" : undefined} />
       </div>
+      {c.analysis && c.status !== "GRAY" && (
+        <div className="flex flex-col gap-1.5">
+          <StateChip analysis={c.analysis} className="self-start" />
+          <p className="m-0 line-clamp-2 text-[13px] text-ink-2" title={c.analysis.summary}>
+            {c.analysis.summary}{c.analysis.source === "rules" ? " (rules)" : ""}
+          </p>
+        </div>
+      )}
       {/* 4 across when the card itself is wide enough, otherwise 2×2 -- never truncated. */}
       <div className="grid grid-cols-2 gap-2 @md:grid-cols-4">
         {MINI.map(([ind, label]) => <MiniVital key={ind} indicator={ind} label={label} reading={c.today?.[ind]} />)}

@@ -14,7 +14,7 @@ import { Sparkline } from "../../../components/charts/Sparkline.jsx";
 import { TILE_ICON } from "../../../components/VitalTile.jsx";
 import { STRINGS } from "../../../strings.js";
 
-export const LAB_INDICATORS = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "sleep", "mood"];
+export const LAB_INDICATORS = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "oxygen_saturation", "sleep", "mood"];
 
 export function toPoints(indicator, rows = []) {
   return rows
@@ -159,7 +159,7 @@ function outer(cfg) {
 export function LogReadingCard({ astroId, rules }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [v, setV] = useState({ hr: "", sys: "", dia: "", sugar: "", temp: "" });
+  const [v, setV] = useState({ hr: "", sys: "", dia: "", sugar: "", temp: "", spo2: "" });
   const [result, setResult] = useState(null);
   const set = (k) => (e) => setV((s) => ({ ...s, [k]: e.target.value }));
   const ind = rules?.indicators;
@@ -170,6 +170,7 @@ export function LogReadingCard({ astroId, rules }) {
     dia: String(Math.round(mid(ind.blood_pressure.diastolic_green))),
     sugar: String(Math.round(mid(ind.blood_sugar.green))),
     temp: mid(ind.temperature.green).toFixed(1),
+    spo2: String(Math.round(((ind.oxygen_saturation.max ?? 100) + ind.oxygen_saturation.green_min) / 2)),
   });
   const fillAbnormal = () => ind && setV({
     hr: String(Math.round(outer(ind.heart_rate).hi + 15)),
@@ -177,6 +178,7 @@ export function LogReadingCard({ astroId, rules }) {
     dia: String(ind.blood_pressure.diastolic_red_high + 8),
     sugar: String(Math.round(outer(ind.blood_sugar).hi + 30)),
     temp: (outer(ind.temperature).hi + 1).toFixed(1),
+    spo2: String(ind.oxygen_saturation.yellow_min - 4),
   });
 
   async function assess() {
@@ -185,6 +187,7 @@ export function LogReadingCard({ astroId, rules }) {
     if (v.sys && v.dia) body.blood_pressure = { systolic: Number(v.sys), diastolic: Number(v.dia) };
     if (v.sugar) body.blood_sugar = Number(v.sugar);
     if (v.temp) body.temperature = Number(v.temp);
+    if (v.spo2) body.oxygen_saturation = Number(v.spo2);
     if (!Object.keys(body).length) return;
     setResult(await post(`/astronauts/${astroId}/assess`, body));
     ["summary", "history", "crew"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
@@ -216,6 +219,7 @@ export function LogReadingCard({ astroId, rules }) {
                 {field("sys", "Systolic", { placeholder: "mmHg" })}
                 {field("dia", "Diastolic", { placeholder: "mmHg" })}
                 {field("temp", "Temperature (°C)", { placeholder: "e.g. 36.8", step: "0.1" })}
+                {field("spo2", "Blood oxygen (%)", { placeholder: "e.g. 98", min: 1, max: 100 })}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="primary" className="min-h-10" onClick={assess}>{STRINGS.assessButton}</Button>

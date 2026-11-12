@@ -46,6 +46,16 @@
       "note_high": "Temperature is high",
       "note_low": "Temperature is low"
     },
+    "oxygen_saturation": {
+      "label": "Blood oxygen (SpO2)",
+      "unit": "%",
+      "body_part": "immune",
+      "hazards": ["hostile_environment"],
+      "green_min": 95,
+      "yellow_min": 90,
+      "max": 100,
+      "note_low": "Blood oxygen is low"
+    },
     "sleep": {
       "label": "Sleep",
       "unit": "hours/night",

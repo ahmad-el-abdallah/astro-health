@@ -22,7 +22,7 @@ import { BETTER, UNIT, compare, fmtValue, insights, levelFor, recentOutOfRange, 
 
 const BAR = new Set(["sleep", "exercise", "water"]);
 const TARGET = { sleep: [7, "Target 7 h"], exercise: [90, "Target 90 min"], water: [2000, "Target 2000 ml"] };
-const TILE_ICON = { heart_rate: "heart", blood_pressure: "blood-pressure", blood_sugar: "blood-sugar", temperature: "temperature", sleep: "sleep", mood: "mood", exercise: "exercise", water: "blood-sugar", reaction_time: "mind" };
+const TILE_ICON = { heart_rate: "heart", blood_pressure: "blood-pressure", blood_sugar: "blood-sugar", temperature: "temperature", oxygen_saturation: "lungs", sleep: "sleep", mood: "mood", exercise: "exercise", water: "blood-sugar", reaction_time: "mind" };
 const SOURCE = { cyd: "CYD", manual: "Manual entry", tag: "NFC tag", seed: "Mission history" };
 const RANGES = [{ value: 7, label: "7 days" }, { value: 30, label: "30 days" }, { value: 90, label: "90 days" }];
 

@@ -65,6 +65,8 @@ export const useStore = (store) => useSyncExternalStore(store.subscribe, store.g
 // the background and the UI tweens to the new values -- no full-page re-render.
 export const EVENT_INVALIDATIONS = {
   assessment: [["summary"], ["history"], ["crew"], ["alerts"], ["schedule"]],
+  analysis: [["summary"], ["history"], ["crew"], ["alerts"]],
+  analysis_pending: [["summary"], ["crew"]],
   cyd_event: [["summary"], ["history"], ["crew"], ["journal"], ["schedule"]],
   reminder: [["schedule"]],
   session_started: [["summary"], ["crew"]],

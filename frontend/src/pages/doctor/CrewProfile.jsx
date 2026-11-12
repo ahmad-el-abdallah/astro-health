@@ -19,6 +19,7 @@ import { useContent, useCrew, useHistory, useMission, useSummary, useThread } fr
 import { Avatar, Card, CardTitle, Progress, Segmented, Shimmer, StatusChip, cx } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
 import { VitalTile } from "../../components/VitalTile.jsx";
+import { AiAnalysisCard } from "../../components/AiAnalysisCard.jsx";
 import { TrendChart } from "../../components/TrendCard.jsx";
 import { RingGauge } from "../../components/charts/RingGauge.jsx";
 import { StageBar, StageLegend } from "../../components/charts/StageBar.jsx";
@@ -27,8 +28,8 @@ import { RiskMeter } from "../../components/RiskMeter.jsx";
 import { cardFlag } from "./feed.js";
 
 const SECTIONS = [["physical", "Physical"], ["mental", "Mental"], ["sleep", "Sleep"], ["mission", "Mission risk"], ["messages", "Messages"]];
-const TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "sleep", "mood"];
-const TREND = [["heart_rate", "Heart rate"], ["blood_pressure", "Blood pressure"], ["blood_sugar", "Blood sugar"], ["temperature", "Temperature"]];
+const TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "oxygen_saturation", "sleep", "mood"];
+const TREND = [["heart_rate", "Heart rate"], ["blood_pressure", "Blood pressure"], ["blood_sugar", "Blood sugar"], ["temperature", "Temperature"], ["oxygen_saturation", "Blood oxygen"]];
 const RING = { GREEN: "border-good-fg", YELLOW: "border-check-fg", RED: "border-alert-fg", GRAY: "border-line-strong" };
 const RISK_RANK = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 const RISK_TEXT = { HIGH: "text-alert-fg", MEDIUM: "text-check-fg", LOW: "text-good-fg" };
@@ -305,6 +306,8 @@ export default function CrewProfile() {
           ))}
         </div>
       </div>
+
+      <AiAnalysisCard astroId={id} summary={summary.data} />
 
       <Physical id={id} summary={summary.data} />
 

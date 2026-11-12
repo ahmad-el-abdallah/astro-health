@@ -1,20 +1,21 @@
 // Doctor AI consultation logic, ported from static/js/tabs/body.js (chat section).
 //
-// Primary path: the NVIDIA-hosted model (POST /astronauts/<id>/consult, server-side key)
-// reads the free text and decides region/intensity plus optional actions -- log a vital,
-// log a symptom, alert the flight surgeon, start a breathing exercise, or trigger the
-// emergency. Each action reuses the existing route (one write path per kind of data),
-// and a failure in one never blanks the reply. If /consult is unavailable (no key,
-// offline, bad output) that one message falls back to keyword matching -- the next
-// message tries the AI again.
+// Every message -- typed, a quick chip, or spoken (ChatDrawer + lib/useVoice.js) -- goes
+// to the AI (POST /astronauts/<id>/chat, the same Groq key as the health analysis), which
+// answers from this astronaut's data and latest analysis. If its reply names a body region
+// + intensity, that's logged through the same POST /discomfort the slider uses (which also
+// triggers a fresh health analysis) and the region is selected on the twin.
 //
-// Model text is kept as plain text and rendered as React text nodes, so it can never
-// inject HTML (the old app had to escape it by hand).
+// If the AI can't answer (no key, offline, rate limit, bad answer), that one message gets
+// the instant keyword reply instead -- text chat always works.
+//
+// Reply text is rendered as React text nodes, so it can never inject HTML.
 import { useCallback, useRef, useState } from "react";
 import { post } from "../../../lib/api.js";
 import { REGION_KEYWORDS } from "../../../three/anatomy/regions.js";
 
 const now = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const HISTORY_TURNS = 8;
 let seq = 0;
 
 function extractIntensity(text) {
@@ -25,10 +26,11 @@ function extractIntensity(text) {
   return 5;
 }
 
-export function useConsultation({ astroId, content, mission, symptomCatalog, persistDiscomfort, selectRegion, toast, refresh }) {
+export function useConsultation({ astroId, content, mission, persistDiscomfort, selectRegion }) {
   const [messages, setMessages] = useState([]);
-  const [aiAvailable, setAiAvailable] = useState(true); // flips off after a 503 (no key configured)
-  const history = useRef([]); // plain {role, content} turns sent back to the model
+  const [thinking, setThinking] = useState(false);
+  const [source, setSource] = useState(null); // { kind: "ai", model } | { kind: "quick" } after the last reply
+  const history = useRef([]); // plain {role, content} turns sent back to the AI
   const owner = useRef(null);
 
   // A different astronaut = a fresh conversation (same as the old tab).
@@ -38,7 +40,7 @@ export function useConsultation({ astroId, content, mission, symptomCatalog, per
     history.current = [];
     setMessages([{
       id: ++seq, who: "assistant", time: now(),
-      text: `Hi ${name || "there"}! Tell me what hurts, tap a body part on your twin, or press Analyze symptoms.`,
+      text: `Hi ${name || "there"}! Ask me how you're doing, tell me what hurts, or press the mic and just talk.`,
     }]);
   }, [astroId]);
 
@@ -57,11 +59,10 @@ export function useConsultation({ astroId, content, mission, symptomCatalog, per
     return hazard ? `${mission.profile.label}: ${hazard.summary}` : "";
   }
 
-  function fallbackReply(text) {
+  function quickReply(text) {
     const match = REGION_KEYWORDS.find(([, re]) => re.test(text));
     if (!match) {
-      const t = 'I could not tell which body part you mean. Try "headache", "back pain 6" or "my heart is racing".';
-      return { text: t, raw: t };
+      return { text: 'I could not tell which body part you mean. Try "headache", "back pain 6" or "my heart is racing".' };
     }
     const [region] = match;
     const intensity = extractIntensity(text);
@@ -71,67 +72,41 @@ export function useConsultation({ astroId, content, mission, symptomCatalog, per
     let t = `Logged ${intensity}/10 discomfort for ${info.label} and updated your twin. `;
     t += intensity >= 7 ? "That is high — send a report to the flight surgeon now." : info.what_to_do;
     const hazard = missionHazardLine(region);
-    return { text: t, raw: t, note: intensity >= 4 && hazard ? hazard : null };
+    return { text: t, note: intensity >= 4 && hazard ? hazard : null };
   }
 
   async function aiReply(text) {
-    const d = await post(`/astronauts/${astroId}/consult`, { message: text, history: history.current });
-    const extras = [];
+    const d = await post(`/astronauts/${astroId}/chat`, { message: text, history: history.current });
     if (d.region && Number.isInteger(d.intensity)) {
-      await persistDiscomfort(d.region, d.intensity);
+      persistDiscomfort(d.region, d.intensity);
       selectRegion(d.region);
     }
-    if (d.vital) {
-      try {
-        const r = await post(`/astronauts/${astroId}/assess`, d.vital);
-        extras.push({ kind: "result", level: r.overall_level, text: r.note });
-        refresh();
-      } catch { /* the reply still shows on its own */ }
-    }
-    if (d.symptom) {
-      try {
-        const r = await post(`/astronauts/${astroId}/symptoms`, { items: [d.symptom] });
-        const label = (symptomCatalog || []).find((s) => s.id === d.symptom)?.label || d.symptom;
-        extras.push({ kind: "note", text: `Logged symptom: ${label} (${r.level}).` });
-        refresh();
-      } catch { /* non-fatal */ }
-    }
-    if (d.alert_surgeon && d.alert_text) {
-      try {
-        await post(`/astronauts/${astroId}/alert`, { text: d.alert_text });
-        toast("Alert sent to the flight surgeon.", "warn");
-        extras.push({ kind: "note", text: "Flight surgeon alerted." });
-      } catch { /* non-fatal */ }
-    }
-    if (d.start_breathing) extras.push({ kind: "breathing" });
-    if (d.trigger_emergency && d.emergency_text) {
-      // The full-screen emergency overlay takes over the moment this lands.
-      try { await post("/emergency", { text: d.emergency_text, astronaut_id: astroId }); } catch { /* non-fatal */ }
-    }
-    return { text: d.reply, raw: d.reply, extras };
+    return { text: d.reply, source: { kind: "ai", model: d.model } };
   }
 
-  // One pipeline for typed messages AND Face to Face voice transcripts.
-  const submit = useCallback(async (raw, { onReply } = {}) => {
+  // One pipeline for typed messages, quick chips AND voice transcripts. Returns the reply
+  // ({ text, ... }) so the drawer can speak it.
+  const submit = useCallback(async (raw) => {
     const text = (raw || "").trim();
     if (!text || !astroId || !content) return null;
     add({ who: "user", text });
     const pending = add({ who: "assistant", text: "Thinking…", pending: true });
+    setThinking(true);
     let result;
     try {
       result = await aiReply(text);
-      setAiAvailable(true);
-    } catch (err) {
-      if (err?.status === 503) setAiAvailable(false);
-      result = fallbackReply(text);
+    } catch {
+      result = { ...quickReply(text), source: { kind: "quick" } };
     }
-    update(pending, { text: result.text, pending: false, extras: result.extras, note: result.note });
-    history.current.push({ role: "user", content: text }, { role: "assistant", content: result.raw });
-    if (onReply) await onReply(result);
+    update(pending, { text: result.text, note: result.note, pending: false });
+    setThinking(false);
+    setSource(result.source);
+    history.current = [...history.current, { role: "user", content: text }, { role: "assistant", content: result.text }]
+      .slice(-HISTORY_TURNS);
     return result;
-  }, [astroId, content, mission, symptomCatalog]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [astroId, content, mission]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const say = useCallback((msg) => add({ who: "assistant", ...msg }), []);
 
-  return { messages, submit, say, ensureConversation, aiAvailable };
+  return { messages, submit, say, ensureConversation, thinking, source };
 }

@@ -50,6 +50,7 @@ export const INDICATORS = {
   blood_pressure: { label: "Blood pressure", unit: "mmHg" },
   blood_sugar: { label: "Blood sugar", unit: "mg/dL" },
   temperature: { label: "Temperature", unit: "°C" },
+  oxygen_saturation: { label: "Blood oxygen", unit: "%" },
   sleep: { label: "Sleep", unit: "" },
   mood: { label: "Mood", unit: "" },
   exercise: { label: "Exercise", unit: "min" },

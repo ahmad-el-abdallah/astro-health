@@ -22,23 +22,22 @@ SESSION_IDLE_S = int(os.environ.get("ASTRO_SESSION_IDLE_S", "600"))
 # laptop without Node can still just `python app.py` -- see docs/CLAUDE.md.
 FRONTEND_DIST = os.environ.get("ASTRO_FRONTEND_DIST", os.path.join(BASE_DIR, "frontend", "dist"))
 
-NVIDIA_API_KEY_PATH = os.path.join(DATA_DIR, "nvidia_api_key")
-# Consultation chat's multi-turn memory: generous-but-bounded, not a cost-
-# optimization problem for a demo -- see docs/CLAUDE.md.
-MAX_CONSULT_HISTORY_TURNS = 10
-MAX_CONSULT_HISTORY_MSG_CHARS = 500
+# AI health analyst (backend/services/analyst.py). Any OpenAI-compatible chat API works;
+# the default is Groq's free plan. Switch provider by changing these three -- e.g.
+# Hugging Face: AI_BASE_URL=https://router.huggingface.co/v1 plus an hf_ token.
+AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
+AI_MODEL = os.environ.get("AI_MODEL", "openai/gpt-oss-120b")
+AI_API_KEY_PATH = os.path.join(DATA_DIR, "ai_api_key")
 
 
-def nvidia_api_key():
-    """env var wins (for anyone who prefers that), else the local gitignored
-    file, else None -- no key means backend/services/consult.py's AI consultation
-    feature is simply unavailable and the Body tab falls back to its own
-    keyword-matching reply."""
-    env_key = os.environ.get("NVIDIA_API_KEY")
-    if env_key:
+def ai_api_key():
+    """AI_API_KEY env var, else the gitignored data/ai_api_key file, else None.
+    No key just means the AI analyst is unavailable and the rules decide instead."""
+    env_key = os.environ.get("AI_API_KEY")
+    if env_key and env_key.strip():
         return env_key.strip()
-    if os.path.exists(NVIDIA_API_KEY_PATH):
-        with open(NVIDIA_API_KEY_PATH, "r", encoding="utf-8") as f:
+    if os.path.exists(AI_API_KEY_PATH):
+        with open(AI_API_KEY_PATH, "r", encoding="utf-8") as f:
             key = f.read().strip()
         return key or None
     return None
@@ -60,6 +59,7 @@ def load_all():
         "mission_health": _load("mission_health"),
         "routine": _load("routine"),
         "symptoms": _load("symptoms"),
+        "ai_analyst": _load("ai_analyst"),
     }
 
 
@@ -85,3 +85,7 @@ def routine():
 
 def symptoms():
     return _load("symptoms")
+
+
+def ai_analyst():
+    return _load("ai_analyst")
