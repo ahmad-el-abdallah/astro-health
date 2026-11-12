@@ -2589,6 +2589,20 @@ frontend tests. **Not yet confirmed with the real Pico + a real card** -- if a t
 ever lost, check the server's terminal for the scan line to tell a reader/USB problem from a
 browser one.
 
+## Login screen: video background (2026-11-12, branch `login-video-bg`, not merged)
+
+- 3wrf supplied a 4K space clip (Earth turning on the right). Re-encoded to 1080p, no
+  audio, ~1.8 MB (`frontend/public/media/login-bg.mp4`, ffmpeg libx264 CRF 26, faststart)
+  plus its first frame `login-bg.jpg` (poster while loading, and the only thing shown when
+  the OS has "reduce motion" on). `LoginScene.jsx` now renders that `<video>` (muted,
+  looping, playsInline) under the same left-to-right dark gradient as before, plus a soft
+  bottom fade. The old hand-animated stars/SVG Earth are in git history.
+- **`frontend/dist` was hand-patched, not rebuilt** -- the sandbox it was made in couldn't
+  reach the npm registry. `dist/assets/index-4mvhSA4V.js`'s login-scene function was
+  swapped for the video version (inline styles, same look) and the two media files copied
+  into `dist/media/`. The old scene code is still in that bundle, just unused. Run
+  `npm run build` once on a machine with Node to regenerate dist cleanly from the source.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 227 tests (rules engine, protocol, sessions, REST API, symptoms,
