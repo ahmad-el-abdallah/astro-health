@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createWakeListener, findWakeCommand } from "./wakeWord.js";
+import { createWakeListener, findWakeCommand, isName } from "./wakeWord.js";
 
 describe("findWakeCommand", () => {
   it("hears the name on its own", () => {
@@ -48,6 +48,17 @@ function harness() {
   return { made, timers, states, wakes, l, say, runTimer, runLast };
 }
 
+describe("hearing her name through noise", () => {
+  it("one letter off still counts", () => {
+    for (const w of ["Astra", "astra's", "Asta", "Astral", "Austra", "Ostra", "Astrah", "Astrid", "astro"]) expect(isName(w)).toBe(true);
+    expect(findWakeCommand("Asta, how am I doing?")).toEqual({ question: "how am I doing?" });
+  });
+  it("but not words two letters away", () => {
+    for (const w of ["extra", "pasta", "Austria", "astronaut", "aster", "after", "a", "ast"]) expect(isName(w)).toBe(false);
+    expect(isName("Astro", "Health")).toBe(false);
+  });
+});
+
 describe("createWakeListener", () => {
   it("wakes on a final phrase with the name, never on interim text", () => {
     const h = harness();
@@ -88,6 +99,29 @@ describe("createWakeListener", () => {
     h.l.resume();
     expect(h.made.length).toBe(2);
     expect(h.states.at(-1)).toBe("listening");
+  });
+});
+
+describe("ignoring the room", () => {
+  it("a name that isn't loud or clear enough doesn't wake her", () => {
+    const made = [];
+    class FakeRec { constructor() { made.push(this); } start() {} abort() {} }
+    const wakes = [], asked = [];
+    const l = createWakeListener({
+      Recognition: FakeRec, onWake: (w) => wakes.push(w), schedule: () => 1, unschedule: () => {},
+      accept: (hit) => { asked.push(hit); return hit.confidence > 0.5; },
+    });
+    l.start();
+    const say = (t, confidence, i = 0) => {
+      const r = [{ transcript: t, confidence }]; r.isFinal = true;
+      const results = []; results[i] = r;
+      made[0].onresult({ resultIndex: i, results });
+    };
+    say("astra how am I", 0.2);
+    expect(wakes).toEqual([]);
+    expect(asked[0]).toMatchObject({ question: "how am I", confidence: 0.2 });
+    say("astra how am I", 0.9, 1);
+    expect(wakes).toEqual([{ question: "how am I" }]);
   });
 });
 

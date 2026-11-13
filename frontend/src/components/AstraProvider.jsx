@@ -19,7 +19,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { get, post } from "../lib/api.js";
 import { useContent, useMission, useSchedule } from "../lib/queries.js";
-import { audioCtx } from "../lib/stationAudio.js";
+import { audioCtx, micMeter } from "../lib/stationAudio.js";
+import { confidentEnough, loudEnough, micLevels } from "../lib/hearing.js";
 import { useVoice, voiceState } from "../lib/useVoice.js";
 import { useSocketEvent } from "../lib/socket.js";
 import { missionDaySeconds, withLiveStatus } from "../lib/schedule.js";
@@ -95,9 +96,12 @@ export function AstraProvider({ children }) {
   const listen = available && enabled && secure && !!Recognition && owner;
   useEffect(() => {
     if (!listen) return undefined;
+    // The microphone level, so the name has to come from someone close (lib/hearing.js).
+    micMeter.start();
     const l = createWakeListener({
       Recognition,
       onState: setListenerState,
+      accept: (hit) => confidentEnough(hit.confidence) && loudEnough(micLevels, 3500),
       onWake: (hit) => {
         if (voiceState.speaking) return; // her own voice
         l.pause(); // right away: the voice screen starts its own recognition
@@ -106,7 +110,7 @@ export function AstraProvider({ children }) {
     });
     listenerRef.current = l;
     l.start();
-    return () => { l.stop(); listenerRef.current = null; };
+    return () => { l.stop(); listenerRef.current = null; micMeter.stop(); };
   }, [listen, Recognition, open]);
 
   // One tab at a time: two tabs listening at once take the microphone from each other over
@@ -162,7 +166,7 @@ export function AstraProvider({ children }) {
   // Browsers only let a page make sound after one click/keypress on it.
   useEffect(() => {
     if (activated) return undefined;
-    const on = () => setActivated(true);
+    const on = () => { audioCtx(); setActivated(true); }; // also lets the microphone meter run
     window.addEventListener("pointerdown", on);
     window.addEventListener("keydown", on);
     return () => { window.removeEventListener("pointerdown", on); window.removeEventListener("keydown", on); };

@@ -6,7 +6,7 @@
 //   * mic button -> pause/resume listening;  red button / Esc -> end
 // The station sound (Quindar beeps, cabin hum, and -- with the neural voice -- reverb/echo)
 // follows the settings chosen on /admin (lib/useVoice.js, lib/stationAudio.js).
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { Icon } from "../../../components/ui/Icon.jsx";
@@ -17,6 +17,7 @@ import { STT_UNAVAILABLE, useVoice, voiceState } from "../../../lib/useVoice.js"
 import { isBargeIn, isEcho, isStopCommand } from "../../../lib/bargeIn.js";
 import { ambience, audioCtx, micMeter, quindar } from "../../../lib/stationAudio.js";
 import { describeAction, isCancelPhrase } from "../../../lib/astraActions.js";
+import { confidentEnough, loudEnough, micLevels, ROOM_ORDER, roomSettings, roomStore } from "../../../lib/hearing.js";
 import { EmergencyCountdown } from "../../../components/astra/EmergencyCountdown.jsx";
 import { GuidedActivity } from "../../../components/astra/GuidedActivity.jsx";
 
@@ -42,6 +43,7 @@ export function VoiceMode({
 }) {
   const [micOn, setMicOn] = useState(true);
   const [captions, setCaptions] = useState(false);
+  const room = useSyncExternalStore(roomStore.subscribe, roomStore.get);
   const [heard, setHeard] = useState("");
   const [said, setSaid] = useState("");
   // Opened by her name on a page nobody has clicked yet (after a reload or an NFC login): the
@@ -87,7 +89,7 @@ export function VoiceMode({
   }, [onInterrupted]);
 
   const [stuckNote, setStuckNote] = useState("");
-  const onFinal = useCallback(async (text) => {
+  const onFinal = useCallback(async (text, meta = {}) => {
     // "Cancel" during the help countdown wins over everything -- even while she's talking
     // (her own words say "say cancel", so the echo check below would throw it away).
     if (live.current.emergency && isCancelPhrase(text)) {
@@ -100,6 +102,15 @@ export function VoiceMode({
     // Browsers deliver your words as they come, so she's usually already stopped (cutInRef)
     // by the time the finished sentence arrives here.
     if (voiceState.speaking && isEcho(text, voiceRef.current?.currentText())) { listenAgain(100); return; } // her own voice
+    // Too quiet or too unclear to be the astronaut (someone across the room, a video, noise
+    // turned into words): ignore it and keep listening (lib/hearing.js, the "Room" setting).
+    const since = meta.startedAt ? Date.now() - meta.startedAt + 400 : 6000;
+    if (!loudEnough(micLevels, since) || !confidentEnough(meta.confidence)) {
+      console.debug(`[astra] ignored "${text}" (too quiet or unclear: probably the room)`);
+      cutInRef.current = false;
+      listenAgain(100);
+      return;
+    }
     const cutIn = voiceState.speaking || cutInRef.current;
     cutInRef.current = false;
     if (voiceState.speaking) interrupt();
@@ -120,7 +131,9 @@ export function VoiceMode({
 
   const onInterim = useCallback((text) => {
     setHeard(text);
-    if (voiceState.speaking && isBargeIn(text, voiceRef.current?.currentText())) interrupt();
+    // Talking over her: new words AND loud enough to be you, so a voice across the room doesn't cut her off.
+    if (voiceState.speaking && isBargeIn(text, voiceRef.current?.currentText(), roomSettings().bargeWords)
+      && loudEnough(micLevels, 1500)) interrupt();
   }, [interrupt]);
 
   // The card's own buttons (same as saying yes/no).
@@ -277,6 +290,15 @@ export function VoiceMode({
                 {settings.engine === "neural" ? "Neural voice" : "Browser voice"}{settings.engine === "neural" && settings.echo !== "off" ? ` · ${settings.echo} echo` : ""}{settings.beeps ? " · comms beeps" : ""}
               </div>
             </div>
+            <div className="flex items-center gap-2">
+            <button
+              onClick={() => roomStore.set(ROOM_ORDER[(ROOM_ORDER.indexOf(room) + 1) % ROOM_ORDER.length])}
+              title="How much background noise is around you. Noisy room: Astra only listens to clear, close speech. Quiet room: she catches a soft voice."
+              aria-label={`Room: ${roomSettings(room).label}. Click to change.`}
+              className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-line-strong bg-control/60 px-4 text-[13px] font-semibold text-ink-2"
+            >
+              <Icon name="mic" size={16} /><span className="max-sm:hidden">Room:</span> {roomSettings(room).label}
+            </button>
             <button
               onClick={() => setCaptions((c) => !c)}
               aria-pressed={captions}
@@ -286,6 +308,7 @@ export function VoiceMode({
             >
               <Icon name="captions" size={16} /> CC
             </button>
+            </div>
           </div>
 
           <div className="flex flex-col items-center gap-6">

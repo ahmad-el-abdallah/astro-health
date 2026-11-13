@@ -2943,11 +2943,66 @@ and the summary now print `[astra] chat failed: <reason>` in the server terminal
 
 266 backend + 82 frontend tests. **Not yet heard with a real mic and speakers.**
 
+## Astra hears you, not the room (2026-11-13)
+
+User: "make Astra more sensitive about the voice, sometimes there are sounds around me". Asked
+which way they meant, and they picked both: she doesn't hear me, AND noise sets her off.
+
+- **`frontend/src/lib/hearing.js`** (pure, tested) handles three things.
+  - A shared mic-level tracker, `micLevels`. The noise floor is the 20th percentile of the last
+    8 s; `peakSince(t)` gives the loudest level since `t`.
+  - `loudEnough()`: the peak must be at least max(`minLevel`, floor × `ratio`).
+  - `confidentEnough()`: the recognizer's own 0..1 score.
+- **The "room" setting** is kept in localStorage `ah-astra-hearing`, through `roomStore`.
+
+  | room | ratio | minLevel | minConfidence | words to talk over her |
+  |---|---|---|---|---|
+  | quiet | 0 (no gates at all) | 0 | 0 | 2 |
+  | normal (default) | 2.2 | 0.025 | 0.3 | 2 |
+  | noisy | 3.2 | 0.045 | 0.5 | 3 |
+
+  **Every gate fails open.** Each of these lets the phrase through:
+  - fewer than 10 samples
+  - a silent meter (sound not unlocked yet)
+  - a confidence of 0 or missing
+- **`stationAudio.micMeter`** has these changes:
+  - It's ref-counted (each `start()` needs a `stop()`), and shared by the voice screen and the
+    wake listener.
+  - It samples every 60 ms into `micLevels`, only while the AudioContext is running.
+  - `getUserMedia` asks for `autoGainControl: false`, so a close voice really is louder.
+- **Wake word** (`wakeWord.js`):
+  - `findWakeCommand` now accepts any word one edit away from "astra" (4–7 letters), plus
+    Astrid/Astrah. "extra", "pasta", "Austria" and "astronaut" are 2+ edits away.
+  - "Astro Health" is still skipped.
+  - A new `accept(hit)` hook runs before waking: confidence and loudness over the last 3.5 s.
+    `AstraProvider` keeps `micMeter` running while the listener is on.
+- **Voice screen**:
+  - `useVoice` passes `{confidence, startedAt}` to `onFinal`.
+  - A phrase too quiet or unclear since listening began is ignored, and she listens again.
+  - "Cancel" during the SOS countdown is checked before every gate, so it's never blocked.
+  - Talking over her needs `isBargeIn(text, reply, bargeWords)` plus `loudEnough` over 1.5 s.
+  - A **Room** button in the header cycles the setting. The Account drawer has "Astra’s
+    hearing".
+- **Verified** with a fake microphone whose loudness the test controls (an oscillator stream
+  replacing `getUserMedia`), on an isolated copy with the real AI. All 14 checks passed:
+  - a quiet "Astra…" doesn't wake her, and neither does a loud one at confidence 0.15; loud
+    and clear does
+  - "Asta" wakes her
+  - a quiet phrase on the voice screen is not sent to the AI, but the same phrase spoken loud
+    is answered
+  - a quiet interruption doesn't stop her, but a loud one does
+  - the Room button cycles, and Quiet room wakes on a soft voice
+  - the choice is remembered, and the Account drawer matches it
+  - no page errors
+
+  266 backend and 92 frontend tests pass. **Not yet tried in a real noisy room.** If Normal
+  drops the user's own voice, use Quiet room or lower `ROOMS.normal.ratio`/`minLevel`.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 266 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 82 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices);
+- `cd frontend && npm test` — 92 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

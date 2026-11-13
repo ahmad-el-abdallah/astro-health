@@ -1,13 +1,43 @@
 // Account & Security: the signed-in astronaut's own sign-in methods (NFC card on file,
 // username/password, Face ID enroll/clear). Port of static/js/core/account.js; a
 // superuser can do the same resets from /admin via the same backend routes.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { del, get, post } from "../../lib/api.js";
 import { captureDescriptor, startCamera, stopCamera } from "../../lib/faceId.js";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { Button, Field } from "../ui/index.jsx";
 import { Drawer } from "./Drawer.jsx";
+import { ROOM_ORDER, ROOMS, roomStore } from "../../lib/hearing.js";
+
+// How strict Astra is about background sound (lib/hearing.js), remembered in this browser.
+function AstraHearing() {
+  const room = useSyncExternalStore(roomStore.subscribe, roomStore.get);
+  const hint = {
+    quiet: "Catches a soft voice, even from across the room.",
+    normal: "Listens to you, ignores quieter sounds around you.",
+    noisy: "Only clear speech close to the microphone. Use it when people talk nearby.",
+  }[room];
+  return (
+    <div className="space-y-3">
+      <h3 className="m-0 text-[15px] font-semibold">Astra’s hearing</h3>
+      <div role="radiogroup" aria-label="Room noise" className="flex flex-wrap gap-1.5">
+        {ROOM_ORDER.map((id) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={room === id}
+            onClick={() => roomStore.set(id)}
+            className={`min-h-10 cursor-pointer rounded-xl border px-3.5 text-[13px] font-semibold ${room === id ? "border-accent-text/60 bg-accent-soft text-accent-text" : "border-line bg-raised text-ink-2 hover:text-ink"}`}
+          >
+            {ROOMS[id].label}
+          </button>
+        ))}
+      </div>
+      <p className="m-0 text-xs text-muted">{hint}</p>
+    </div>
+  );
+}
 
 // What Astra remembers about you (things you told her, and check-ins she has planned).
 // Only you see these -- not the flight surgeon. Delete any of them here.
@@ -170,6 +200,8 @@ export function AccountDrawer({ open, onClose }) {
             <span className={`absolute top-1 left-0 h-5 w-5 rounded-full bg-white transition-transform ${liteGlass ? "translate-x-6" : "translate-x-1"}`} />
           </button>
         </div>
+
+        {!isSurgeon && <AstraHearing />}
 
         {!isSurgeon && open && <AstraMemory id={id} />}
 

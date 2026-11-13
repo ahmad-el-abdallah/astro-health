@@ -119,6 +119,14 @@ straight away. Say only "Astra" and she beeps and listens for your question.
 - **Allow the microphone** the first time. After opening or refreshing the page, **click
   anywhere once** so the browser lets her talk back. If you call her before clicking, she
   shows her answer as text with a **"Tap so Astra can talk"** button, which plays it aloud.
+- **Noise around you:** Astra listens for *your* voice, close to the microphone, and ignores
+  quieter sounds in the room (people talking nearby, a video, a fan). She also accepts her name
+  with one letter misheard, like "Asta" or "Ostra". Pick the **Room** setting on the voice
+  screen, or under Account → Astra's hearing:
+  - **Quiet room:** catches a soft voice, even from across the room.
+  - **Normal** (the default).
+  - **Noisy room:** only clear speech close to the mic, and talking over her takes a few
+    words.
 - **One tab at a time:** only the tab you used last listens, because two tabs can't share
   the microphone. Any other tab's pill says "Astra in another tab"; click in that tab to
   move her there.

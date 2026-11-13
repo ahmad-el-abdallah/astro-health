@@ -18,12 +18,13 @@ function newWords(text, replyText) {
   return norm(text).filter((w) => w.length > 1 && !said.has(w));
 }
 
-/** Should what the mic is hearing (so far) stop her? */
-export function isBargeIn(text, replyText) {
+/** Should what the mic is hearing (so far) stop her? minNew: how many words she isn't saying
+ *  it takes (2; 3 in a noisy room, lib/hearing.js). */
+export function isBargeIn(text, replyText, minNew = 2) {
   if (isStopCommand(text)) return true;
   const words = norm(text);
   const fresh = newWords(text, replyText);
-  return fresh.length >= 2 || (words.length >= 3 && fresh.length / words.length >= 0.5);
+  return fresh.length >= minNew || (words.length >= minNew + 1 && fresh.length / words.length >= 0.5);
 }
 
 /** A final phrase that is really just her own voice picked up by the mic. */

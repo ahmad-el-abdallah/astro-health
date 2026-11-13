@@ -6,8 +6,11 @@
 //                metal-cabin reverb (impulse response generated in code) and a soft feedback
 //                echo. This only works for audio the page receives -- the browser's own
 //                speechSynthesis voice can't be processed (the page never gets its sound).
-//  * micMeter    reads the microphone level for the voice-mode orb while listening.
+//  * micMeter    reads the microphone level: the voice-mode orb, and lib/hearing.js's
+//                "is that you or the room?" check.
 // One shared AudioContext, created/resumed inside a click (browsers block sound otherwise).
+
+import { micLevels } from "./hearing.js";
 
 let ctx = null;
 
@@ -231,23 +234,47 @@ export async function playNeural(arrayBuffer, { echo = "medium", radio = false }
 // ---- microphone level (voice-mode orb while listening) ----
 export const input = { analyser: null };
 let micStream = null;
+let micUsers = 0;
+let micTimer = null;
+let micStarting = null;
 
+// Shared by the voice screen (the orb) and the wake-word listener (telling your voice from the
+// room, lib/hearing.js): each start() needs its own stop(); the microphone closes after the last.
 export const micMeter = {
   async start() {
+    micUsers += 1;
+    if (micStream) return true;
+    if (!micStarting) micStarting = this._open();
+    return micStarting;
+  },
+  async _open() {
     const c = audioCtx();
-    if (!c || micStream || !navigator.mediaDevices?.getUserMedia) return false;
+    if (!c || !navigator.mediaDevices?.getUserMedia) { micStarting = null; return false; }
+    let stream;
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      // Noise suppression lowers steady sounds (fans, hum); no auto-gain, so a voice close to the
+      // microphone really is louder than the room.
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false } });
     } catch {
-      return false; // no meter, the orb just breathes; recognition reports its own errors
+      micStarting = null;
+      return false; // no meter: the orb just breathes, and the hearing gates let everything through
     }
+    micStarting = null;
+    if (micUsers <= 0) { stream.getTracks().forEach((t) => t.stop()); return false; } // stopped meanwhile
+    micStream = stream;
     const analyser = c.createAnalyser();
     analyser.fftSize = 1024;
     c.createMediaStreamSource(micStream).connect(analyser); // measured only, never played back
     input.analyser = analyser;
+    micLevels.reset();
+    micTimer = setInterval(() => { if (c.state === "running") micLevels.push(levelOf(analyser), Date.now()); }, 60);
     return true;
   },
   stop() {
+    micUsers = Math.max(0, micUsers - 1);
+    if (micUsers > 0) return;
+    clearInterval(micTimer);
+    micTimer = null;
     micStream?.getTracks().forEach((t) => t.stop());
     micStream = null;
     input.analyser = null;

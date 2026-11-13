@@ -4,26 +4,54 @@
 // the time, not only after the name. Only FINAL phrases are checked, so it never fires on a
 // half-heard word. See docs/CLAUDE.md "Astra wake word".
 
-// "astra", optionally after "hey/hi/ok/okay", plus the ways speech recognition commonly
-// mishears it ("Astro", "Austra", "Ostra", "Astrid"). Word boundaries keep "astronaut" and
-// "extra" from matching, and "Astro Health" (the app's name) is excluded.
-const WAKE = /\b(?:(?:hey|hi|ok|okay)[\s,]+)?(?:astra|astrah|asstra|aastra|austra|ostra|astrid|astro(?![\s,]+health))\b[\s,.!?:;-]*(.*)$/i;
+// The name, as speech recognition writes it. Exact list first, then anything ONE letter away
+// from "astra" (Astro, Austra, Ostra, Asta, Astral, Astra's…), so a noisy room's mishearing
+// still wakes her. "Extra", "pasta", "Austria" and "astronaut" are 2+ letters away and never
+// match, and "Astro Health" (the app's own name) is skipped.
+const LEADS = new Set(["hey", "hi", "ok", "okay"]);
+const EXTRA_NAMES = new Set(["astrid", "astrah", "asstra", "aastra"]);
+
+function oneEditAway(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+const clean = (w) => w.toLowerCase().replace(/[^a-z]/g, "");
+export function isName(word, next = "") {
+  const w = clean(word);
+  if (w.length < 4 || w.length > 7) return false;
+  if (w === "astro" && clean(next) === "health") return false;
+  return EXTRA_NAMES.has(w) || oneEditAway(w, "astra");
+}
 
 /** null if the phrase doesn't call Astra, else { question } -- the words after the name
  *  ("" when the name was said on its own). */
 export function findWakeCommand(text) {
   if (!text) return null;
-  const m = String(text).match(WAKE);
-  if (!m) return null;
-  const question = m[1].replace(/^[\s,.!?:;'-]+/, "").replace(/\s+/g, " ").trim();
-  return { question };
+  const words = String(text).trim().split(/\s+/);
+  for (let i = 0; i < words.length; i++) {
+    if (!isName(words[i], words[i + 1])) continue;
+    const question = words.slice(i + 1).join(" ").replace(/^[\s,.!?:;'-]+/, "").trim();
+    return { question };
+  }
+  return null;
 }
 
 /**
  * A background listener that keeps itself running:
- *   createWakeListener({ Recognition, onWake, onState })
+ *   createWakeListener({ Recognition, onWake, onState, accept })
  *   -> { start, stop, pause, resume }
- * onWake({ question }) when a final phrase calls Astra. onState(state) with
+ * onWake({ question }) when a final phrase calls Astra and accept({ question, confidence })
+ * agrees it was the astronaut (loud and clear enough, lib/hearing.js). onState(state) with
  * "listening" | "paused" | "blocked" | "off". Restarts on every `end` (browsers end
  * continuous recognition on their own every so often), backing off 0.3 s -> 5 s after
  * errors; a denied microphone ("not-allowed") stops it for good (state "blocked").
@@ -35,7 +63,7 @@ export function findWakeCommand(text) {
 export const WATCHDOG_MS = 45000;
 
 export function createWakeListener({
-  Recognition, onWake, onState, schedule = setTimeout, unschedule = clearTimeout,
+  Recognition, onWake, onState, accept = () => true, schedule = setTimeout, unschedule = clearTimeout,
   every = setInterval, unevery = clearInterval, now = () => Date.now(), watchdogMs = WATCHDOG_MS,
   interimMs = 1000,
 }) {
@@ -87,13 +115,15 @@ export function createWakeListener({
       disarm();
       if (fired.has(i) || !running || paused) return;
       fired.add(i);
+      // Last check (lib/hearing.js): loud and clear enough to be the astronaut, not the room?
+      if (!accept(hit)) { console.debug(`[astra] ignored "${hit.heard}" (too quiet or unclear: probably the room)`); return; }
       console.info(`[astra] wake word (${how}): "${hit.question}"`);
-      onWake?.(hit);
+      onWake?.({ question: hit.question });
     };
     const hitIn = (res) => {
       for (let a = 0; a < (res.length || 1); a++) {
         const hit = findWakeCommand(res[a]?.transcript);
-        if (hit) return hit;
+        if (hit) return { ...hit, confidence: res[a]?.confidence, heard: res[a]?.transcript };
       }
       return null;
     };

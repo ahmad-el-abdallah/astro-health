@@ -252,16 +252,17 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
     rec.lang = "en-US";
     rec.interimResults = true;
     rec.continuous = false;
-    heardRef.current = { final: "", interim: "", failed: false, aborted: false };
+    heardRef.current = { final: "", interim: "", failed: false, aborted: false, confidence: 0, startedAt: Date.now() };
     rec.onresult = (e) => {
-      let fin = "", interim = "";
+      let fin = "", interim = "", confidence = 0;
       for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) fin += r[0].transcript;
+        if (r.isFinal) { fin += r[0].transcript; confidence = Math.max(confidence, r[0].confidence || 0); }
         else interim += r[0].transcript;
       }
       heardRef.current.final = fin;
       heardRef.current.interim = interim;
+      heardRef.current.confidence = confidence;
       live.current.onInterim?.(`${fin}${interim}`.trim());
     };
     rec.onerror = (e) => {
@@ -277,7 +278,8 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
       const heard = heardRef.current;
       if (heard.aborted || heard.failed) return;
       const text = (heard.final || heard.interim).trim();
-      if (text) live.current.onFinal?.(text);
+      // with how sure the recognizer was, and when listening began (lib/hearing.js's checks)
+      if (text) live.current.onFinal?.(text, { confidence: heard.final ? heard.confidence : 0, startedAt: heard.startedAt });
       else live.current.onNoSpeech?.();
     };
     try {

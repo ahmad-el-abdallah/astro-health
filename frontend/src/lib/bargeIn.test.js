@@ -26,6 +26,14 @@ describe("talking over Astra", () => {
   });
 });
 
+describe("noisy room", () => {
+  it("needs 3 new words to stop her (a stop word still works)", () => {
+    expect(isBargeIn("my sleep", REPLY, 3)).toBe(false);
+    expect(isBargeIn("what about my sleep", REPLY, 3)).toBe(true);
+    expect(isBargeIn("stop", REPLY, 3)).toBe(true);
+  });
+});
+
 describe("spokenPart", () => {
   it("cuts back to the last whole word she said", () => {
     expect(spokenPart(REPLY, 25)).toBe("Your vitals look normal");
