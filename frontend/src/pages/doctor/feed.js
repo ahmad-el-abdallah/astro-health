@@ -9,7 +9,7 @@ import { fmtTime, formatIndicatorValue, INDICATORS, numericValue } from "../../l
 import { bandsFor } from "../../lib/levels.js";
 
 const RANK = { RED: 0, YELLOW: 1, GRAY: 2 };
-const UNIT = { heart_rate: "bpm", blood_pressure: "mmHg", blood_sugar: "mg/dL", temperature: "°C", oxygen_saturation: "%", exercise: "min", water: "ml" };
+const UNIT = { heart_rate: "bpm", blood_pressure: "mmHg", blood_sugar: "mg/dL", temperature: "°C", oxygen_saturation: "%", respiration_rate: "/min", stress: "/100", exercise: "min", water: "ml" };
 
 function alertTitle(text = "") {
   // Assessment alerts read "RED: heart rate, temperature".

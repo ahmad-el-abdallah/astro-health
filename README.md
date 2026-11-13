@@ -418,6 +418,12 @@ Works the same with the real hardware or in `--simulate` mode.
   Surgeon's tools menu.
 - To start over with fresh demo data: Flight Surgeon tools → **Reset demo data** (asks you to
   type RESET; superuser accounts are kept), or `.venv/bin/python -m backend.seed`.
+- **Live monitor (Overview → "Start live monitor")** replays a *real* recorded crew session: a
+  moving ECG, heart rate, breathing rate and a relative stress level (skin response), with the
+  recorded startle moments flagged. Source: NASA's crew-state physiology study (Kaggle
+  "Reducing Commercial Aviation Fatalities"), crew 13. Only a small per-second summary is in
+  the repo (`backend/sensor/crew13.json`). To rebuild it from the original zip:
+  `.venv/bin/python -m backend.sensor.build ~/Downloads/13.zip`
 
 ## Testing
 

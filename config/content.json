@@ -33,7 +33,7 @@
       "what_it_does": "Controls thinking, mood, sleep and reaction speed.",
       "space_effects": "Isolation, confinement and disrupted schedules can affect mood, sleep quality and how fast you react.",
       "what_to_do": "Keep a steady sleep schedule, do the daily mood check, and try a breathing exercise if you feel stressed.",
-      "indicators": ["sleep", "mood", "reaction_time"],
+      "indicators": ["sleep", "mood", "reaction_time", "stress"],
       "hazards": ["isolation_confinement"]
     },
     "eyes": {
@@ -81,7 +81,7 @@
       "what_it_does": "Fights infection and manages inflammation; shown here as a whole-body glow.",
       "space_effects": "Radiation and a sealed, recycled-air habitat can both affect immune function and body temperature regulation.",
       "what_to_do": "Report fever or feeling unwell early; keep the habitat clean and follow hygiene routines.",
-      "indicators": ["temperature", "oxygen_saturation"],
+      "indicators": ["temperature", "oxygen_saturation", "respiration_rate"],
       "hazards": ["space_radiation", "hostile_environment"]
     }
   },
@@ -125,6 +125,22 @@
         "Sit still and rest your hand for a minute.",
         "Clip the pulse oximeter onto a fingertip (warm hand, no nail polish).",
         "Wait until the number stops changing, then enter it in %."
+      ]
+    },
+    "respiration_rate": {
+      "title": "How breathing rate is measured",
+      "steps": [
+        "The chest strap of the live wearable counts each breath; nothing to type.",
+        "Start the live monitor on the Overview page.",
+        "Breathe normally: it shows breaths per minute over the last 30 seconds."
+      ]
+    },
+    "stress": {
+      "title": "How the stress level is measured",
+      "steps": [
+        "The wearable's finger sensor tracks tiny changes in skin sweat (skin conductance).",
+        "A sudden rise above your own recent level counts as a stress response, shown 0-100.",
+        "It's relative to you, not a medical value: a short spike after a surprise is normal."
       ]
     }
   },

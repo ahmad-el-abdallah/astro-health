@@ -20,7 +20,7 @@ from backend.config import ai_analyst as load_analyst_cfg, content as load_conte
 from backend.config import TIME_SCALE
 from backend.hardware import protocol
 from backend.jobs import comms, scheduler
-from backend.logic import exercise, health_rules, location, sessions
+from backend.logic import exercise, health_rules, location, sensor_feed, sessions
 from backend.services import analyst
 
 DEBOUNCE_S = 5          # wait for a burst of changes to settle
@@ -232,6 +232,9 @@ def build_context(conn, astro_id, profile=None, for_chat=False):
                      "and tell them to head back to the airlock. A YELLOW suit reading needs close watching.")
     else:
         lines.append("Location: inside the station.")
+    wearable = sensor_feed.context_line(astro_id)
+    if wearable:
+        lines.append(wearable)
     if for_chat:
         try:
             lines += exercise.chat_lines(conn, astro_id)

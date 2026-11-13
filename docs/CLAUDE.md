@@ -3495,11 +3495,69 @@ The voice-tone side worked (it runs on the laptop). The AI side kept failing, an
   rebuilt from source, so that patch is gone. The login page's product preview
   (`public/preview/overview.jpg`, wide screens) sits on top of the video's right side.
 
+## Live monitor: a real NASA crew recording replayed as a wearable (2026-11-13)
+
+The user found `~/Downloads/13.zip` (122 MB). It's one crew ("13") of NASA's crew-state
+physiology study, the Kaggle "Reducing Commercial Aviation Fatalities" data:
+- 4 CSVs at ~256 Hz: CA (focused attention), DA (diverted attention, Event 5 = task
+  periods), SS (startle/surprise, Event 1 = the startles), each 6 min; LOFT (long flight sim,
+  256 MB, unused)
+- columns: 20 EEG, `ECG`, `R` (respiration belt), `GSR` (skin conductance), `Event`
+
+Asked where to use it, the user chose **"Live sensor monitor"**.
+
+- **`backend/sensor/build.py`** (one-off: `python -m backend.sensor.build <zip>`; pure Python,
+  no numpy, ~2 s) writes `backend/sensor/crew13.json` (0.34 MB, committed; the zip is not).
+  Per second, for each of CA/DA/SS:
+  - **heart rate:** R-peaks (detrended ECG, polarity auto-picked, adaptive threshold, 0.33 s
+    refractory), 60 / median RR over 10 s, then a 7 s median filter against double-counted
+    beats
+  - **breathing:** upward crossings with hysteresis over 30 s
+  - **stress 0–100:** GSR's rise above its own 30 s median baseline. Not the raw level: it
+    drifts up all session as the electrodes warm, which read as "stress 100" by the end. It's
+    scaled by max(99th-percentile rise, 4% of the person's level), so ordinary ripples don't
+    get stretched to 100; calm ≈ 20. Real result: focus/multitask average ~30 and stay ≤64;
+    the startle test hits 100 at the marked startles (HR 66 → 99 at the same time).
+  - **event flag:** only DA and SS; CA flags its whole run
+  - **ECG trace:** 100 Hz, scaled to ±127
+- **`backend/logic/sensor_feed.py`** (in memory, like `active_sessions`; loops the recording):
+  - its own worker thread emits a Socket.IO `sensor` event every second (hr, br, stress,
+    event, 100 ECG samples)
+  - every 60 s it saves the minute's averages as `heart_rate` / `respiration_rate` / `stress`
+    readings (`source='wearable'`)
+  - **`analysis.request` only when a saved level changes** (free Groq limits)
+  - `context_line()` feeds `analysis.build_context` (Astra and the health AI see it, including
+    "a startle just happened")
+- **Routes:** `GET /sensor/segments` (open); `GET /astronauts/<id>/sensor` (self or
+  surgeon); `PUT` (self only, `{"segment"}` / `{"on": false}`), which emits `sensor_changed`.
+  `/summary` carries `sensor`.
+- **New indicators** (`config/health_rules.json`, PLACEHOLDER):
+  - `respiration_rate`: green 12–20, yellow 8–11/21–26; body part `immune`
+  - `stress`: green ≤60, yellow ≤85; body part `brain`
+  - also in content.json (body parts + measure guides), `INDICATORS`, the tile icons and the
+    doctor feed units
+- **Frontend `components/LiveSensorCard.jsx`:**
+  - On the crew Overview (under the Today strip): pick a test, Start/Stop.
+  - On the doctor CrewProfile: shown only while running, with no Stop.
+  - The ECG is drawn on a canvas from `sensorStore` each animation frame, one second behind,
+    sliding through the newest chunk so it moves smoothly.
+  - Stats (the heart icon beats at the live rate), a stress bar, a "Startle event" chip, and
+    the source credited on screen.
+- **Verified:**
+  - 12 new backend tests (`tests/test_sensor.py`: synthetic ECG/breathing in, the known rate
+    out ±2; drift vs a quick rise; looping; minute saves; analysis only on change; route
+    permissions) and 1 frontend test. 339 backend + 163 frontend pass.
+  - Headless on an isolated copy: the card streams, HR 67–68, the ECG is drawn, the doctor
+    sees it without Stop, the startle chip appears at the recorded moment, a reading is saved
+    after a minute, the Breathing tile appears, Stop works, no phone overflow, no console
+    errors.
+  - Not checked with the real AI (the 120b daily allowance was used up that day).
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 327 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 339 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 162 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
+- `cd frontend && npm test` — 163 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

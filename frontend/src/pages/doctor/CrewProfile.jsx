@@ -20,6 +20,7 @@ import { Avatar, Card, CardTitle, Progress, Segmented, Shimmer, StatusChip, cx, 
 import { Icon } from "../../components/ui/Icon.jsx";
 import { VitalTile } from "../../components/VitalTile.jsx";
 import { AiAnalysisCard } from "../../components/AiAnalysisCard.jsx";
+import { LiveSensorCard } from "../../components/LiveSensorCard.jsx";
 import { TrendChart } from "../../components/TrendCard.jsx";
 import { RingGauge } from "../../components/charts/RingGauge.jsx";
 import { StageBar, StageLegend } from "../../components/charts/StageBar.jsx";
@@ -308,6 +309,7 @@ export default function CrewProfile() {
       </div>
 
       <AiAnalysisCard astroId={id} summary={summary.data} />
+      <LiveSensorCard astroId={id} summary={summary.data} />
 
       <Physical id={id} summary={summary.data} />
 

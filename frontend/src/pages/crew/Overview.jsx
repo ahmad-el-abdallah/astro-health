@@ -24,10 +24,11 @@ import { Thread } from "../../components/Thread.jsx";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { STRINGS } from "../../strings.js";
 import { AiAnalysisCard } from "../../components/AiAnalysisCard.jsx";
+import { LiveSensorCard } from "../../components/LiveSensorCard.jsx";
 import { useToday } from "../../lib/useToday.js";
 
 const MAIN_TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "oxygen_saturation", "sleep", "mood"];
-const EXTRA_TILES = ["reaction_time", "exercise", "water"];
+const EXTRA_TILES = ["respiration_rate", "stress", "reaction_time", "exercise", "water"]; // the first two come from the live monitor
 const RING = { GREEN: "border-good-fg", YELLOW: "border-check-fg", RED: "border-alert-fg", GRAY: "border-line-strong" };
 const RISK_TEXT = { HIGH: "text-alert-fg", MEDIUM: "text-check-fg", LOW: "text-good-fg" };
 
@@ -474,6 +475,8 @@ export default function Overview() {
       </Row>
 
       <TodayStrip astroId={id} />
+
+      <LiveSensorCard astroId={id} summary={s} canControl={!isSurgeon} />
 
       <AiAnalysisCard astroId={id} summary={s} repeatSummary={!(s?.analysis && s.analysis_current)} />
 

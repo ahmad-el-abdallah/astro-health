@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from backend import config, db
-from backend.logic import analysis, sessions
+from backend.logic import analysis, sensor_feed, sessions
 from backend.services import analyst
 
 # Test apps never start the Pico NFC reader thread (see app.py): it would outlive its test,
@@ -49,6 +49,7 @@ def no_real_ai(monkeypatch, request):
     if request.module.__name__.split(".")[-1] not in ANALYSIS_TEST_MODULES:
         monkeypatch.setattr(analysis, "request", lambda *a, **k: None)
     analysis.reset()
+    sensor_feed.reset()  # every live wearable off
     yield
     if analysis._worker_started:
         analysis.wait_idle(5)

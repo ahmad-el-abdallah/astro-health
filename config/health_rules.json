@@ -56,6 +56,26 @@
       "max": 100,
       "note_low": "Blood oxygen is low"
     },
+    "respiration_rate": {
+      "label": "Breathing rate",
+      "unit": "breaths/min",
+      "body_part": "immune",
+      "hazards": ["hostile_environment"],
+      "green": [12, 20],
+      "yellow": [[8, 11], [21, 26]],
+      "note_high": "Breathing is fast",
+      "note_low": "Breathing is slow"
+    },
+    "stress": {
+      "label": "Stress (skin response)",
+      "unit": "/100",
+      "body_part": "brain",
+      "hazards": ["isolation_confinement"],
+      "green": [0, 60],
+      "yellow": [[61, 85]],
+      "note_high": "Stress response is high",
+      "_comment": "PLACEHOLDER. From the wearable's skin conductance, scaled within the recording: relative arousal, not a medical value. One-minute averages are saved, so a single startle spike rarely leaves green."
+    },
     "sleep": {
       "label": "Sleep",
       "unit": "hours/night",

@@ -13,7 +13,7 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, exercise, location, sessions, health_rules, symptoms, voice_talks
+from backend.logic import analysis, astra_memory, exercise, location, sensor_feed, sessions, health_rules, symptoms, voice_talks
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
@@ -168,6 +168,7 @@ def _today_snapshot(conn, astro_id):
         "today": today,
         "symptoms_today": symptoms_today,
         "location": location.get(conn, astro_id),
+        "sensor": sensor_feed.status(astro_id),
         "status": status,
         "analysis": latest,
         "analysis_current": current,
@@ -513,6 +514,7 @@ def create_routes(app, socketio, bridge):
             "last_check": last_assessment["ts"] if last_assessment else None,
             "body_levels": body_levels,
             "discomfort": discomfort,
+            "sensor": sensor_feed.status(astro_id),
             "session_active": astro_id in sessions.active_sessions,
             "symptoms_today": snap["symptoms_today"],
             "location": snap["location"],
@@ -654,6 +656,42 @@ def create_routes(app, socketio, bridge):
             data = location.set(conn, astro_id, loc)
         emit_fn("location_changed", {"astronaut_id": astro_id, **data})
         analysis.request(astro_id, "location")
+        return jsonify(data)
+
+    # ---- the live wearable (backend/logic/sensor_feed.py): a real recorded crew session ----
+    @bp.get("/sensor/segments")
+    def sensor_segments():
+        return jsonify({"segments": sensor_feed.segments(), "source": sensor_feed.source()})
+
+    @bp.get("/astronauts/<int:astro_id>/sensor")
+    def get_sensor(astro_id):
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+        return jsonify(sensor_feed.status(astro_id) or {"on": False})
+
+    @bp.put("/astronauts/<int:astro_id>/sensor")
+    def put_sensor(astro_id):
+        """{"segment": "focus"|"multitask"|"startle"} starts it, {"on": false} stops it.
+        Only the astronaut wears it (the doctor watches)."""
+        body = request.get_json(force=True) or {}
+        with db.write_conn() as conn:
+            viewer, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            if viewer["id"] != astro_id:
+                return jsonify({"error": "only the astronaut can start or stop their monitor"}), 403
+        if body.get("on") is False:
+            sensor_feed.stop(astro_id)
+            data = {"on": False}
+        else:
+            try:
+                data = sensor_feed.start(astro_id, body.get("segment"))
+            except ValueError:
+                return jsonify({"error": "segment must be one of: " + ", ".join(s["id"] for s in sensor_feed.segments())}), 400
+        emit_fn("sensor_changed", {"astronaut_id": astro_id, "on": data["on"]})
+        analysis.request(astro_id, "wearable")
         return jsonify(data)
 
     @bp.post("/astronauts/<int:astro_id>/assess")
