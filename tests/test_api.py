@@ -217,7 +217,7 @@ def test_chat_is_503_without_an_ai_key(client):
 
 def test_chat_answers_with_the_ai_and_sanitizes_history(client, monkeypatch):
     login_as(client, AHMAD_UID)
-    monkeypatch.setattr(analyst, "available", lambda: True)
+    monkeypatch.setattr(analyst, "configured", lambda: True)
     seen = {}
 
     def fake_chat(context, history, message, symptom_ids=(), can_act=True, guide_ids=()):
@@ -238,7 +238,7 @@ def test_chat_answers_with_the_ai_and_sanitizes_history(client, monkeypatch):
 
 def test_chat_never_returns_actions_for_the_surgeon_asking_about_crew(client, monkeypatch):
     login_as(client, _surgeon_uid())
-    monkeypatch.setattr(analyst, "available", lambda: True)
+    monkeypatch.setattr(analyst, "configured", lambda: True)
     seen = {}
 
     def fake_chat(c, h, m, s=(), can_act=True, guide_ids=()):

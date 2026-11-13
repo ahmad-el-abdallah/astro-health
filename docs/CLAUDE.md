@@ -3449,9 +3449,43 @@ existing voice experience. Decided with the user:
   first real click on any "Talk to Astra" button (Body page too) doesn't open the call; the
   second does.
 
+## Astra kept going quiet in "Wanna talk?": Groq's limits, now waited out or routed around (2026-11-13)
+
+User: "when I talk to Astra on the Mind page she's not answering, only analysing my voice."
+The voice-tone side worked (it runs on the laptop). The AI side kept failing, and Astra said
+"Sorry, I couldn't reach my AI" every turn.
+
+- **Cause:** the free Groq key's limits, per model.
+  - 8,000 tokens per minute, and **200,000 tokens per day** for `gpt-oss-120b`.
+  - One chat turn is about 3,000 tokens (a ~1,800-token instruction prompt plus the data and
+    history), so a minute covers about two replies and a day about 65.
+  - That day the 120b allowance was used up (198,522 of 200,000).
+  - On top of that, a 429 used to stop all AI calls for its full wait (600 s when capped),
+    and `/chat` answered 503 during it.
+- **Fix** (`backend/services/analyst.py`):
+  - Rate limits are now **per model** (`_model_backoff`), and every Groq model has its own
+    allowance. `_call_once` tries `config.AI_MODEL`, then `config.AI_FALLBACK_MODELS`:
+    default on Groq `openai/gpt-oss-20b,qwen/qwen3.8-27b`, env `AI_FALLBACK_MODELS`.
+    Both were checked live: valid answers in under 1 s, and both still return the
+    `log_mood` yes card.
+  - `model_name()` reports the model that actually answered.
+  - The wait comes from Retry-After, else Groq's `x-ratelimit-reset-tokens` ("585ms",
+    "7.66s", "1m26.4s" via `_seconds`), not a fixed 60 s.
+  - `chat()` **waits out** a short limit when it still fits the 22 s turn (with a 6 s
+    margin), instead of failing.
+  - The `/chat` route only 503s with no key (`analyst.configured()`).
+  - The server logs each 429 with Groq's reason: `[astra] AI rate limit on <model> …`.
+- **Verified:** a scripted 70 s spoken "Wanna talk?" on an isolated copy with the real key
+  (120b's day used up) got a real answer every turn, through 20b and qwen. The log shows
+  both fallbacks hitting their per-minute limits and one 1.4 s wait. Before the fix, every
+  turn got "couldn't reach my AI". 6 new tests; 327 passing.
+- **If she goes quiet again**, check the server log for `AI rate limit on`. Per day,
+  gpt-oss-120b and 20b allow 200K tokens each and qwen its own amount; heavy testing on the
+  same key uses them all up.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 315 tests, 7 skipped without the optional voice model (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 327 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
 - `cd frontend && npm test` — 162 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.

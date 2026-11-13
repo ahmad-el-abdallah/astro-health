@@ -27,6 +27,12 @@ FRONTEND_DIST = os.environ.get("ASTRO_FRONTEND_DIST", os.path.join(BASE_DIR, "fr
 # Hugging Face: AI_BASE_URL=https://router.huggingface.co/v1 plus an hf_ token.
 AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
 AI_MODEL = os.environ.get("AI_MODEL", "openai/gpt-oss-120b")
+# Tried in order when AI_MODEL is rate-limited. On Groq's free plan every model has its OWN
+# daily allowance (200K tokens/day for gpt-oss-120b, about 65 Astra chat turns), so when the
+# main model's day is used up Astra keeps answering with these instead of going quiet.
+_GROQ_FALLBACKS = "openai/gpt-oss-20b,qwen/qwen3.8-27b" if "api.groq.com" in AI_BASE_URL else ""
+AI_FALLBACK_MODELS = [m.strip() for m in os.environ.get("AI_FALLBACK_MODELS", _GROQ_FALLBACKS).split(",")
+                      if m.strip() and m.strip() != AI_MODEL]
 AI_API_KEY_PATH = os.path.join(DATA_DIR, "ai_api_key")
 
 

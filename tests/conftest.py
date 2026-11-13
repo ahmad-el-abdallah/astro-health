@@ -6,6 +6,7 @@ import pytest
 
 from backend import config, db
 from backend.logic import analysis, sessions
+from backend.services import analyst
 
 # Test apps never start the Pico NFC reader thread (see app.py): it would outlive its test,
 # could open the real reader plugged into a dev laptop, and races test_pico_bridge.py.
@@ -39,6 +40,10 @@ def no_real_ai(monkeypatch, request):
     that test it, queuing an analysis is a no-op, so the background worker can never
     write into another test's database."""
     monkeypatch.setattr(config, "ai_api_key", lambda: None)
+    monkeypatch.setattr(config, "AI_MODEL", "test/main-model")  # fixed models, whatever the env says
+    monkeypatch.setattr(config, "AI_FALLBACK_MODELS", ["test/fallback-model"])
+    monkeypatch.setattr(analyst, "_model_backoff", {})
+    monkeypatch.setattr(analyst, "_last_model", None)
     monkeypatch.setattr(analysis, "DEBOUNCE_S", 0)
     monkeypatch.setattr(analysis, "MIN_INTERVAL_S", 0)
     if request.module.__name__.split(".")[-1] not in ANALYSIS_TEST_MODULES:

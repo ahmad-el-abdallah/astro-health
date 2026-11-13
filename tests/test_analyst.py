@@ -374,3 +374,99 @@ def test_parse_chat_keeps_a_named_exercise_and_drops_an_unknown_one():
     out = analyst.parse_chat(chat_answer([{"type": "start_workout", "exercise": "yoga"}]), SYMPTOMS)
     assert out["actions"] == [{"type": "start_workout"}]
     assert analyst.parse_chat(chat_answer([{"type": "navigate", "page": "exercise"}]), SYMPTOMS)["actions"][0]["page"] == "exercise"
+
+
+# ---- rate limits: wait a short pause out instead of failing the turn ----
+
+def test_rate_wait_reads_groq_reset_times():
+    assert analyst._seconds("585ms") == 0.585
+    assert analyst._seconds("7.66s") == 7.66
+    assert abs(analyst._seconds("1m26.4s") - 86.4) < 1e-9
+    assert analyst._seconds("12") == 12
+    assert analyst._seconds("soon") is None
+    assert analyst._rate_wait({"x-ratelimit-reset-tokens": "2.5s"}) == 2.5
+    assert analyst._rate_wait({"retry-after": "4", "x-ratelimit-reset-tokens": "2.5s"}) == 4
+    assert analyst._rate_wait({}) == analyst.BACKOFF_S
+
+
+def test_chat_waits_out_a_short_rate_limit_and_answers(monkeypatch):
+    monkeypatch.setattr(config, "ai_api_key", lambda: "gsk_fake")
+    monkeypatch.setattr(analyst, "_backoff_until", 0.0)
+    slept = []
+    monkeypatch.setattr(analyst.time, "sleep", slept.append)
+    calls = []
+
+    def fake_call(messages, max_tokens=None, timeout=None):
+        calls.append(1)
+        if len(calls) == 1:
+            raise analyst.RateLimitError("AI rate limit reached", 3.0)
+        return json.dumps({"reply": "Glad you told me. How did you sleep?", "actions": []})
+
+    monkeypatch.setattr(analyst, "_call_once", fake_call)
+    out = analyst.chat("ctx", [], "I feel tired", SYMPTOMS)
+    assert out["reply"].startswith("Glad")
+    assert slept == [3.0] and len(calls) == 2
+
+
+def test_chat_gives_up_when_the_rate_limit_wait_is_too_long(monkeypatch):
+    monkeypatch.setattr(config, "ai_api_key", lambda: "gsk_fake")
+    monkeypatch.setattr(analyst, "_backoff_until", 0.0)
+    monkeypatch.setattr(analyst.time, "sleep", lambda s: (_ for _ in ()).throw(AssertionError("must not sleep")))
+
+    def busy(messages, max_tokens=None, timeout=None):
+        raise analyst.RateLimitError("AI rate limit reached", 40.0)
+
+    monkeypatch.setattr(analyst, "_call_once", busy)
+    with pytest.raises(analyst.AnalystError):
+        analyst.chat("ctx", [], "hello", SYMPTOMS)
+
+
+def test_chat_waits_for_a_short_backoff_already_running(monkeypatch):
+    monkeypatch.setattr(config, "ai_api_key", lambda: "gsk_fake")
+    monkeypatch.setattr(analyst, "_backoff_until", analyst.time.time() + 2.0)
+    slept = []
+    monkeypatch.setattr(analyst.time, "sleep", slept.append)
+    monkeypatch.setattr(analyst, "_call_once", lambda m, max_tokens=None, timeout=None: json.dumps({"reply": "Hi!", "actions": []}))
+    assert analyst.chat("ctx", [], "hello", SYMPTOMS)["reply"] == "Hi!"
+    assert len(slept) == 1 and 0 < slept[0] <= 2.0
+
+
+def test_a_429_backs_off_only_as_long_as_groq_asks(monkeypatch):
+    monkeypatch.setattr(config, "ai_api_key", lambda: "gsk_fake")
+    monkeypatch.setattr(analyst, "_backoff_until", 0.0)
+    import email.message
+    import urllib.error
+    headers = email.message.Message()
+    headers["x-ratelimit-reset-tokens"] = "3.2s"
+
+    def fake_urlopen(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", headers, None)
+
+    monkeypatch.setattr(analyst.urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(analyst.RateLimitError):
+        analyst._call_once([{"role": "user", "content": "hi"}])  # both models answer 429
+    for m in ("test/main-model", "test/fallback-model"):
+        assert 0 < analyst._model_backoff[m] - analyst.time.time() <= 3.3
+    assert analyst._backoff_until == 0.0  # a rate limit isn't a network failure
+
+
+def test_a_rate_limited_main_model_falls_back_to_the_next_one(monkeypatch):
+    monkeypatch.setattr(config, "ai_api_key", lambda: "gsk_fake")
+    monkeypatch.setattr(analyst, "_backoff_until", 0.0)
+    tried = []
+
+    def fake_model(model, messages, max_tokens, timeout):
+        tried.append(model)
+        if model == "test/main-model":
+            analyst._model_backoff[model] = analyst.time.time() + 600  # used up for the day
+            raise analyst.RateLimitError("tokens per day", 600)
+        return "answer from " + model
+
+    monkeypatch.setattr(analyst, "_call_model", fake_model)
+    assert analyst._call_once([{"role": "user", "content": "hi"}]) == "answer from test/fallback-model"
+    assert analyst.model_name() == "test/fallback-model"
+    # next time the limited model isn't even tried
+    tried.clear()
+    analyst._call_once([{"role": "user", "content": "hi"}])
+    assert tried == ["test/fallback-model"]
+    assert analyst.available() is True

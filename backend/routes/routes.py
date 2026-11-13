@@ -569,7 +569,7 @@ def create_routes(app, socketio, bridge):
                 return jsonify(err[0]), err[1]
             if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
                 return jsonify({"error": "not found"}), 404
-        if not analyst.available():
+        if not analyst.configured():  # a short rate-limit back-off is waited out inside chat()
             return jsonify({"error": "AI is not available"}), 503
         _, profile = comms.current_profile()
         with db.write_conn() as conn:

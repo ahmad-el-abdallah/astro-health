@@ -30,9 +30,12 @@ MAX_REPLY = 600          # the chat's spoken limit too (frontend useVoice speaks
 CHAT_MAX_TOKENS = 900
 CHAT_BUDGET_S = 22       # a whole chat turn, retries included (the page gives up at 30 s)
 MIN_RETRY_S = 5
+CHAT_WAIT_MARGIN_S = 6   # a rate-limit wait must leave at least this long for the answer itself
 MAX_ITEM = 160
 
-_backoff_until = 0.0
+_backoff_until = 0.0     # after a network failure: wait before trying the AI at all
+_model_backoff = {}      # model -> time it's free again after a 429 (rate limit)
+_last_model = None       # the model that gave the latest answer (shown as "Analyzed by AI · …")
 
 
 class AnalystError(Exception):
@@ -43,12 +46,72 @@ class MalformedOutputError(AnalystError):
     """The model answered, but not with valid JSON in the expected shape (retried once)."""
 
 
+class RateLimitError(AnalystError):
+    """The AI said "too many tokens right now" (HTTP 429). wait: seconds until it's free."""
+
+    def __init__(self, message, wait):
+        super().__init__(message)
+        self.wait = wait
+
+
+def _seconds(text):
+    """Groq's reset times: "585ms", "7.66s", "1m26.4s" (also a plain Retry-After "12")."""
+    if not text:
+        return None
+    text = str(text).strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    total, num = 0.0, ""
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch.isdigit() or ch == ".":
+            num += ch
+        elif text.startswith("ms", i):
+            total += float(num or 0) / 1000; num = ""; i += 1
+        elif ch in "hms":
+            total += float(num or 0) * {"h": 3600, "m": 60, "s": 1}[ch]; num = ""
+        else:
+            return None
+        i += 1
+    return total if not num else None
+
+
+def _rate_wait(headers):
+    """How long to wait after a 429: Retry-After, else Groq's token-bucket reset time. The free
+    plan's per-minute token allowance refills continuously, so this is usually a few seconds --
+    sitting out a whole minute (the old fixed back-off) left Astra silent for no reason."""
+    if headers:
+        for name in ("retry-after", "x-ratelimit-reset-tokens", "x-ratelimit-reset-requests"):
+            wait = _seconds(headers.get(name))
+            if wait is not None:
+                return wait
+    return BACKOFF_S
+
+
+def _models():
+    return [config.AI_MODEL, *config.AI_FALLBACK_MODELS]
+
+
+def _free_models(now=None):
+    now = time.time() if now is None else now
+    return [m for m in _models() if _model_backoff.get(m, 0) <= now]
+
+
 def available():
-    return config.ai_api_key() is not None and time.time() >= _backoff_until
+    return config.ai_api_key() is not None and time.time() >= _backoff_until and bool(_free_models())
+
+
+def configured():
+    """There's a key. (available() also needs no back-off running; Astra's chat waits a short
+    back-off out instead, so its route only needs this.)"""
+    return config.ai_api_key() is not None
 
 
 def model_name():
-    return config.AI_MODEL
+    return _last_model or config.AI_MODEL
 
 
 def _system_prompt(cfg):
@@ -70,18 +133,35 @@ def _system_prompt(cfg):
 
 
 def _call_once(messages, max_tokens=MAX_TOKENS, timeout=TIMEOUT_S):
+    """One answer from the first model that isn't rate-limited (AI_MODEL, then the fallbacks).
+    Raises RateLimitError (wait = until the first one is free) when every model is limited."""
+    global _last_model
+    if not config.ai_api_key():
+        raise AnalystError("no AI API key configured")
+    limited = None
+    for model in _free_models():
+        try:
+            out = _call_model(model, messages, max_tokens, timeout)
+        except RateLimitError as exc:
+            limited = exc
+            continue  # this model's allowance is used up for now: try the next one
+        _last_model = model
+        return out
+    soonest = min((_model_backoff.get(m, 0) for m in _models()), default=0) - time.time()
+    raise RateLimitError(str(limited) if limited else "AI rate limit reached", max(soonest, 1))
+
+
+def _call_model(model, messages, max_tokens, timeout):
     global _backoff_until
     key = config.ai_api_key()
-    if not key:
-        raise AnalystError("no AI API key configured")
     payload = {
-        "model": config.AI_MODEL,
+        "model": model,
         "messages": messages,
         "temperature": 0.2,
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
     }
-    if config.AI_MODEL.startswith("openai/gpt-oss"):
+    if model.startswith("openai/gpt-oss"):
         payload["reasoning_effort"] = "low"  # gpt-oss thinks first; keep it short and fast
     req = urllib.request.Request(
         f"{config.AI_BASE_URL}/chat/completions",
@@ -97,13 +177,14 @@ def _call_once(messages, max_tokens=MAX_TOKENS, timeout=TIMEOUT_S):
             body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code == 429:
-            retry = exc.headers.get("retry-after") if exc.headers else None
+            wait = min(max(_rate_wait(exc.headers), 1), 600)
+            _model_backoff[model] = time.time() + wait
             try:
-                wait = float(retry)
-            except (TypeError, ValueError):
-                wait = BACKOFF_S
-            _backoff_until = time.time() + min(max(wait, 5), 600)
-            raise AnalystError("AI rate limit reached") from exc
+                why = json.loads(exc.read().decode("utf-8", "replace")).get("error", {}).get("message", "")
+            except Exception:
+                why = ""
+            print(f"[astra] AI rate limit on {model} (HTTP 429): free again in {wait:.0f} s. {why[:200]}", flush=True)
+            raise RateLimitError("AI rate limit reached", wait) from exc
         if exc.code in (401, 403):
             raise AnalystError("AI key was rejected") from exc
         if exc.code == 400:
@@ -432,8 +513,18 @@ def chat(context_text, history, message, symptom_ids=(), cfg=None, can_act=True,
     """One Astra chat turn. history: [{"role": "user"|"assistant", "content": str}, ...]
     (already sanitized by the route). can_act=False (the surgeon asking about a crew
     member): she answers but never offers or returns actions. Raises AnalystError."""
-    if not available():
-        raise AnalystError("AI is not configured or is cooling down after an error")
+    if config.ai_api_key() is None:
+        raise AnalystError("AI is not configured")
+    # The whole turn (waits, first answer and any retry) must fit CHAT_BUDGET_S, so a slow or
+    # busy AI can never leave the astronaut on "Thinking…" for a minute.
+    deadline = time.monotonic() + CHAT_BUDGET_S
+    # A short rate-limit pause is waited out, not turned into "I couldn't reach my AI": the free
+    # plan allows ~2 replies a minute, and a spoken conversation goes faster than that.
+    wait = _backoff_until - time.time()
+    if wait > 0:
+        if wait > CHAT_BUDGET_S - CHAT_WAIT_MARGIN_S:
+            raise AnalystError("AI is cooling down after an error")
+        time.sleep(wait)
     cfg = cfg or config.ai_analyst()
     system = _chat_prompt(cfg, symptom_ids, guide_ids) + ("" if can_act else _NO_ACTIONS_NOTE)
     messages = [
@@ -441,14 +532,18 @@ def chat(context_text, history, message, symptom_ids=(), cfg=None, can_act=True,
         *history,
         {"role": "user", "content": message},
     ]
-    # The whole turn (first answer + any retry) must fit CHAT_BUDGET_S, so a slow AI can never
-    # leave the astronaut on "Thinking…" for a minute: a retry only happens if there's time.
-    deadline = time.monotonic() + CHAT_BUDGET_S
 
     def left():
         return deadline - time.monotonic()
 
-    raw = _call_once(messages, max_tokens=CHAT_MAX_TOKENS, timeout=min(TIMEOUT_S, CHAT_BUDGET_S))
+    try:
+        raw = _call_once(messages, max_tokens=CHAT_MAX_TOKENS, timeout=min(TIMEOUT_S, left()))
+    except RateLimitError as busy:
+        if busy.wait > left() - CHAT_WAIT_MARGIN_S:
+            raise
+        print(f"[astra] AI busy (rate limit): waiting {busy.wait:.1f} s, then answering", flush=True)
+        time.sleep(busy.wait)
+        raw = _call_once(messages, max_tokens=CHAT_MAX_TOKENS, timeout=min(TIMEOUT_S, left()))
     try:
         out = parse_chat(raw, symptom_ids, guide_ids)
     except MalformedOutputError as first:
