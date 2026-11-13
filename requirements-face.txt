@@ -1,0 +1,15 @@
+# OPTIONAL: the Face Health Analysis module (environment only for now) -- see
+# docs/face-analysis-setup.md. The app runs without these; requirements.txt alone is enough.
+#
+#   .venv/bin/python -m pip install -r requirements-face.txt       (Windows: .venv\Scripts\python)
+#   .venv/bin/python scripts/face_analysis/download_model.py        (the Face Landmarker model)
+#   .venv/bin/python scripts/face_analysis/verify_setup.py
+#
+# MediaPipe brings OpenCV as opencv-contrib-python. Do NOT also install opencv-python or
+# opencv-python-headless: they all provide the same cv2 module and overwrite each other.
+# numpy is listed so it stays at the version the voice tone model already uses (any 2.x
+# works for MediaPipe). Verified on Windows 11, Python 3.14.6, 2026-11-13.
+--only-binary=:all:
+mediapipe==1.2.3
+opencv-contrib-python==5.0.0.93
+numpy==2.5.4

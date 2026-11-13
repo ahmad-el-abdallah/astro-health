@@ -17,7 +17,7 @@ from backend.logic import analysis, astra_memory, exercise, location, sessions, 
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
-from backend.services import analyst, emotion, voice
+from backend.services import analyst, emotion, face, voice
 from backend import voice_settings
 from backend.config import (
     content as load_content, missions as load_missions,
@@ -35,6 +35,8 @@ def rows(rs):
     return [dict(r) for r in rs]
 
 
+FACE_WINDOW_S = 12  # the observation window (10-15 s asked for)
+FACE_FPS = 10
 _TALK_ID = re.compile(r"[A-Za-z0-9_-]{1,40}")  # groups one "Wanna talk?" conversation's phrases
 
 
@@ -1251,6 +1253,94 @@ def create_routes(app, socketio, bridge):
                 return jsonify(err[0]), err[1]
             talk = voice_talks.latest(conn, astro_id)
         return jsonify({"talk": talk})
+
+    # ---- Face Analysis (backend/services/face.py): webcam frames analysed on THIS laptop ----
+    # Frames arrive one at a time, are measured in memory and dropped; only the final report
+    # is stored (face_analyses). Recording is for the astronaut themself only.
+    @bp.get("/face/status")
+    def face_status():
+        return jsonify({**face.status(), "window_s": FACE_WINDOW_S, "fps": FACE_FPS})
+
+    def _own(astro_id):
+        if auth.current_astronaut_id() is None:
+            return jsonify({"error": "not logged in"}), 401
+        if auth.current_astronaut_id() != astro_id:
+            return jsonify({"error": "forbidden"}), 403
+        return None
+
+    @bp.post("/astronauts/<int:astro_id>/face/sessions")
+    def face_start(astro_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        try:
+            sid = face.start_session(astro_id)
+        except face.Unavailable as e:
+            return jsonify({"error": "face analysis unavailable", "reason": str(e)}), 503
+        except face.FaceError as e:
+            return jsonify({"error": str(e)}), 409
+        return jsonify({"session_id": sid, "window_s": FACE_WINDOW_S, "fps": FACE_FPS}), 201
+
+    @bp.post("/astronauts/<int:astro_id>/face/sessions/<session_id>/frames")
+    def face_frame(astro_id, session_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        if (request.content_length or 0) > face.MAX_FRAME_BYTES:
+            return jsonify({"error": "frame too large"}), 413
+        try:
+            t_ms = int(float(request.args.get("t", "0")))
+        except ValueError:
+            return jsonify({"error": "bad timestamp"}), 400
+        try:
+            out = face.add_frame(session_id, astro_id, request.get_data(cache=False), t_ms)
+        except face.FaceError as e:
+            return jsonify({"error": str(e)}), 400
+        if out is None:
+            return jsonify({"error": "unknown or expired session"}), 404
+        return jsonify(out)
+
+    @bp.post("/astronauts/<int:astro_id>/face/sessions/<session_id>/finish")
+    def face_finish(astro_id, session_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        try:
+            report = face.finish(session_id, astro_id)
+        except face.FaceError as e:
+            return jsonify({"error": str(e)}), 400
+        if report is None:
+            return jsonify({"error": "unknown or expired session"}), 404
+        now = datetime.now(timezone.utc).isoformat()
+        q = report["quality"]
+        with db.write_conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO face_analyses (astronaut_id, ts, duration_s, frames, usable_frames, quality, report_json, model) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (astro_id, now, q["duration_s"], q["frames"], q["usable_frames"], q["rating"], json.dumps(report), report["model"]),
+            )
+            row_id = cur.lastrowid
+        emit_fn("face_analysis", {"astronaut_id": astro_id, "id": row_id})
+        return jsonify({"id": row_id, "ts": now, **report})
+
+    @bp.post("/astronauts/<int:astro_id>/face/sessions/<session_id>/cancel")
+    def face_cancel(astro_id, session_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        return jsonify({"cancelled": face.cancel(session_id, astro_id)})
+
+    @bp.get("/astronauts/<int:astro_id>/face/latest")
+    def face_latest(astro_id):
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)  # the astronaut + the flight surgeon
+            if err:
+                return jsonify(err[0]), err[1]
+            r = conn.execute("SELECT id, ts, report_json FROM face_analyses WHERE astronaut_id = ? ORDER BY id DESC LIMIT 1",
+                             (astro_id,)).fetchone()
+        if not r:
+            return jsonify({"analysis": None})
+        return jsonify({"analysis": {"id": r["id"], "ts": r["ts"], **json.loads(r["report_json"])}})
 
     @bp.get("/astronauts/<int:astro_id>/voice-tone")
     def get_voice_tone(astro_id):

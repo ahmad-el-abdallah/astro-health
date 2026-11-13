@@ -241,7 +241,7 @@ if (ready) {
   await page.getByRole("region", { name: "Latest Conversation Analysis" }).getByTestId("dominant").waitFor({ timeout: 10000 }).catch(() => {});
   check("... still there after a page refresh", await page.getByRole("region", { name: "Latest Conversation Analysis" }).getByTestId("dominant").isVisible());
 }
-check("mood check-in and mood chart still there", (await page.getByText("How are you feeling right now?").isVisible()) && (await page.getByText("Mood over time").isVisible()));
+check("mood check-in and mood chart still there", (await page.getByText("How are you feeling right now?").isVisible()) && (await page.getByText("Mood · last 7 days").isVisible()));
 
 // ---------------------------------------------------------------- normal Astra never records
 const postsBefore = crew.posts.length;

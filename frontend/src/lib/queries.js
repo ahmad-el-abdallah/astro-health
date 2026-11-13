@@ -59,6 +59,16 @@ export const useVoiceToneStatus = () =>
     refetchInterval: (q) => (q.state.data?.state === "loading" || q.state.data?.state === "idle" ? 3000 : false) });
 // The latest FINISHED "Wanna talk?" conversation and its own result (Mind page). Polled only
 // while it's still being analysed; otherwise the voice_talk / voice_tone events refresh it.
+// Face Analysis (Mind page): whether this laptop can run it, and the last report.
+// A 404 means the running backend predates Face Analysis: don't retry it, and re-check every
+// 5 s so the card recovers by itself once the backend is restarted.
+const noRetryOn404 = (count, err) => err?.status !== 404 && count < 3;
+export const useFaceStatus = () =>
+  useQuery({ queryKey: ["face-status"], queryFn: () => get("/face/status"), retry: noRetryOn404,
+    refetchInterval: (q) => (q.state.data?.state === "loading" || q.state.data?.state === "idle" || q.state.error ? (q.state.error ? 5000 : 3000) : false) });
+export const useLatestFace = (id) =>
+  useQuery({ queryKey: ["face-latest", id], queryFn: () => get(`/astronauts/${id}/face/latest`), enabled: !!id, retry: noRetryOn404,
+    refetchInterval: (q) => (q.state.error?.status === 404 ? 5000 : false) });
 export const useLatestVoiceTalk = (id) =>
   useQuery({ queryKey: ["voice-talk-latest", id], queryFn: () => get(`/astronauts/${id}/voice-talks/latest`), enabled: !!id,
     refetchInterval: (q) => (q.state.data?.talk?.status === "analysing" ? 2000 : false) });
