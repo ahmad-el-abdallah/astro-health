@@ -163,7 +163,7 @@ export function Login() {
         </div>
         <span className="flex items-center gap-2 rounded-full border border-[rgba(143,166,255,.18)] bg-[rgba(19,26,48,.6)] px-3.5 py-2 text-[13px] text-[#cfd9ff]">
           <span className="h-2 w-2 rounded-full bg-mars" />
-          {mission.data?.profile?.label || "Mission"}
+          {mission.data?.profile?.short || mission.data?.profile?.label || "Mission"}
         </span>
       </header>
 

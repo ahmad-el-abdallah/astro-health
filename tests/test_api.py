@@ -370,11 +370,45 @@ def test_emergency_start_and_cancel(client):
 
 
 def test_mission_profile_can_change(client):
-    res = client.put("/api/mission", json={"profile_id": "station"})
+    res = client.put("/api/mission", json={"profile_id": "artemis2"})
     assert res.status_code == 200
-    assert res.get_json()["profile_id"] == "station"
+    assert res.get_json()["profile_id"] == "artemis2"
     res = client.get("/api/mission")
-    assert res.get_json()["profile_id"] == "station"
+    assert res.get_json()["profile_id"] == "artemis2"
+
+
+def test_unknown_mission_is_rejected_and_old_ids_mean_no_mission(client):
+    """The five real missions replaced the old made-up profiles: an unknown id
+    is refused, and a database still holding an old id shows no mission running."""
+    from backend import db
+    assert client.put("/api/mission", json={"profile_id": "nope"}).status_code == 400
+    with db.write_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('mission_profile', 'mars_transit')")
+    res = client.get("/api/mission")
+    assert res.status_code == 200
+    assert res.get_json()["profile_id"] is None
+    assert res.get_json()["profile"]["label"] == "No mission selected"
+
+
+def test_mission_can_be_stopped(client):
+    """Start a mission, then stop it: no mission running and no comms delay."""
+    from backend.jobs import comms
+    client.put("/api/mission", json={"profile_id": "mars520"})
+    assert comms.delay_seconds() > 0
+    res = client.put("/api/mission", json={"profile_id": None})
+    assert res.status_code == 200 and res.get_json()["profile_id"] is None
+    data = client.get("/api/mission").get_json()
+    assert data["profile_id"] is None and data["health"] is None
+    assert comms.delay_seconds() == 0
+
+
+def test_every_mission_is_real_and_sourced():
+    """Each mission says if it is real or a simulation and links its sources."""
+    from backend.config import missions
+    for profile_id, p in missions()["profiles"].items():
+        assert p["kind"] in ("real", "simulation"), profile_id
+        assert p["sources"] and all(s["url"].startswith("https://") for s in p["sources"]), profile_id
+        assert isinstance(p["comms_delay_s"], (int, float)), profile_id
 
 
 def test_every_mission_profile_has_a_health_plan(client):
@@ -389,7 +423,7 @@ def test_every_mission_profile_has_a_health_plan(client):
         assert set(plan["body_risks"]) == parts
         assert all(r["risk"] in ("LOW", "MEDIUM", "HIGH") for r in plan["body_risks"].values())
         assert plan["monitoring"] and all(m["indicator"] in indicators for m in plan["monitoring"])
-    res = client.put("/api/mission", json={"profile_id": "mars_transit"})
+    res = client.put("/api/mission", json={"profile_id": "crew13_iss"})
     assert client.get("/api/mission").get_json()["health"]["body_risks"]["skeleton"]["risk"] == "HIGH"
 
 
