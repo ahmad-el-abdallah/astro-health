@@ -14,6 +14,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { CREW_NAV, DOCTOR_NAV } from "../../nav.js";
 import { useAlerts, useCrew, useSummary } from "../../lib/queries.js";
+import { useToday } from "../../lib/useToday.js";
 import { serialStatusStore, useStore } from "../../lib/socket.js";
 import { STRINGS } from "../../strings.js";
 import { Icon } from "../ui/Icon.jsx";
@@ -158,6 +159,7 @@ export function Sidebar({ collapsed = false, drawer = false, onNavigate, onAccou
   const crew = useCrew(isSurgeon);
   const groups = isSurgeon ? DOCTOR_NAV : CREW_NAV;
   const openAlerts = (alerts.data || []).filter((a) => !a.acknowledged).length;
+  const today = useToday(isSurgeon ? null : user?.astronaut_id); // daily check-ins due now
   const Logo = isSurgeon ? LogoDoctor : LogoCrew;
   // Two separate pills, so the drawer and the desktop sidebar never fight over one layoutId.
   const pillId = drawer ? "nav-pill-drawer" : "nav-pill";
@@ -228,7 +230,7 @@ export function Sidebar({ collapsed = false, drawer = false, onNavigate, onAccou
                   collapsed={collapsed}
                   pillId={pillId}
                   onNavigate={onNavigate}
-                  badge={item.showsAlerts && openAlerts ? openAlerts : null}
+                  badge={item.showsAlerts && openAlerts ? openAlerts : item.showsDue && today.due ? today.due : null}
                 />
               ))}
             </div>

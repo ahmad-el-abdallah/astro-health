@@ -220,7 +220,7 @@ def analyze(context_text, indicator_ids, cfg=None):
 
 # ---------------------------------------------------------------- Astra, the crew's chat
 
-PAGES = ("overview", "body", "trends", "mind", "sleep", "mission", "schedule", "learn")
+PAGES = ("overview", "body", "trends", "mind", "sleep", "mission", "schedule")
 MOODS = ("rough", "low", "okay", "good", "great")
 MAX_ACTIONS = 4
 # Loose sanity limits for vitals said out loud -- a mishearing like "heart rate 720" is

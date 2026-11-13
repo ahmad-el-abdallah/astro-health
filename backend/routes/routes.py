@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import math
+import time
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request, Response
@@ -21,6 +22,7 @@ from backend.config import (
     content as load_content, missions as load_missions,
     mission_health as load_mission_health,
     routine as load_routine,
+    TIME_SCALE,
 )
 
 
@@ -1248,7 +1250,7 @@ def create_routes(app, socketio, bridge):
         emit_fn("mission_changed", {"profile_id": profile_id, "profile": profile})
         return jsonify({"profile_id": profile_id, "profile": profile})
 
-    # ---- content / learn ----
+    # ---- content ----
     @bp.get("/content")
     def content():
         return jsonify(load_content())
@@ -1265,7 +1267,18 @@ def create_routes(app, socketio, bridge):
             _, err = auth.authorize_view(conn, astro_id)
             if err:
                 return jsonify(err[0]), err[1]
-            return jsonify(scheduler.day_plan(conn, astro_id))
+            plan = scheduler.day_plan(conn, astro_id)
+        # Is sleep or a workout being tracked right now (tag, voice or the Today page)? The
+        # Today page shows Start or Stop from this.
+        tracking = {}
+        for kind in ("sleep", "exercise"):
+            key = sessions.running_toggle(astro_id, kind)
+            info = sessions.open_toggles.get(key) if key else None
+            tracking[kind] = None if not info else {
+                "started_at": info["started_iso"],
+                "mission_min": round((time.time() - info["started_at"]) * TIME_SCALE / 60),
+            }
+        return jsonify({**plan, "tracking": tracking})
 
     # ---- crew-wide status board: a shared station display, not a personal
     # dashboard (docs/CLAUDE.md "crew-wide status board"). Deliberately

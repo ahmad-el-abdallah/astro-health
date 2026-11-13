@@ -4,7 +4,7 @@
 //                       a neural voice is too slow for counted cues). Logged as a breathing activity.
 //   * reaction_test  -- 5 rounds: wait for green, then tap (or press Space). A tap before green
 //                       is a lapse. Saved as a reaction-time reading, judged against YOUR baseline.
-//   * measure_guide  -- the Learn page's step-by-step guide (config/content.json measure_guides),
+//   * measure_guide  -- the step-by-step measuring guide (config/content.json measure_guides),
 //                       read out one step at a time; Next / Back to move.
 // Each calls onDone({ text }) with what Astra should say at the end (or onDone(null) when you stop).
 import { useCallback, useEffect, useRef, useState } from "react";

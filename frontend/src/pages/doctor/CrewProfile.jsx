@@ -118,7 +118,7 @@ function Header({ person, summary, mission, onJump }) {
         )}
       </div>
       <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-        {[["/trends", "trends", "Trends"], ["/body", "doctor-ai", "Body & Astra"], ["/schedule", "schedule", "Schedule"]].map(([to, icon, label]) => (
+        {[["/trends", "trends", "Trends"], ["/body", "doctor-ai", "Body & Astra"], ["/today", "schedule", "Today"]].map(([to, icon, label]) => (
           <button key={to} onClick={() => open(to)} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl bg-raised px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-control hover:text-ink">
             <Icon name={icon} size={15} /> {label}
           </button>

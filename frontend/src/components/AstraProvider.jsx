@@ -29,8 +29,8 @@ import {
 } from "../lib/astraNotices.js";
 import { AstraNotice } from "./astra/AstraNotice.jsx";
 import { createWakeListener } from "../lib/wakeWord.js";
-import { useConsultation } from "../pages/crew/body/useConsultation.js";
-import { VoiceMode } from "../pages/crew/body/VoiceMode.jsx";
+import { useConsultation } from "../pages/crew/health/body/useConsultation.js";
+import { VoiceMode } from "../pages/crew/health/body/VoiceMode.jsx";
 
 const PREF_KEY = "ah-astra";
 const NO_ASTRA_ROUTES = ["/admin", "/status-board"];

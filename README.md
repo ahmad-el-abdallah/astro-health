@@ -68,9 +68,20 @@ no reflash needed). That idle timeout never signs the browser out.
 
 ### What's in the app
 
-- **Crew:** Overview, Astra & body (3D anatomy twin, plus a Astra chat you can type or talk to),
-  Trends, Mind & mood, Sleep lab, Mission health, Schedule (live mission clock), Learn, and a
-  thread with the Flight Surgeon on the Overview.
+- **Crew**, in four sections:
+  - **Overview**: the home dashboard, with today's check-ins at a glance and the thread with
+    the Flight Surgeon.
+  - **Daily check-ins**, what the astronaut must do every day:
+    - **Today**: the routine on the mission clock. The sidebar badge counts tasks due now.
+      Workouts and sleep tracking start and stop right there, and the other tasks link to
+      where they're done.
+    - **Mind & mood**
+    - **Sleep lab**
+
+    A **Face check** card (every 2 hours, reading your expression for tiredness or stress)
+    is shown as *Coming soon*.
+  - **Health**: Astra & body (3D anatomy twin plus the Astra chat), Trends.
+  - **Mission**: Mission health.
 - **Flight Surgeon:** Crew overview, Alerts (acknowledge), each crew member's profile (with
   delayed replies), plus every crew page for whichever crew member is picked. The **tools**
   button (wrench) renames crew members, exports CSVs and resets the demo data.
@@ -234,7 +245,7 @@ Without being asked, Astra says (or shows in a small card at the bottom right):
 
 - **Health warnings**: when your health analysis gets worse (yellow or red), at most once
   every 10 minutes. She offers to alert the flight surgeon, or says she already did.
-- **Schedule**: "It's 08:00: exercise block. Should I start tracking your workout?", and
+- **Today's routine**: "It's 08:00: exercise block. Should I start tracking your workout?", and
   "You missed the morning vitals check…" when a task is missed.
 - **The flight surgeon**: she reads their messages to you (and you can answer by voice),
   and tells you when they've seen your alert, after the comms delay.
@@ -289,7 +300,7 @@ First run creates the database (`data/astro.db`, git-ignored) with the real crew
 UIDs are in `backend/seed.py`) plus a Flight Surgeon. New cards are assigned in `/admin`.
 
 The app runs on a sped-up **mission clock** (`ASTRO_TIME_SCALE`, default 60: one real minute
-is one mission hour). Comms delays, reminders and the Schedule page all use it, and it starts
+is one mission hour). Comms delays, reminders and the Today page all use it, and it starts
 at 00:00 each time the server starts.
 
 ### Running the CYD on a power bank (no laptop cable)
@@ -322,7 +333,8 @@ Works the same with the real hardware or in `--simulate` mode.
 6. In the profile's **Messages**, reply. Switch the mission to **Mars transit** first (top bar
    → Mission chip → Mars transit) to watch the reply count down before it reaches Ahmad, then log back in as
    Ahmad to see it arrive.
-7. **Schedule**: the mission clock, with tasks ticked off from what was actually logged.
+7. **Today** (Daily check-ins): the mission clock, with tasks ticked off from what was
+   actually logged. Press **Start workout**, then **Stop workout**.
 8. Simulator → **Emergency card**. Every open screen shows the red overlay, signed in or not.
    Cancel it on the overlay (or hold the CYD's corner SOS button 3 s on hardware).
 
@@ -331,7 +343,7 @@ Works the same with the real hardware or in `--simulate` mode.
 - Thresholds: `config/health_rules.json` (every indicator's GREEN/YELLOW/RED ranges).
   Vitals: heart rate, blood pressure, blood sugar, temperature and blood oxygen (SpO2,
   placeholder bands: 95%+ good, 90-94% check, below 90% alert).
-- Plain-language text (hazards, body parts, measurement guides, Learn cards): `config/content.json`.
+- Plain-language text (hazards, body parts, measurement guides): `config/content.json`.
 - Mission profiles and comms delays: `config/missions.json`; per-mission body risks and
   checks: `config/mission_health.json`.
 - Daily schedule: `config/routine.json`.

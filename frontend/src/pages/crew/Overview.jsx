@@ -24,6 +24,7 @@ import { Thread } from "../../components/Thread.jsx";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { STRINGS } from "../../strings.js";
 import { AiAnalysisCard } from "../../components/AiAnalysisCard.jsx";
+import { useToday } from "../../lib/useToday.js";
 
 const MAIN_TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "oxygen_saturation", "sleep", "mood"];
 const EXTRA_TILES = ["reaction_time", "exercise", "water"];
@@ -406,6 +407,38 @@ function MissionChecks({ summary, mission, rules }) {
   );
 }
 
+// ---- today's daily check-ins, at a glance (the full list is the Today page) ----
+const TASK_CHIP = {
+  done: "border-good-fg/40 bg-good-bg text-good-fg",
+  due: "border-check-fg/50 bg-check-bg text-check-fg",
+  missed: "border-alert-fg/50 bg-alert-bg text-alert-fg",
+  upcoming: "border-line bg-raised text-ink-2",
+};
+function TodayStrip({ astroId }) {
+  const t = useToday(astroId);
+  if (!t.ready || !t.total) return null;
+  return (
+    <Card className="flex flex-wrap items-center gap-x-6 gap-y-3 p-5">
+      <div className="flex min-w-[220px] flex-1 flex-col gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="ah-eyebrow">Daily check-ins</span>
+          <span className="text-sm font-semibold">{t.done} of {t.total} done today</span>
+          {t.next && <span className="text-[13px] text-muted">· Next: {t.next.time} {t.next.text}</span>}
+        </div>
+        <Progress value={t.done / t.total} />
+      </div>
+      <ul className="m-0 flex list-none flex-wrap gap-2 p-0" aria-label="Today's tasks">
+        {t.entries.map((e) => (
+          <li key={e.time + e.kind} title={`${e.text}: ${e.status}`} aria-label={`${e.time} ${e.text}: ${e.status}`} className={cx("rounded-full border px-3 py-1 text-xs font-semibold", TASK_CHIP[e.status] || TASK_CHIP.upcoming)}>
+            {e.time} {e.status === "done" ? "✓" : e.status === "missed" ? "· missed" : e.status === "due" ? "· due" : ""}
+          </li>
+        ))}
+      </ul>
+      <Link to="/today" className="text-sm font-semibold text-accent-text underline underline-offset-2">Open Today</Link>
+    </Card>
+  );
+}
+
 export default function Overview() {
   const { id } = useAstronautPicker();
   const { isSurgeon } = useAuth();
@@ -423,6 +456,8 @@ export default function Overview() {
         <Hero summary={s} />
         <SymptomCard summary={s} onReport={() => setReporting(true)} />
       </Row>
+
+      <TodayStrip astroId={id} />
 
       <AiAnalysisCard astroId={id} summary={s} />
 

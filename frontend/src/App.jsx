@@ -17,13 +17,12 @@ import LogoCrew from "./assets/brand/logo-mark-crew.svg?react";
 // Each page is its own chunk, loaded when first opened -- the login screen ships small,
 // and heavy pages (3D, charts) never cost anything until you visit them.
 const Overview = lazy(() => import("./pages/crew/Overview.jsx"));
-const Body = lazy(() => import("./pages/crew/Body.jsx"));
-const Trends = lazy(() => import("./pages/crew/Trends.jsx"));
-const Mind = lazy(() => import("./pages/crew/Mind.jsx"));
-const Sleep = lazy(() => import("./pages/crew/Sleep.jsx"));
-const Mission = lazy(() => import("./pages/crew/Mission.jsx"));
-const Learn = lazy(() => import("./pages/crew/Learn.jsx"));
-const Schedule = lazy(() => import("./pages/crew/Schedule.jsx"));
+const Body = lazy(() => import("./pages/crew/health/Body.jsx"));
+const Trends = lazy(() => import("./pages/crew/health/Trends.jsx"));
+const Mind = lazy(() => import("./pages/crew/daily/Mind.jsx"));
+const Sleep = lazy(() => import("./pages/crew/daily/Sleep.jsx"));
+const Mission = lazy(() => import("./pages/crew/mission/Mission.jsx"));
+const Today = lazy(() => import("./pages/crew/daily/Today.jsx"));
 const CrewOverview = lazy(() => import("./pages/doctor/CrewOverview.jsx"));
 const Alerts = lazy(() => import("./pages/doctor/Alerts.jsx"));
 const CrewProfile = lazy(() => import("./pages/doctor/CrewProfile.jsx"));
@@ -73,8 +72,9 @@ function Gate() {
         <Route path="mind" element={<Mind />} />
         <Route path="sleep" element={<Sleep />} />
         <Route path="mission" element={<Mission />} />
-        <Route path="schedule" element={<Schedule />} />
-        <Route path="learn" element={<Learn />} />
+        <Route path="today" element={<Today />} />
+        <Route path="schedule" element={<Navigate to="/today" replace />} />
+        <Route path="learn" element={<Navigate to="/" replace />} />
         <Route path="doctor" element={<DoctorOnly><CrewOverview /></DoctorOnly>} />
         <Route path="doctor/alerts" element={<DoctorOnly><Alerts /></DoctorOnly>} />
         <Route path="doctor/crew/:id" element={<DoctorOnly><CrewProfile /></DoctorOnly>} />

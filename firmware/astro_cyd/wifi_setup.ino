@@ -384,11 +384,19 @@ void drawWifiConnectingScreen() {
     drawKey(bx + 140, by, bw, bh, "Other network", U_SLATE, 1);
   }
   drawSosButton();
+  if (WiFi.status() != WL_CONNECTED) drawBackButton();  // once connected it restarts by itself
   drawFooter(laptopOnline);
 }
 
 void wifiConnectingTouch(int x, int y) {
-  if (wifiConnectPending || WiFi.status() == WL_CONNECTED) return;  // connecting, or about to restart
+  if (WiFi.status() == WL_CONNECTED) return;  // about to restart
+  if (pointInBack(x, y)) {  // give up on this attempt and go back to the password
+    if (wifiConnectPending) { wifiConnectPending = false; WiFi.disconnect(); }
+    screen = SCR_WIFI_KEYBOARD;
+    drawWifiKeyboardScreen();
+    return;
+  }
+  if (wifiConnectPending) return;  // still connecting
   int cy = U_HEAD_H + 60 + 55;
   int bx = SCRW / 2 - 130, bw = 120, bh = 30;
   if (hitRect(bx, cy, bw, bh, x, y)) {

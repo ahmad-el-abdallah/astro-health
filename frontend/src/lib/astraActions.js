@@ -12,8 +12,7 @@ export const PAGES = {
   mind: { path: "/mind", label: "Mind & mood" },
   sleep: { path: "/sleep", label: "Sleep lab" },
   mission: { path: "/mission", label: "Mission health" },
-  schedule: { path: "/schedule", label: "Schedule" },
-  learn: { path: "/learn", label: "Learn" },
+  schedule: { path: "/today", label: "Today" },
 };
 
 const VITALS = [

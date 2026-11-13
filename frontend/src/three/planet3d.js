@@ -462,6 +462,6 @@ const Planet3D = (() => {
   return { mount };
 })();
 
-// ES module export for the React app (pages/crew/Mission.jsx). The loop stops by
+// ES module export for the React app (pages/crew/mission/Mission.jsx). The loop stops by
 // itself once the canvas leaves the page (canvas.isConnected), so unmounting is enough.
 export { Planet3D };

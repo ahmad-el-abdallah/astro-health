@@ -52,7 +52,7 @@ describe("describeAction", () => {
     ]);
   });
   it("every page id has a path", () => {
-    for (const p of ["overview", "body", "trends", "mind", "sleep", "mission", "schedule", "learn"]) expect(PAGES[p].path).toMatch(/^\//);
+    for (const p of ["overview", "body", "trends", "mind", "sleep", "mission", "schedule"]) expect(PAGES[p].path).toMatch(/^\//);
   });
 });
 

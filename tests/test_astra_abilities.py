@@ -223,3 +223,15 @@ def test_notices_setting_is_validated():
     ok, err = voice_settings.validate({"notices": "show"}, voice_settings.DEFAULTS)
     assert err is None and ok["notices"] == "show"
     assert voice_settings.validate({"notices": "loud"}, voice_settings.DEFAULTS)[1]
+
+
+def test_schedule_says_what_is_being_tracked(client):
+    login(client, AHMAD_UID)
+    a = _astro_id(AHMAD_UID)
+    body = client.get(f"/api/astronauts/{a}/schedule").get_json()
+    assert body["tracking"] == {"sleep": None, "exercise": None} and body["entries"]
+    client.post(f"/api/astronauts/{a}/activity", json={"kind": "exercise", "action": "start"})
+    t = client.get(f"/api/astronauts/{a}/schedule").get_json()["tracking"]
+    assert t["exercise"]["mission_min"] >= 0 and t["sleep"] is None
+    client.post(f"/api/astronauts/{a}/activity", json={"kind": "exercise", "action": "stop"})
+    assert client.get(f"/api/astronauts/{a}/schedule").get_json()["tracking"]["exercise"] is None

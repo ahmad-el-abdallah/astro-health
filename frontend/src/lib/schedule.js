@@ -26,3 +26,13 @@ export function missionDaySeconds(plan, fetchedAt, now = Date.now()) {
   const total = (plan.day - 1) * DAY + plan.day_seconds + (Math.max(0, now - fetchedAt) / 1000) * plan.time_scale;
   return total % DAY;
 }
+
+/** Tasks that need doing right now: due or missed (done and upcoming don't count). */
+export const dueCount = (entries) => entries.filter((e) => e.status === "due" || e.status === "missed").length;
+
+/** The daily progress in one object: done of total, what's due now, and the next task. */
+export function todaySummary(entries) {
+  const done = entries.filter((e) => e.status === "done").length;
+  const next = entries.find((e) => e.status === "due" || e.status === "missed") || entries.find((e) => e.status === "upcoming") || null;
+  return { done, total: entries.length, due: dueCount(entries), next };
+}

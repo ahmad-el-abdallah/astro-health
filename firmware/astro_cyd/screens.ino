@@ -81,6 +81,17 @@ void drawSosTile(int x, int y, int w, int h) {
 }
 bool pointInSos(int x, int y) { return hitRect(sosX, sosY, sosW, sosH, x, y); }
 
+// ---- the Back button: every sub-screen's way back to where you came from, in the
+// bottom-right corner (the mirror of the SOS corner). Each screen that draws it checks
+// pointInBack() first in its own touch handler. ----
+static const int BACK_W = 46, BACK_H = 44;
+int backX() { return SCRW - 4 - BACK_W; }
+int backY() { return SCRH - U_FOOT_H - BACK_H; }
+void drawBackButton() {
+  drawTile(backX(), backY(), BACK_W, BACK_H, U_SLATE, iconBack, "Back", "", "");
+}
+bool pointInBack(int x, int y) { return hitRect(backX(), backY(), BACK_W, BACK_H, x, y); }
+
 // ---- screen: Idle ----
 // ---- idle screen's own clock region (y 60-125): a real UTC clock once
 // Join Wi-Fi actually has internet and NTP has synced (astro_cyd.ino's
@@ -222,8 +233,13 @@ void drawSessionScreen() {
   drawVital(x + vw + U_PAD, vy + vh + U_PAD, vw, vh, "Sleep", vSleep, vSleepL, iconSleep);
   int ny = vy + 2 * (vh + U_PAD), nh = SCRH - U_FOOT_H - U_PAD - ny;
   drawPanel(x, ny, w, nh, 0);
-  tft.setTextColor(U_DIM, U_PANEL);
-  drawWrapped("Tap a card above, or Done when finished.", x + w / 2, ny + nh / 2 - 6, w - 16, 11, 1);
+  if (exerciseRunning) {  // you went Back from the workout timer: here's the way back to it
+    tft.setTextColor(U_GREEN, U_PANEL);
+    drawWrapped("Workout running. Tap here to see the timer.", x + w / 2, ny + nh / 2 - 6, w - 16, 11, 1);
+  } else {
+    tft.setTextColor(U_DIM, U_PANEL);
+    drawWrapped("Tap a card above, or Done when finished.", x + w / 2, ny + nh / 2 - 6, w - 16, 11, 1);
+  }
 
   drawFooter(laptopOnline);
 }
@@ -236,6 +252,10 @@ void sessionTouch(int x, int y) {
   colRow(4, 3, y0, h); if (hitRect(U_PAD, y0, U_COL_W, h, x, y)) { startBreathing(); return; }
   int rx = SCRW - U_PAD - U_COL_W;
   colRow(2, 0, y0, h); if (hitRect(rx, y0, U_COL_W, h, x, y)) { endSessionLocally("done"); return; }
+  if (exerciseRunning) {  // the "Workout running" panel (same rect as drawSessionScreen's)
+    int px = SESS_CX0, pw = SESS_CW, vy = U_HEAD_H + U_PAD, ny = vy + 2 * (46 + U_PAD);
+    if (hitRect(px, ny, pw, SCRH - U_FOOT_H - U_PAD - ny, x, y)) { screen = SCR_EXERCISE_TIMER; drawExerciseTimer(); return; }
+  }
 }
 
 void endSessionLocally(const char* reason) {
@@ -570,9 +590,11 @@ void drawMoodScreen() {
   tft.setTextColor(U_SUB, U_BG);
   tft.drawString("Tap the face that matches how you feel", SCRW / 2, MOOD_TOP + MOOD_H + 16, 1);
   drawSosButton();
+  drawBackButton();
   drawFooter(laptopOnline);
 }
 void moodTouch(int x, int y) {
+  if (pointInBack(x, y)) { goHome(); return; }
   int w = moodColW();
   for (int i = 0; i < 5; i++) {
     if (hitRect(U_PAD + i * (w + U_PAD), MOOD_TOP, w, MOOD_H, x, y)) {
@@ -589,6 +611,7 @@ const char* SYMPTOM_KEYS[8] = { "headache", "nausea", "back_pain", "blurry_visio
 bool symptomChecked[8];
 static const int SYMPT_TOP = U_HEAD_H + U_PAD, SYMPT_H = 30, SYMPT_GAP = 4;
 static const int SEND_X = 4 + 60 + U_PAD;  // clear of the corner SOS tile
+int sendW() { return SCRW - SEND_X - BACK_W - 4 - U_PAD; }  // and of the corner Back tile
 int symptomColW() { return (SCRW - U_PAD * 3) / 2; }
 void symptomRect(int i, int& bx, int& by, int& bw, int& bh) {
   int w = symptomColW(), row = i / 2, col = i % 2;
@@ -611,22 +634,24 @@ void drawSymptomsScreen() {
   drawHeader("ANY SYMPTOMS?", "tap all that apply", false, "", 0);
   for (int i = 0; i < 8; i++) drawSymptomChip(i);
   int sendY = SYMPT_TOP + 4 * (SYMPT_H + SYMPT_GAP) + 6;
-  tft.fillRoundRect(SEND_X, sendY, SCRW - U_PAD - SEND_X, 36, 6, U_CREW);
+  tft.fillRoundRect(SEND_X, sendY, sendW(), 36, 6, U_CREW);
   iconSymptoms(SEND_X + 22, sendY + 18, 0.6, TFT_WHITE, U_CREW);
   tft.setTextDatum(ML_DATUM);
   tft.setTextColor(TFT_WHITE, U_CREW);
   tft.drawString("Send", SEND_X + 38, sendY + 18, 2);
   drawSosButton();
+  drawBackButton();
   drawFooter(laptopOnline);
 }
 void symptomsTouch(int x, int y) {
+  if (pointInBack(x, y)) { for (int i = 0; i < 8; i++) symptomChecked[i] = false; goHome(); return; }
   int bx, by, bw, bh;
   for (int i = 0; i < 8; i++) {
     symptomRect(i, bx, by, bw, bh);
     if (hitRect(bx, by, bw, bh, x, y)) { symptomChecked[i] = !symptomChecked[i]; drawSymptomChip(i); return; }
   }
   int sendY = SYMPT_TOP + 4 * (SYMPT_H + SYMPT_GAP) + 6;
-  if (hitRect(SEND_X, sendY, SCRW - U_PAD - SEND_X, 36, x, y)) {
+  if (hitRect(SEND_X, sendY, sendW(), 36, x, y)) {
     String items[8]; int n = 0;
     for (int i = 0; i < 8; i++) if (symptomChecked[i]) items[n++] = SYMPTOM_KEYS[i];
     sendSymptoms(curUid, items, n);
@@ -663,12 +688,14 @@ void drawReactionWaiting() {
     tft.drawString(lt, SCRW / 2, SCRH - U_FOOT_H - 16, 1);
   }
   drawSosButton();
+  drawBackButton();
   drawFooter(laptopOnline);
 }
 void drawReactionCircle() {
   tft.fillCircle(CX, CY, 50, U_GREEN);
 }
 void reactionTouch(int x, int y) {
+  if (pointInBack(x, y)) { reactionCircleShown = false; goHome(); return; }  // stop the test, nothing sent
   if (!reactionCircleShown) {
     reactionFalseStarts++;
     return;  // tapped too early; keep waiting for the real circle
@@ -719,7 +746,12 @@ void drawBreatheFrame() {
   char rem[16]; snprintf(rem, sizeof(rem), "%lus left", (unsigned long)((BREATHE_TOTAL_MS - elapsed) / 1000));
   tft.drawString(rem, CX, CY + 90, 1);
   drawSosButton();
+  drawBackButton();
   drawFooter(laptopOnline);
+}
+
+void breatheTouch(int x, int y) {
+  if (pointInBack(x, y)) goHome();  // stop early: not logged as a breathing session
 }
 
 // ---- screen: Status (full-color result banner) ----
@@ -737,6 +769,7 @@ void onStatusMsg(const String& name, const String& level, const String& note) {
   tft.drawString(name, CX, 120, 2);
   drawWrapped(note, CX, 150, SCRW - 24, 20, 2);
   tft.setTextColor(fg, bg);
+  tft.drawString("Tap anywhere to go back", CX, SCRH - 36, 1);
   tft.drawString("Demo with placeholder data. Not medical advice.", CX, SCRH - 20, 1);
   screen = SCR_STATUS;
   toastUntilMs = millis() + 4000;
@@ -756,9 +789,16 @@ void drawExerciseTimer() {
   tft.setTextColor(U_DIM, U_BG);
   tft.drawString("elapsed", CX, CY + 40, 2);
   tft.setTextColor(U_SUB, U_BG);
-  tft.drawString("Tap the treadmill tag again to stop", CX, SCRH - U_FOOT_H - 16, 1);
+  tft.drawString("Tap the tag again to stop", CX, SCRH - U_FOOT_H - 16, 1);
   drawSosButton();
+  drawBackButton();
   drawFooter(laptopOnline);
+}
+
+void exerciseTimerTouch(int x, int y) {
+  // Back leaves the workout running (it's timed on the laptop); the crew home shows a
+  // "Workout running" line to come back here, and the tag (or the app) stops it.
+  if (pointInBack(x, y)) goHome();
 }
 
 // ---- generic hold-to-confirm progress bar -- used by the Emergency
@@ -809,6 +849,8 @@ void onUnknownTagMsg(const String& uid) {
   tft.drawString("Unknown card", CX, 140, 2);
   tft.setTextColor(U_DIM, U_BG);
   tft.drawString(uid, CX, 162, 2);
+  tft.setTextColor(U_SUB, U_BG);
+  tft.drawString("Tap anywhere to go back", CX, 190, 1);
   drawFooter(laptopOnline);
   screen = SCR_UNKNOWN_TAG;
   toastUntilMs = millis() + 3000;
@@ -851,6 +893,29 @@ void goHome() {
   else if (s == SCR_SESSION) drawSessionScreen();
   else drawIdleScreen();
 }
+// Redraw any screen as it is now -- used to come back to the page you were on after a
+// toast (a toast used to drop you on Idle from every page but the three homes).
+void drawScreen(Screen s) {
+  switch (s) {
+    case SCR_IDLE: drawIdleScreen(); break;
+    case SCR_SESSION: drawSessionScreen(); break;
+    case SCR_SURGEON_HOME: drawSurgeonHomeScreen(); break;
+    case SCR_MOOD: drawMoodScreen(); break;
+    case SCR_SYMPTOMS: drawSymptomsScreen(); break;
+    case SCR_REACTION: drawReactionWaiting(); if (reactionCircleShown) drawReactionCircle(); break;
+    case SCR_BREATHE: drawBreatheFrame(); break;
+    case SCR_EXERCISE_TIMER: drawExerciseTimer(); break;
+    case SCR_CREW_DETAIL: drawCrewDetailScreen(); break;
+    case SCR_ALERTS: drawAlertsScreen(); break;
+    case SCR_INBOX: drawInboxScreen(); break;
+    case SCR_WIFI_MENU: drawWifiMenuScreen(); break;
+    case SCR_WIFI_SCAN: drawWifiScanScreen(); break;
+    case SCR_WIFI_KEYBOARD: drawWifiKeyboardScreen(); break;
+    case SCR_WIFI_CONNECTING: drawWifiConnectingScreen(); break;
+    default: goHome(); break;  // the timed banners (Status, Unknown card) and the emergency
+  }
+}
+
 // Screens only reachable while a session is open -- used by
 // onCardScanned()'s busy-check below (ignore a stray extra tap while any
 // of these is showing, not just the two home screens).
@@ -1049,7 +1114,11 @@ void handleTouch() {
     case SCR_WIFI_SCAN:       wifiScanTouch(x, y); break;
     case SCR_WIFI_KEYBOARD:   wifiKeyboardTouch(x, y); break;
     case SCR_WIFI_CONNECTING: wifiConnectingTouch(x, y); break;
-    default: break;  // Breathe / Status / Exercise timer / Unknown tag: no taps needed
+    case SCR_BREATHE:         breatheTouch(x, y); break;
+    case SCR_EXERCISE_TIMER:  exerciseTimerTouch(x, y); break;
+    case SCR_STATUS:
+    case SCR_UNKNOWN_TAG:     toastUntilMs = 1; break;  // tap anywhere: go back now, don't wait
+    default: break;
   }
 }
 
@@ -1108,12 +1177,7 @@ void updateScreenTimers() {
   if (toastUntilMs && now > toastUntilMs) {
     toastUntilMs = 0;
     screen = screenBeforeToast;
-    switch (screen) {
-      case SCR_IDLE: drawIdleScreen(); break;
-      case SCR_SESSION: drawSessionScreen(); break;
-      case SCR_SURGEON_HOME: drawSurgeonHomeScreen(); break;
-      default: goIdle(); break;
-    }
+    drawScreen(screen);  // back to the exact page you were on, not Idle
   }
 
   // Same pre-existing scope as before phase 2 -- the idle timeout only

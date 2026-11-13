@@ -59,8 +59,9 @@ config/*.json               every PLACEHOLDER value (thresholds, text, missions,
 data/astro.db               created at runtime by backend/seed.py, git-ignored
 frontend/                   the React app (Vite + React 19 + Tailwind v4 + motion) -- see
                              "React frontend" below. dist/ (the build) IS committed.
-  src/pages/crew/              Overview, Body (+ body/), Trends (+ trends/stats.js), Mind, Sleep,
-                                Mission, Schedule, Learn
+  src/pages/crew/              Overview.jsx, then one folder per sidebar section (2026-11-13):
+                                daily/ (Today = the old Schedule, Mind, Sleep), health/ (Body +
+                                body/, Trends + trends/), mission/ (Mission)
   src/pages/doctor/            CrewOverview, Alerts, CrewProfile, feed.js (the alert feed)
   src/pages/admin/Admin.jsx    /admin (its own superuser login)
   src/components/              shared UI (ui/, charts/, layout/ incl. Sidebar + DoctorTools,
@@ -3032,11 +3033,106 @@ Re-verified with the controllable fake mic, 17/17:
 
 94 frontend tests pass.
 
+## The app organized into sections: "Daily check-ins" with Today as its hub (2026-11-13)
+
+User: "organize the project, e.g. a section for what the astronaut must complete daily like
+mind, mood, sleep lab". A face-expression check (every 2 h, interval set on /admin) is coming
+later: "keep this for later". Decided with the user: the **Schedule page becomes "Today"** (not
+a second page), and the face check shows now as **"Coming soon"**.
+
+- **Sidebar** (`frontend/src/nav.js`):
+  - Overview
+  - **Daily check-ins**: Today, Mind & mood, Sleep lab
+  - **Health**: Astra & body, Trends
+  - **Mission**: Mission health, Learn
+
+  The doctor's "Crew data" list uses the same order. `nav.test.js` checks that every crew page
+  appears exactly once and that the doctor's list has the same pages.
+- **Files follow the sections:**
+  - `pages/crew/daily/`: Today.jsx (moved with `git mv` from Schedule.jsx), Mind, Sleep
+  - `pages/crew/health/`: Body + body/, Trends + trends/
+  - `pages/crew/mission/`: Mission, Learn
+
+  Every relative import was rewritten by a script that resolves each path from the file's old
+  location.
+- **Routes:**
+  - `/today` is the page; `/schedule` redirects to it.
+  - Astra's page id `"schedule"` (`analyst.PAGES`, unchanged) maps to `/today` "Today" in
+    `lib/astraActions.js`.
+  - CrewProfile's shortcut points at /today.
+- **Today page:**
+  - Workouts and sleep tracking start and stop in place (`TrackButton` → `POST /activity`,
+    the same timers as the tags and Astra).
+  - `GET /astronauts/<id>/schedule` now returns `tracking: {sleep, exercise}`, each null or
+    `{started_at, mission_min}`. The button therefore shows "Stop workout · 12 min" even for a
+    tag-started workout.
+  - `trackingRows()` puts that Stop button on ONE row per kind: the due/missed one, else the
+    next upcoming. The first version showed it on both exercise rows.
+  - New `FaceCheckSoon` card, which has no behaviour yet. **When the face check is built**, it
+    becomes a Today task, with its interval as a setting on /admin.
+- **Shared daily summary:**
+  - `lib/useToday.js`: the schedule plus `withLiveStatus`, ticking every 15 s, through
+    `todaySummary()` / `dueCount()` in `lib/schedule.js`.
+  - It feeds the sidebar's Today badge (tasks due or missed now; crew only, same style as
+    Alerts) and the new Overview strip: "Daily check-ins · N of 5 done today · Next: …",
+    per-task chips, and Open Today.
+- **Verified:**
+  - 267 backend tests (1 new) and 100 frontend tests (6 new), lint clean, dist rebuilt.
+  - Headless check on an isolated copy at 600×:
+    - the sidebar order for crew and for the doctor
+    - the badge shows "2" when two tasks are due
+    - the Overview strip and Open Today
+    - /schedule redirects
+    - the Face check card is there
+    - Start workout → "Stop workout · 1 min" on one row only → Stop logs it
+    - all 8 crew pages load, with no page errors
+
+## CYD: a Back button on every screen, and toasts return you to the page you were on (2026-11-13)
+
+User: "in my CYD I cannot return to the last page, we need Back on all pages".
+
+- **New `drawBackButton()` / `pointInBack()`** (`screens.ino`): a 46×44 "Back" tile in the
+  bottom-right corner, mirroring the SOS corner tile on the left. Each screen that draws it
+  checks `pointInBack()` first in its own touch handler.
+- **Added to these screens:**
+  - **Mood:** goes home.
+  - **Symptoms:** clears the ticks and goes home. Send is now narrower (`sendW()`) to make
+    room.
+  - **Reaction test:** stops the test and sends nothing.
+  - **Breathe:** the new `breatheTouch`; stopping early isn't logged as a breathing session.
+  - **Workout timer:** the new `exerciseTimerTouch`; the workout keeps running. The crew home
+    then shows "Workout running. Tap here to see the timer." in its bottom panel, and tapping
+    it goes back to the timer.
+  - **Wi-Fi "Connecting…":** cancels the attempt (`WiFi.disconnect()`) and goes back to the
+    password keyboard.
+- The result banner (Status) and "Unknown card" now close on **a tap anywhere**
+  (`toastUntilMs = 1`), with a "Tap anywhere to go back" line. They used to wait 3–4 s.
+- **Already had a way back:** Crew detail, Alerts and Inbox (Back tiles); the Wi-Fi menu and
+  scan (Back); the keyboard (Cancel). Idle and the two home screens are roots, and the
+  emergency is cancelled with its hold bar.
+- **Bug fixed on the way:** after a toast, `updateScreenTimers()` only knew how to redraw
+  Idle, crew home and surgeon home, and sent every other page to **Idle**. The new
+  `drawScreen(Screen)` redraws any screen, so a toast now returns you to the exact page you
+  were on.
+- `arduino-cli compile` is clean (36% flash / 16% RAM, unchanged). **Not flashed when written:
+  ask first**, and the laptop's `app.py` must release the port.
+
+## Learn page removed (2026-11-13)
+
+At the user's request ("delete learn page"):
+- deleted `pages/crew/mission/Learn.jsx`, plus its route and nav items (crew and doctor)
+- removed Astra's `learn` page id from `analyst.PAGES` and `astraActions.PAGES`
+- `/learn` now redirects to Overview, for old bookmarks
+
+The Mission group now holds only Mission health. `config/content.json` is unchanged: its
+measuring guides and body-part text are still used by the voice-screen measuring guide, the
+Body page and Astra. Older entries that mention Learn are historical.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 266 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 267 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 94 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
+- `cd frontend && npm test` — 100 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).
