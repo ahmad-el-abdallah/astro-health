@@ -40,12 +40,12 @@ function AstraPill() {
       aria-pressed={astra.enabled}
       aria-label={`Astra: ${p.text}. ${title}`}
       title={title}
-      className={cx("flex min-h-11 cursor-pointer items-center gap-2 ah-glass rounded-full px-3.5 text-[13px] font-semibold hover:border-accent-text/50", p.tone)}
+      className={cx("flex min-h-11 cursor-pointer items-center gap-2 ah-glass rounded-full px-3.5 text-label font-semibold hover:border-accent-text/50", p.tone)}
     >
       <Icon name="waveform" size={15} className="text-accent-text" />
       <span className={cx("h-2 w-2 rounded-full", p.dot)} />
       <span className="max-md:hidden">{p.text}</span>
-      {needsClick && <span className="text-[11px] font-medium text-check-fg max-lg:hidden">· click once for voice</span>}
+      {needsClick && <span className="text-caption font-medium text-check-fg max-2xl:hidden">· click once for voice</span>}{/* below 2xl the tooltip says it, so the top bar stays on one row */}
     </button>
   );
 }
@@ -85,11 +85,11 @@ function ConfirmLocation({ goingOut, onCancel, onConfirm, busy }) {
         <span className={cx("mb-3 flex h-11 w-11 items-center justify-center rounded-2xl", goingOut ? "bg-check-bg text-check-fg" : "bg-good-bg text-good-fg")}>
           <Icon name={goingOut ? "env-station" : "overview"} size={22} />
         </span>
-        <h3 className="m-0 mb-2 font-display text-[21px] font-semibold">{copy.title}</h3>
+        <h3 className="m-0 mb-2 font-display text-heading font-semibold">{copy.title}</h3>
         <p className="m-0 text-sm leading-relaxed text-ink-2">{copy.body}</p>
         <div className="mt-5 flex justify-end gap-2.5">
           <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
-          <Button variant="primary" onClick={onConfirm} disabled={busy} autoFocus>{copy.ok}</Button>
+          <Button variant="primary" onClick={onConfirm} busy={busy} autoFocus>{copy.ok}</Button>
         </div>
       </motion.div>
     </div>,
@@ -109,7 +109,8 @@ function LocationPill({ astroId, canSwitch }) {
     const t = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(t);
   }, [eva]);
-  if (!astroId || !q.data) return null;
+  if (!astroId) return null;
+  if (!q.data) return <span aria-hidden="true" className="h-11 w-14 animate-pulse rounded-full bg-raised" />; // loading
   const minutes = eva ? Math.round((q.data.mission_min || 0) + ((now - q.dataUpdatedAt) / 60000) * (q.data.time_scale || 1)) : 0;
   const span = minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${Math.max(0, minutes)} min`;
   async function toggle() {
@@ -136,7 +137,7 @@ function LocationPill({ astroId, canSwitch }) {
       aria-label={`Location: ${eva ? `outside, EVA ${span}` : "inside"}. ${title}`}
       title={title}
       className={cx(
-        "flex min-h-11 items-center gap-2 rounded-full px-3.5 text-[13px] font-semibold disabled:cursor-default",
+        "flex min-h-11 items-center gap-2 rounded-full px-3.5 text-label font-semibold disabled:cursor-default",
         canSwitch && "cursor-pointer",
         eva ? "border border-check-fg/60 bg-check-bg text-check-fg" : "ah-glass text-ink hover:border-accent-text/50",
       )}
@@ -178,7 +179,7 @@ export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.22 }}
-            className="m-0 font-display text-[28px] font-bold tracking-[-0.02em]"
+            className="m-0 font-display text-display font-bold tracking-[-0.02em]"
           >
             {title}
           </motion.h1>
@@ -190,21 +191,21 @@ export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = 
 
       <Link
         to="/mission"
-        className="flex min-h-11 items-center gap-2 ah-glass rounded-full px-3.5 text-[13px] text-ink hover:border-accent-text/50"
+        className="flex min-h-11 items-center gap-2 ah-glass rounded-full px-3.5 text-label text-ink hover:border-accent-text/50"
       >
         <span className={`h-2.5 w-2.5 rounded-full ${mission.data?.profile_id ? "bg-good-fg shadow-[0_0_8px_currentColor] text-good-fg" : "bg-muted"}`} />
         Mission: <strong className={`font-semibold ${mission.data?.profile_id ? "" : "text-muted"}`}>{mission.data?.profile?.short || mission.data?.profile?.label || "–"}</strong>
       </Link>
 
       {showPicker && (
-        <label className="flex min-h-11 items-center gap-2 ah-glass rounded-full py-0 pr-1.5 pl-3.5 text-[13px] text-muted">
+        <label className="flex min-h-11 items-center gap-2 ah-glass rounded-full py-0 pr-1.5 pl-3.5 text-label text-muted">
           Astronaut
           {/* Crew members are locked to themselves (the backend enforces it too). */}
           <select
             value={picker.id ?? ""}
             onChange={(e) => picker.setId(Number(e.target.value))}
             disabled={picker.locked}
-            className="min-h-[34px] cursor-pointer rounded-2xl border-0 bg-control px-2.5 text-[13px] font-semibold text-ink disabled:cursor-default"
+            className="min-h-[34px] cursor-pointer rounded-2xl border-0 bg-control px-2.5 text-label font-semibold text-ink disabled:cursor-default"
           >
             {picker.options.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
@@ -234,7 +235,7 @@ export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = 
 
       <button
         onClick={onAccount}
-        className="min-h-11 cursor-pointer max-md:hidden ah-glass rounded-full px-4 text-[13px] font-semibold text-ink hover:border-accent-text/50"
+        className="min-h-11 cursor-pointer max-md:hidden ah-glass rounded-full px-4 text-label font-semibold text-ink hover:border-accent-text/50"
       >
         Account
       </button>
@@ -242,7 +243,7 @@ export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = 
         onClick={signOut}
         aria-label="Log out"
         title="Log out"
-        className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-raised hover:text-ink max-md:hidden xl:px-4"
+        className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-full px-3 text-label font-medium text-ink-2 hover:bg-raised hover:text-ink max-md:hidden xl:px-4"
       >
         <Icon name="logout" size={17} />
         <span className="max-xl:hidden">Log out</span>

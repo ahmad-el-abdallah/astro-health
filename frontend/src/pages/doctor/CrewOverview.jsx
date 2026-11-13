@@ -44,8 +44,8 @@ function StatCard({ stat, value, active, onClick }) {
         <Icon name={stat.icon} size={20} />
       </span>
       <span className="min-w-0">
-        <AnimatedNumber value={value} className="block font-display text-[28px] leading-none font-bold" />
-        <span className="mt-1 block text-[13px] leading-tight text-muted">{stat.label}</span>
+        <AnimatedNumber value={value} className="block font-display text-display leading-none font-bold" />
+        <span className="mt-1 block text-label leading-tight text-muted">{stat.label}</span>
       </span>
     </button>
   );
@@ -53,9 +53,9 @@ function StatCard({ stat, value, active, onClick }) {
 
 function MiniVital({ indicator, label, reading }) {
   return (
-    <div className="min-w-0 rounded-xl bg-raised px-3 py-2.5">
-      <div className="truncate text-[11px] text-muted">{label}</div>
-      <div className="mt-1 flex items-center gap-1.5 text-[15px] font-semibold">
+    <div className="min-w-0 rounded-[var(--radius-inner)] bg-raised px-3 py-2.5">
+      <div className="truncate text-caption text-muted">{label}</div>
+      <div className="mt-1 flex items-center gap-1.5 text-body font-semibold">
         <span className={cx("h-2 w-2 shrink-0 rounded-full", DOT[reading?.level] || "bg-subtle")} />
         <span className="truncate">{reading ? formatIndicatorValue(indicator, reading.value) : "–"}</span>
       </div>
@@ -71,19 +71,19 @@ function CrewCard({ c }) {
         <Avatar name={c.name} color={c.color} size={46} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="m-0 truncate text-[17px] font-semibold">{c.name}</h3>
+            <h3 className="m-0 truncate text-title font-semibold">{c.name}</h3>
             {c.session_active && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-px text-[11px] font-semibold text-accent-text">
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-px text-caption font-semibold text-accent-text">
                 <span className="h-1.5 w-1.5 animate-[ah-pulse-dot_1.6s_ease-in-out_infinite] rounded-full bg-accent-text" />on CYD
               </span>
             )}
             {c.location?.location === "eva" && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-check-bg px-2 py-px text-[11px] font-semibold text-check-fg">
+              <span className="inline-flex items-center gap-1 rounded-full bg-check-bg px-2 py-px text-caption font-semibold text-check-fg">
                 <span className="h-1.5 w-1.5 animate-[ah-pulse-dot_1.6s_ease-in-out_infinite] rounded-full bg-check-fg" />On EVA
               </span>
             )}
           </div>
-          <div className="truncate text-[13px] text-muted">
+          <div className="truncate text-label text-muted">
             {c.last_reading ? `Last reading ${fmtTime(c.last_reading)}` : "No readings yet"}
           </div>
         </div>
@@ -92,7 +92,7 @@ function CrewCard({ c }) {
       {c.analysis && c.status !== "GRAY" && (
         <div className="flex flex-col gap-1.5">
           <StateChip analysis={c.analysis} className="self-start" />
-          <p className="m-0 line-clamp-2 text-[13px] text-ink-2" title={c.analysis.summary}>
+          <p className="m-0 line-clamp-2 text-label text-ink-2" title={c.analysis.summary}>
             {c.analysis.summary}{c.analysis.source === "rules" ? " (rules)" : ""}
           </p>
         </div>
@@ -126,15 +126,15 @@ export function FeedRow({ item, compact = false, action = null }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           {item.astronautId != null ? (
-            <Link to={`/doctor/crew/${item.astronautId}`} className="min-w-0 text-[15px] font-semibold text-ink hover:underline">
+            <Link to={`/doctor/crew/${item.astronautId}`} className="min-w-0 text-body font-semibold text-ink hover:underline">
               <span className={compact ? "line-clamp-2" : ""}>{item.title}</span>
             </Link>
           ) : (
-            <span className={cx("min-w-0 text-[15px] font-semibold", compact && "line-clamp-2")}>{item.title}</span>
+            <span className={cx("min-w-0 text-body font-semibold", compact && "line-clamp-2")}>{item.title}</span>
           )}
           <StatusChip level={item.level} text={item.level === "GRAY" ? "No data" : undefined} plain />
         </div>
-        <div className="mt-0.5 text-[13px] text-muted">
+        <div className="mt-0.5 text-label text-muted">
           {item.name}{item.ts ? ` · ${fmtTime(item.ts)}` : ""}{!compact && item.detail ? ` · ${item.detail}` : ""}
         </div>
       </div>
@@ -180,11 +180,19 @@ export default function CrewOverview() {
       <div className="grid grid-cols-1 items-start gap-[18px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="flex min-w-0 flex-col gap-3.5">
           <div className="flex flex-wrap items-center gap-3 px-1">
-            <h2 className="m-0 mr-auto font-display text-xl font-semibold">
-              Crew members
+            <h2 className="m-0 mr-auto font-display text-heading font-semibold">
+              {/* Says the fact, not just the section name. */}
+              <span className="ah-num">{counts.all}</span> crew
+              {/* Same words as the stat cards above: red = "need attention now", yellow = "to check". */}
+              <span className="text-muted">
+                {" · "}
+                {counts.RED > 0 ? <><span className="ah-num">{counts.RED}</span> need{counts.RED === 1 ? "s" : ""} attention now</>
+                  : counts.YELLOW > 0 ? <><span className="ah-num">{counts.YELLOW}</span> to check</>
+                  : counts.GRAY < counts.all ? "all good" : "no readings today"}
+              </span>
               {filter !== "all" && (
-                <button onClick={() => setFilter("all")} className="ml-2 cursor-pointer rounded-full bg-raised px-2.5 py-0.5 align-middle text-xs font-semibold text-ink-2 hover:text-ink">
-                  {STATS.find((s) => s.key === filter)?.label} ✕
+                <button onClick={() => setFilter("all")} className="ml-2 inline-flex cursor-pointer items-center gap-1 rounded-full bg-raised px-2.5 py-0.5 align-middle text-xs font-semibold text-ink-2 hover:text-ink">
+                  {STATS.find((s) => s.key === filter)?.label} <Icon name="close" size={12} />
                 </button>
               )}
             </h2>
@@ -199,7 +207,7 @@ export default function CrewOverview() {
               />
             </label>
           </div>
-          <p className="m-0 -mt-1.5 px-1 text-[13px] text-muted">Sorted by who needs attention first · status from the last 24 h.</p>
+          <p className="m-0 -mt-1.5 px-1 text-label text-muted">Sorted by who needs attention first · status from the last 24 h.</p>
           {shown.length === 0 ? (
             <Card className="text-sm text-muted">No crew members match.</Card>
           ) : (

@@ -130,10 +130,10 @@ function ChangeChip({ indicator, change, days }) {
 
 function Stat({ label, children, sub }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-raised p-3">
+    <div className="flex min-w-0 flex-col gap-1 rounded-[var(--radius-inner)] bg-raised p-3">
       <span className="text-xs text-muted">{label}</span>
-      <span className="truncate text-[15px] font-semibold">{children}</span>
-      {sub && <span className="truncate text-[11px] text-subtle">{sub}</span>}
+      <span className="truncate text-body font-semibold">{children}</span>
+      {sub && <span className="truncate text-caption text-subtle">{sub}</span>}
     </div>
   );
 }
@@ -145,7 +145,7 @@ function SummaryCard({ indicator, days, stats, change }) {
   const day = (t) => t.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   return (
     <Card className="flex flex-col gap-4">
-      <CardTitle eyebrow="Summary" title={`Last ${days} days`} />
+      <CardTitle title={`${INDICATORS[indicator].label} · last ${days} days`} />
       {!stats ? (
         <p className="m-0 text-sm text-muted">No {INDICATORS[indicator].label.toLowerCase()} readings in this range yet.</p>
       ) : (
@@ -157,7 +157,7 @@ function SummaryCard({ indicator, days, stats, change }) {
                 key={`${indicator}-${days}-${stats.avg}`}
                 initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.22 }}
-                className="font-display text-[34px] leading-none font-bold tracking-tight"
+                className="font-display text-hero leading-none font-bold tracking-tight"
               >
                 {fmtValue(indicator, stats.avg, stats.avg2, { avg: true })}
               </motion.span>
@@ -231,7 +231,7 @@ const TONE = {
 function InsightsCard({ list }) {
   return (
     <Card className="flex min-w-0 flex-col">
-      <CardTitle eyebrow="Insights" title="What the numbers show" subtitle="Worked out from your own readings. Descriptive only, not medical advice." />
+      <CardTitle title="What the numbers show" subtitle="Worked out from your own readings. Descriptive only, not medical advice." />
       {list.length === 0 ? (
         <p className="m-0 text-sm text-muted">Insights appear once there are a few readings in this range.</p>
       ) : (
@@ -240,7 +240,7 @@ function InsightsCard({ list }) {
             <motion.li
               key={it.text}
               variants={{ initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 } }}
-              className="flex items-start gap-3 rounded-xl bg-raised p-3 text-sm leading-snug text-ink-2"
+              className="flex items-start gap-3 rounded-[var(--radius-inner)] bg-raised p-3 text-sm leading-snug text-ink-2"
             >
               <span className={cx("mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", TONE[it.tone].cls)}>
                 <Icon name={TONE[it.tone].icon} size={15} />
@@ -295,13 +295,13 @@ function WeekdayCard({ indicator, days, points, bands }) {
               </span>
               <span className="text-right">
                 <span className="font-semibold">{d.avg != null ? f(d.avg) : "–"}</span>
-                <span className="block text-[11px] text-subtle">{d.n} reading{d.n === 1 ? "" : "s"}</span>
+                <span className="block text-caption text-subtle">{d.n} reading{d.n === 1 ? "" : "s"}</span>
               </span>
             </li>
           ))}
         </ul>
         {known.length > 1 && top !== low && (
-          <p className="m-0 mt-4 rounded-xl bg-raised p-3 text-[13px] text-ink-2">
+          <p className="m-0 mt-4 rounded-[var(--radius-inner)] bg-raised p-3 text-label text-ink-2">
             Highest on {DAY_NAME[top.day]} ({f(top.avg)}), lowest on {DAY_NAME[low.day]} ({f(low.avg)}). Dashed line: overall average {f(overall)}.
           </p>
         )}
@@ -310,7 +310,7 @@ function WeekdayCard({ indicator, days, points, bands }) {
   }
   return (
     <Card className="flex min-w-0 flex-col">
-      <CardTitle eyebrow="Pattern" title="By day of the week" subtitle={`Average ${label} for each weekday, last ${days} days.`} />
+      <CardTitle title="By day of the week" subtitle={`Average ${label} for each weekday, last ${days} days.`} />
       {body}
     </Card>
   );
@@ -324,7 +324,6 @@ function ReadingsLog({ indicator, rows }) {
   return (
     <Card>
       <CardTitle
-        eyebrow="Readings log"
         title={`${list.length} ${INDICATORS[indicator].label.toLowerCase()} reading${list.length === 1 ? "" : "s"}`}
         subtitle="Newest first, with where each one came from."
       />
@@ -332,7 +331,7 @@ function ReadingsLog({ indicator, rows }) {
         <p className="m-0 text-sm text-muted">Nothing logged in this range.</p>
       ) : (
         <>
-          <div className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_110px_130px] gap-3 px-3 pb-2 text-[11px] font-semibold tracking-[0.1em] text-subtle uppercase md:grid">
+          <div className="hidden grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_110px_130px] gap-3 px-3 pb-2 text-caption font-semibold tracking-[0.1em] text-subtle uppercase md:grid">
             <span>When</span><span>Value</span><span>Status</span><span>Source</span>
           </div>
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
@@ -344,7 +343,7 @@ function ReadingsLog({ indicator, rows }) {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 8) * 0.03 } }}
                   exit={{ opacity: 0 }}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-xl bg-raised px-3 py-2.5 text-sm md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_110px_130px]"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-[var(--radius-inner)] bg-raised px-3 py-2.5 text-sm md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_110px_130px]"
                 >
                   <span className="truncate text-ink-2">{fmtTime(r.ts)}</span>
                   <span className="font-semibold md:order-none">{formatIndicatorValue(indicator, r.value)}{unit}</span>
@@ -399,9 +398,8 @@ export default function Trends() {
       <Card className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="ah-eyebrow mb-1">All indicators</div>
-            <h2 className="m-0 text-base font-semibold">Pick one to explore</h2>
-            <p className="m-0 mt-0.5 text-[13px] text-muted">Latest reading and its trend over the selected range.</p>
+            <h2 className="m-0 text-title font-semibold">All indicators</h2>
+            <p className="m-0 mt-0.5 text-label text-muted">Latest reading and its trend over the selected range.</p>
           </div>
           <Segmented id="trend-range" size="sm" value={days} onChange={setDays} options={RANGES} />
         </div>
@@ -416,8 +414,7 @@ export default function Trends() {
         <Card className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div>
-              <div className="ah-eyebrow mb-1">{INDICATORS[indicator].label}</div>
-              <h2 className="m-0 text-base font-semibold">Last {days} days{BAR.has(indicator) ? " · daily totals" : ""}</h2>
+              <h2 className="m-0 text-title font-semibold">{INDICATORS[indicator].label} · last {days} days{BAR.has(indicator) ? " · daily totals" : ""}</h2>
             </div>
             <span className="text-xs text-muted">Each point is colored by how that reading was rated.</span>
           </div>

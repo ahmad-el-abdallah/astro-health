@@ -31,7 +31,7 @@ export function EmergencyOverlay() {
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
             className="relative w-full max-w-lg rounded-hero border border-alert-border bg-alert-surface p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,.6)]"
           >
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-alert-action text-[#1a0b10]">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-alert-action text-bg">
               <Icon name="alert" size={30} />
             </div>
             <h1 id="emergency-title" className="m-0 font-display text-4xl font-bold tracking-tight text-alert-fg">Emergency</h1>
@@ -43,7 +43,7 @@ export function EmergencyOverlay() {
             </ul>
             <button
               onClick={() => post("/emergency", { action: "cancel" })}
-              className="min-h-12 cursor-pointer rounded-xl bg-alert-action px-6 font-bold text-[#1a0b10] hover:brightness-110"
+              className="min-h-12 cursor-pointer rounded-xl bg-alert-action px-6 font-bold text-bg hover:brightness-110"
             >
               Cancel emergency
             </button>

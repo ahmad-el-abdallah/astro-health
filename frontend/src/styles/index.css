@@ -31,8 +31,8 @@
   --ah-accent-rgb: 74 104 236;
   --ah-text: #e8ecf7;
   --ah-text-2: #b4bdd8;
-  --ah-text-muted: #9aa4c2;
-  --ah-text-subtle: #8a94b2;
+  --ah-text-muted: #a9b2cf;
+  --ah-text-subtle: #9aa4c2;
   --ah-placeholder: #6f7a99;
   --ah-chart-line: #8fa6ff;
   --ah-sleep-awake: #ff7a6b;
@@ -53,9 +53,6 @@
   --ah-glow-1: rgba(74, 104, 236, .34);
   --ah-glow-2: rgba(47, 191, 168, .14);
   --ah-planet-air: rgba(96, 150, 255, .55);
-  /* Frost grain: static SVG noise, rasterized once and tiled -- the fine texture that makes
-     the panels read as frosted glass instead of flat tinted plastic. */
-  --ah-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .26 0 0 0 -.075'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 [data-role="doctor"] {
@@ -76,8 +73,8 @@
   --ah-accent-rgb: 47 191 168;
   --ah-text: #e6eef3;
   --ah-text-2: #b5c7d2;
-  --ah-text-muted: #93a9b8;
-  --ah-text-subtle: #8aa0ae;
+  --ah-text-muted: #a3b7c4;
+  --ah-text-subtle: #93a9b8;
   --ah-chart-line: #5fd6c2;
   --ah-sleep-rem: #bff0e6;
   --ah-sleep-light: #6fc7b8;
@@ -150,6 +147,25 @@
   --radius-card: 20px;
   --radius-card-l: 22px;
   --radius-hero: 26px;
+  /* Nested surfaces: inner radius = outer radius - the padding between them (22 - 20 for a
+     card's tiles), never below 8px so it still reads as rounded ("by eye"). */
+  --radius-inner: 8px;
+
+  /* The type scale. Components use these (or Tailwind's xs/sm/base) -- never text-[Npx].
+     caption 11 · xs 12 · label 13 · sm 14 · body 15 · base 16 · title 17 · heading 22 ·
+     display 28 · hero 40 · jumbo 52 */
+  --text-caption: 11px;
+  --text-label: 13px;
+  --text-body: 15px;
+  --text-title: 17px;
+  --text-heading: 22px;
+  --text-heading--line-height: 1.25;
+  --text-display: 28px;
+  --text-display--line-height: 1.15;
+  --text-hero: 40px;
+  --text-hero--line-height: 1.05;
+  --text-jumbo: 52px;
+  --text-jumbo--line-height: 1;
 
   --ease-enter: cubic-bezier(.2, .7, .2, 1);
 }
@@ -167,6 +183,8 @@
     transition: background-color 300ms ease;
   }
   a { color: var(--ah-accent-text); text-decoration: none; }
+  h1, h2, h3, h4 { text-wrap: balance; }
+  p, li { text-wrap: pretty; }
   button, input, select, textarea { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--ah-accent-text); outline-offset: 2px; }
   ::placeholder { color: var(--ah-placeholder); }
@@ -185,8 +203,8 @@
   /* What makes it read as real glass rather than a tinted box:
      - a clear, low tint over a strong blur + saturation boost (the backdrop's colors glow
        through, like frosted glass in front of a light);
-     - fine static frost grain (--ah-grain);
-     - light falling from the top: a brighter top band and a faint diagonal reflection;
+     - light falling from the top: a brighter top band (no grain or diagonal sheen: the
+       2026-11-13 clean-up removed those embellishments);
      - a specular rim (::before) -- bright where the light catches the top-left edge, fading
        out along the sides, picking up the accent color at the bottom-right -- plus a darker
        bottom inner edge for the slab's thickness;
@@ -195,11 +213,7 @@
   .ah-glass, .ah-glass-strong, .ah-glass-flat {
     position: relative;
     border: 1px solid var(--ah-glass-edge);
-    background-image:
-      var(--ah-grain),
-      linear-gradient(112deg, rgba(255, 255, 255, 0) 34%, rgba(255, 255, 255, .032) 47%, rgba(255, 255, 255, 0) 60%),
-      linear-gradient(180deg, rgba(255, 255, 255, .09) 0%, rgba(255, 255, 255, .022) 32%, rgba(255, 255, 255, 0) 68%);
-    background-size: 180px 180px, 100% 100%, 100% 100%;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, .07) 0%, rgba(255, 255, 255, .018) 32%, rgba(255, 255, 255, 0) 68%);
     background-color: var(--ah-glass-tint);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, .13),
@@ -276,8 +290,7 @@
 .ah-callout__box {
   position: absolute; top: -18px; display: flex; flex-direction: column; gap: 1px; white-space: nowrap;
   padding: 6px 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--c, #e4ecff) 45%, transparent);
-  background: var(--ah-grain), linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, 0) 60%), rgba(10, 14, 28, .82);
-  background-size: 180px 180px, 100% 100%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, 0) 60%), rgba(10, 14, 28, .82);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 8px 22px rgba(0, 0, 0, .4);
   color: var(--ah-text); font-size: 12px; line-height: 1.25;
 }
@@ -292,11 +305,18 @@
 
 /* Loading shimmer: moves with transform (GPU-composited) -- never background-position,
    which repaints every frame (one of the causes of the old login screen's lag). */
+/* Numbers that change (tiles, clocks, timers, tables) keep their width: no jiggle. */
+.ah-num { font-variant-numeric: tabular-nums; }
+@keyframes ah-spin { to { transform: rotate(360deg); } }
+/* A changed value flashes once, softly -- useful feedback, not decoration. */
+@keyframes ah-flash { from { background-color: rgb(var(--ah-accent-rgb) / .22); } to { background-color: transparent; } }
+@keyframes ah-pop { 0% { transform: scale(.6); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+
 @keyframes ah-shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 @keyframes ah-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @keyframes ah-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
 
-/* Lite glass: same material (rim, grain, light) minus the live blur. */
+/* Lite glass: same material (rim, light) minus the live blur. */
 html[data-glass="lite"] .ah-glass,
 html[data-glass="lite"] .ah-glass-strong {
   -webkit-backdrop-filter: none;

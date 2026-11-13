@@ -193,7 +193,7 @@ export function BandLegend({ bands, unit }) {
   const hasCaution = bands.some((b) => b.kind === "caution");
   if (!normal && !hasCaution) return null;
   return (
-    <div className="flex flex-wrap items-center gap-4 text-[13px] text-ink-2">
+    <div className="flex flex-wrap items-center gap-4 text-label text-ink-2">
       {normal && (
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-sm bg-[#1f4a45]" />

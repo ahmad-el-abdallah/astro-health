@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { post } from "../lib/api.js";
 import { fmtTime } from "../lib/format.js";
-import { Button, Card, StatusChip, cx } from "./ui/index.jsx";
+import { Button, Card, Spinner, cx } from "./ui/index.jsx";
 import { Icon } from "./ui/Icon.jsx";
 
 export const STATE_ICON = {
@@ -25,7 +25,7 @@ export function StateChip({ analysis, className = "" }) {
   if (!analysis) return null;
   const level = analysis.state === "not_enough_data" ? "GRAY" : analysis.overall_level;
   return (
-    <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-semibold", TONE[level] || TONE.GRAY, className)}>
+    <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-label font-semibold", TONE[level] || TONE.GRAY, className)}>
       <Icon name={STATE_ICON[analysis.state] || "doctor-ai"} size={14} />
       {analysis.state_label}
     </span>
@@ -38,7 +38,8 @@ function sourceLine(a) {
   return `${why} · checked by the rules · ${fmtTime(a.ts)}`;
 }
 
-export function AiAnalysisCard({ astroId, summary, className = "" }) {
+// repeatSummary=false: the page already shows the summary as its headline (crew Overview).
+export function AiAnalysisCard({ astroId, summary, repeatSummary = true, className = "" }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const a = summary?.analysis;
@@ -60,14 +61,14 @@ export function AiAnalysisCard({ astroId, summary, className = "" }) {
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text">
           <Icon name="doctor-ai" size={20} />
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="ah-eyebrow">AI health analysis</div>
-          <div className="text-[13px] text-muted">{a ? sourceLine(a) : "Not analyzed yet"}</div>
+        <div className="min-w-0 flex-[1_1_200px]">
+          <h2 className="m-0 text-title font-semibold">Health analysis</h2>
+          <div className="text-label text-muted">{a ? sourceLine(a) : "Not analyzed yet"}</div>
         </div>
+        {/* One badge: the state already carries the level's colour (Needs a check = yellow). */}
         {a && <StateChip analysis={a} />}
-        {a && a.state !== "not_enough_data" && <StatusChip level={a.overall_level} />}
-        <Button className="min-h-10 px-3.5 text-[13px]" onClick={analyzeNow} disabled={busy} aria-busy={busy}>
-          <Icon name="reset" size={15} className={busy ? "animate-spin" : ""} /> {busy ? "Analyzing…" : "Analyze now"}
+        <Button className="min-h-10 px-3.5 text-label" onClick={analyzeNow} busy={busy}>
+          {!busy && <Icon name="reset" size={16} />} {busy ? "Analyzing…" : "Analyze now"}
         </Button>
       </div>
 
@@ -80,9 +81,11 @@ export function AiAnalysisCard({ astroId, summary, className = "" }) {
           transition={{ duration: 0.3 }}
           className="flex flex-col gap-3"
         >
-          <p className="m-0 font-display text-lg leading-snug font-semibold">
-            {a ? a.summary : "Take a reading or check in on the CYD, and the AI will look at the whole picture."}
-          </p>
+          {(!a || repeatSummary) && (
+            <p className="m-0 font-display text-heading font-semibold">
+              {a ? a.summary : "Take a reading or check in on the CYD, and the AI will look at the whole picture."}
+            </p>
+          )}
           {a && (a.reasons.length > 0 || a.advice.length > 0) && (
             <div className="grid gap-4 sm:grid-cols-2">
               {a.reasons.length > 0 && (
@@ -103,12 +106,12 @@ export function AiAnalysisCard({ astroId, summary, className = "" }) {
       </AnimatePresence>
 
       {pending && !busy && (
-        <div className="flex items-center gap-2 text-[13px] text-accent-text">
-          <span className="h-1.5 w-1.5 animate-[ah-pulse-dot_1.6s_ease-in-out_infinite] rounded-full bg-accent-text" />
+        <div className="flex items-center gap-2 text-label text-accent-text">
+          <Spinner size={12} />
           New data · the AI is analyzing…
         </div>
       )}
-      <p className="m-0 text-[11px] text-subtle">AI analysis of placeholder data. Not medical advice.</p>
+      <p className="m-0 text-caption text-subtle">AI analysis of placeholder data. Not medical advice.</p>
     </Card>
   );
 }

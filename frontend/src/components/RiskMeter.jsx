@@ -13,8 +13,8 @@ export function RiskMeter({ risk }) {
           <motion.span
             key={i}
             className="h-[5px] w-3.5 rounded-[3px]"
-            initial={{ backgroundColor: "#2c3757" }}
-            animate={{ backgroundColor: i <= n ? RISK_CLR[risk] : "#2c3757" }}
+            initial={{ backgroundColor: "var(--ah-border-strong)" }}
+            animate={{ backgroundColor: i <= n ? RISK_CLR[risk] : "var(--ah-border-strong)" }}
             transition={{ delay: 0.2 + i * 0.12 }}
           />
         ))}

@@ -155,19 +155,19 @@ export function Login() {
 
       <header className="relative z-[1] flex flex-wrap items-center justify-between gap-4 px-[clamp(16px,5vw,72px)] py-7">
         <div className="flex items-center gap-3">
-          <LogoCrew width={40} height={40} className="rounded-xl shadow-[0_0_24px_rgba(74,104,236,.5)]" aria-hidden="true" />
+          <LogoCrew width={40} height={40} className="rounded-xl" aria-hidden="true" />
           <div>
             <span className="block font-display text-lg font-bold tracking-tight">{STRINGS.appName}</span>
-            <span className="text-[11px] tracking-[0.12em] text-muted">CREW HEALTH · MISSION MEDICINE</span>
+            <span className="text-caption tracking-[0.12em] text-muted">CREW HEALTH · MISSION MEDICINE</span>
           </div>
         </div>
-        <span className="flex items-center gap-2 rounded-full border border-[rgba(143,166,255,.18)] bg-[rgba(19,26,48,.6)] px-3.5 py-2 text-[13px] text-[#cfd9ff]">
+        <span className="flex items-center gap-2 rounded-full border border-[rgba(143,166,255,.18)] bg-[rgba(19,26,48,.6)] px-3.5 py-2 text-label text-[#cfd9ff]">
           <span className="h-2 w-2 rounded-full bg-mars" />
           {mission.data?.profile?.short || mission.data?.profile?.label || "Mission"}
         </span>
       </header>
 
-      <main className="relative z-[1] flex flex-1 items-center px-[clamp(16px,5vw,72px)] pt-3 pb-12">
+      <main className="relative z-[1] flex flex-1 items-center gap-[clamp(32px,4vw,64px)] px-[clamp(16px,5vw,72px)] pt-3 pb-12">
         <motion.section
           aria-labelledby="login-title"
           initial={{ opacity: 0, y: 18 }}
@@ -176,10 +176,7 @@ export function Login() {
           className="flex w-full max-w-[440px] flex-col gap-[18px] rounded-hero ah-glass-flat p-[clamp(22px,4vw,36px)] shadow-[0_30px_80px_rgba(0,0,0,.45)]"
         >
           <div>
-            <span className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.16em] text-accent-text before:h-px before:w-[18px] before:bg-accent-text before:content-['']">
-              SECURE ACCESS
-            </span>
-            <h1 id="login-title" className="mt-2.5 mb-0 font-display text-[clamp(28px,4vw,38px)] leading-[1.1] font-bold tracking-[-0.025em]">
+            <h1 id="login-title" className="m-0 font-display text-[clamp(28px,4vw,38px)] leading-[1.1] font-bold tracking-[-0.025em]">
               Welcome aboard
             </h1>
             <p className="mt-1.5 mb-0 text-sm text-ink-2">Sign in to monitor crew health and stay connected with mission medicine.</p>
@@ -190,7 +187,7 @@ export function Login() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.5, ease: EASE_ENTER }}
-            className="flex flex-col gap-2 rounded-[15px] border-[1.5px] border-accent bg-[rgba(74,104,236,.08)] px-[18px] py-4 shadow-[0_0_25px_rgba(74,104,236,.12)]"
+            className="flex flex-col gap-2 rounded-[15px] border-[1.5px] border-accent bg-[rgba(74,104,236,.08)] px-[18px] py-4"
           >
             <div className="flex items-center gap-3">
               <span className="relative flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-accent text-white">
@@ -207,12 +204,12 @@ export function Login() {
               </div>
             </div>
             {connection === "offline" ? (
-              <p className="m-0 flex items-center gap-2 text-[13px] text-check-fg" role="status">
+              <p className="m-0 flex items-center gap-2 text-label text-check-fg" role="status">
                 <span className="h-2 w-2 rounded-full bg-check-fg animate-[ah-pulse-dot_0.8s_ease-in-out_infinite]" />
                 Reconnecting to the station… a card tapped now will still sign you in.
               </p>
             ) : (
-              <p className="m-0 flex items-center gap-2 text-[13px] text-accent-text" role="status">
+              <p className="m-0 flex items-center gap-2 text-label text-accent-text" role="status">
                 <span className="h-2 w-2 rounded-full bg-accent-text animate-[ah-pulse-dot_1.2s_ease-in-out_infinite]" />
                 Waiting for a card tap…
               </p>
@@ -220,7 +217,7 @@ export function Login() {
             {/* Only affects a tap made from the web (the Simulator's NFC buttons) -- a
                 real physical tap on actual hardware always signs in its own CYD too,
                 since there's no way for real hardware to know this browser's choice. */}
-            <div className="mt-1 flex flex-col gap-1.5 border-t border-[rgba(74,104,236,.18)] pt-2.5 text-[12px] text-ink-2">
+            <div className="mt-1 flex flex-col gap-1.5 border-t border-[rgba(74,104,236,.18)] pt-2.5 text-xs text-ink-2">
               <label className="flex cursor-pointer items-center gap-2">
                 <input type="radio" name="scan-mode" checked={scanMode === "cyd"} onChange={() => setLoginScanMode("cyd")} />
                 Also sign in my CYD
@@ -242,14 +239,14 @@ export function Login() {
           >
             <form onSubmit={submitPassword} className="flex flex-col gap-3.5">
               <label className="flex flex-col gap-1.5">
-                <span className="text-[13px] font-medium text-[#dbe2f5]">Username</span>
+                <span className="text-label font-medium text-[#dbe2f5]">Username</span>
                 <span className="relative">
                   <Icon name="user" size={18} className="pointer-events-none absolute top-3.5 left-3.5 text-subtle" />
                   <input className={fieldCls} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" placeholder="ahmad@station.crew" />
                 </span>
               </label>
               <label className="flex flex-col gap-1.5">
-                <span className="text-[13px] font-medium text-[#dbe2f5]">Password</span>
+                <span className="text-label font-medium text-[#dbe2f5]">Password</span>
                 <span className="relative">
                   <Icon name="lock" size={18} className="pointer-events-none absolute top-3.5 left-3.5 text-subtle" />
                   <input
@@ -321,8 +318,26 @@ export function Login() {
             <button onClick={() => setContactOpen(true)} className="cursor-pointer text-accent-text hover:underline">Contact mission ops</button>{" "}
             to get set up.
           </p>
-          <p className="m-0 text-center text-[10px] text-placeholder">{STRINGS.footerDisclaimer}</p>
+          <p className="m-0 text-center text-caption text-placeholder">{STRINGS.footerDisclaimer}</p>
         </motion.section>
+
+        {/* Show the actual product: a real screenshot of the crew Overview (demo data),
+            wide screens only -- phones go straight to signing in. */}
+        <motion.figure
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.9, ease: EASE_ENTER }}
+          className="m-0 hidden min-w-0 flex-1 lg:block"
+        >
+          <img
+            src="/preview/overview.jpg"
+            width={1440}
+            height={900}
+            alt="The crew Overview after signing in: today's status, Astra's health analysis and the latest readings"
+            className="block h-auto w-full rounded-card-l border border-line shadow-[0_30px_80px_rgba(0,0,0,.45)]"
+          />
+          <figcaption className="mt-3 text-label text-muted">After you sign in: your status, Astra’s health analysis and today’s readings, live.</figcaption>
+        </motion.figure>
       </main>
 
       <Modal open={contactOpen} onClose={() => setContactOpen(false)} title="Mission operations">

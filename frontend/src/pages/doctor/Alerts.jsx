@@ -49,7 +49,7 @@ function AlertRow({ item, crewById, onAck, busy }) {
       </span>
       <div className="min-w-[200px] flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[16px] font-semibold">{item.title}</span>
+          <span className="text-base font-semibold">{item.title}</span>
           {item.acked
             ? <StatusChip level="GRAY" plain text="Acknowledged" />
             : <StatusChip level={item.level} text={item.level === "GRAY" ? "No data" : undefined} />}
@@ -67,7 +67,7 @@ function AlertRow({ item, crewById, onAck, busy }) {
       </div>
       <div className="flex gap-2 max-sm:w-full">
         {item.kind === "alert" && !item.acked && (
-          <Button className="min-h-11 max-sm:flex-1" onClick={() => onAck(item.alertId)} disabled={busy}>
+          <Button className="min-h-11 max-sm:flex-1" onClick={() => onAck(item.alertId)} busy={busy}>
             <Icon name="tick" size={16} /> Acknowledge
           </Button>
         )}
@@ -159,12 +159,12 @@ export default function Alerts() {
             label: (
               <span className="inline-flex items-center gap-2">
                 {label}
-                <span className={cx("rounded-full px-1.5 text-[11px] font-bold", v === level ? "bg-white/25" : "bg-raised")}>{counts[v]}</span>
+                <span className={cx("rounded-full px-1.5 text-caption font-bold", v === level ? "bg-white/25" : "bg-raised")}>{counts[v]}</span>
               </span>
             ),
           }))}
         />
-        <label className="ml-auto flex items-center gap-2 text-[13px] text-muted">
+        <label className="ml-auto flex items-center gap-2 text-label text-muted">
           <span className="max-sm:hidden">Crew member</span>
           <select value={who} onChange={(e) => setWho(e.target.value)} className="ah-input min-h-11 w-44 text-sm" aria-label="Crew member">
             <option value="all">All crew</option>
@@ -179,7 +179,7 @@ export default function Alerts() {
           role="switch"
           aria-checked={showAcked}
           onClick={() => setShowAcked((v) => !v)}
-          className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink-2"
+          className="flex cursor-pointer items-center gap-2.5 text-label text-ink-2"
         >
           <span className={cx("relative block h-6 w-10 shrink-0 rounded-full transition-colors", showAcked ? "bg-accent" : "bg-line-strong")}>
             <span className={cx("absolute top-1 left-0 h-4 w-4 rounded-full bg-white transition-transform", showAcked ? "translate-x-5" : "translate-x-1")} />
@@ -187,7 +187,7 @@ export default function Alerts() {
           Show acknowledged
         </button>
         {openAlertIds.length > 1 && (
-          <Button className="ml-auto min-h-10 text-[13px]" onClick={() => ack(openAlertIds)} disabled={busy}>
+          <Button className="ml-auto min-h-10 text-label" onClick={() => ack(openAlertIds)} busy={busy}>
             <Icon name="tick" size={15} /> Acknowledge all {openAlertIds.length}
           </Button>
         )}

@@ -16,7 +16,7 @@ import { motion } from "motion/react";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { fmtTime, formatHours, MOOD_LABELS, moodScore, sleepHours } from "../../lib/format.js";
 import { useContent, useCrew, useHistory, useMission, useSummary, useThread } from "../../lib/queries.js";
-import { Avatar, Card, CardTitle, Progress, Segmented, Shimmer, StatusChip, cx } from "../../components/ui/index.jsx";
+import { Avatar, Card, CardTitle, Progress, Segmented, Shimmer, StatusChip, cx, TrendLabel } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
 import { VitalTile } from "../../components/VitalTile.jsx";
 import { AiAnalysisCard } from "../../components/AiAnalysisCard.jsx";
@@ -89,7 +89,7 @@ function Header({ person, summary, mission, onJump }) {
         </div>
         <div className="flex min-w-[220px] flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h2 className="m-0 font-display text-[30px] leading-none font-bold tracking-tight">{person.name}</h2>
+            <h2 className="m-0 font-display text-display leading-none font-bold tracking-tight">{person.name}</h2>
             <StatusChip level={person.status} label="Today" text={person.status === "GRAY" ? "No data" : undefined} />
             {person.session_active && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent-text">
@@ -111,19 +111,19 @@ function Header({ person, summary, mission, onJump }) {
               <Icon name={flag.level === "GRAY" ? "no-data" : "alert"} size={18} />
             </span>
             <span className="min-w-0">
-              <span className="block text-[11px] font-bold tracking-[0.1em] uppercase opacity-90">{flag.level === "RED" ? "Alert" : flag.level === "YELLOW" ? "Check" : "No data"}</span>
-              <span className="block truncate text-[15px] font-semibold text-ink">{flag.text}</span>
+              <span className="block text-caption font-bold tracking-[0.1em] uppercase opacity-90">{flag.level === "RED" ? "Alert" : flag.level === "YELLOW" ? "Check" : "No data"}</span>
+              <span className="block truncate text-body font-semibold text-ink">{flag.text}</span>
             </span>
           </button>
         )}
       </div>
       <div className="flex flex-wrap gap-2 border-t border-line pt-4">
         {[["/trends", "trends", "Trends"], ["/body", "doctor-ai", "Body & Astra"], ["/today", "schedule", "Today"]].map(([to, icon, label]) => (
-          <button key={to} onClick={() => open(to)} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl bg-raised px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-control hover:text-ink">
+          <button key={to} onClick={() => open(to)} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-[var(--radius-inner)] bg-raised px-3.5 text-label font-semibold text-ink-2 hover:bg-control hover:text-ink">
             <Icon name={icon} size={15} /> {label}
           </button>
         ))}
-        <a href={`/api/export/${person.id}.csv`} className="ml-auto flex min-h-10 items-center gap-2 rounded-xl bg-raised px-3.5 text-[13px] font-semibold text-ink-2 hover:bg-control hover:text-ink">
+        <a href={`/api/export/${person.id}.csv`} className="ml-auto flex min-h-10 items-center gap-2 rounded-[var(--radius-inner)] bg-raised px-3.5 text-label font-semibold text-ink-2 hover:bg-control hover:text-ink">
           <Icon name="send" size={15} /> Send to Earth (CSV)
         </a>
       </div>
@@ -162,7 +162,7 @@ function Mental({ id, mission }) {
   const firstHalf = scores.slice(0, Math.ceil(scores.length / 2));
   const secondHalf = scores.slice(Math.ceil(scores.length / 2));
   const avg = (a) => a.reduce((s, v) => s + v, 0) / a.length;
-  const trend = scores.length < 3 ? "Not enough check-ins" : avg(secondHalf) - avg(firstHalf) > 0.3 ? "↗ Improving" : avg(secondHalf) - avg(firstHalf) < -0.3 ? "↘ Lower" : "→ Stable";
+  const trend = scores.length < 3 ? null : avg(secondHalf) - avg(firstHalf) > 0.3 ? "up" : avg(secondHalf) - avg(firstHalf) < -0.3 ? "down" : "flat";
   return (
     <Card id="sec-mental" className="flex scroll-mt-24 flex-col gap-4">
       <CardTitle title="Mental health" right={<StatusChip level={level} text={score ? MOOD_LABELS[score] : "No data"} plain />} className="mb-0" />
@@ -171,7 +171,7 @@ function Mental({ id, mission }) {
         <dl className="m-0 min-w-[200px] flex-1 text-sm">
           <div className="flex justify-between border-b border-divider py-2.5"><dt className="text-ink-2">Mood</dt><dd className="m-0 font-semibold">{score ? MOOD_LABELS[score] : "–"}</dd></div>
           <div className="flex justify-between border-b border-divider py-2.5"><dt className="text-ink-2">Mission risk (mind)</dt><dd className={cx("m-0 font-semibold", RISK_TEXT[risk])}>{risk ? risk[0] + risk.slice(1).toLowerCase() : "–"}</dd></div>
-          <div className="flex justify-between py-2.5"><dt className="text-ink-2">Mood, last 7 days</dt><dd className="m-0 font-semibold">{trend}</dd></div>
+          <div className="flex justify-between py-2.5"><dt className="text-ink-2">Mood, last 7 days</dt><dd className="m-0"><TrendLabel direction={trend} text={trend ? undefined : "Not enough check-ins"} /></dd></div>
         </dl>
       </div>
     </Card>
@@ -185,7 +185,7 @@ function SleepCard({ summary }) {
     <Card id="sec-sleep" className="flex scroll-mt-24 flex-col gap-4">
       <CardTitle title="Sleep · last night" right={r ? <StatusChip level={r.level} /> : <StatusChip level="GRAY" text="No data" plain />} className="mb-0" />
       <div className="flex flex-wrap items-baseline gap-3">
-        <span className="font-display text-[44px] leading-none font-bold tracking-tight">{r ? formatHours(sleepHours(r.value)) : "–"}</span>
+        <span className="font-display text-jumbo leading-none font-bold tracking-tight">{r ? formatHours(sleepHours(r.value)) : "–"}</span>
         {(v.bedtime || v.wake_time) && <span className="text-sm text-muted">Bedtime {v.bedtime || "–"} · Wake {v.wake_time || "–"}</span>}
       </div>
       {r ? (
@@ -211,7 +211,7 @@ function MissionRisk({ summary, mission, content }) {
     <Section
       id="mission"
       title={`Body systems on ${mission?.profile?.label || "this mission"}`}
-      right={checks.length > 0 && <span className="rounded-full bg-raised px-3 py-1 text-[13px] text-ink-2"><b className="text-ink">{done} of {checks.length}</b> checks done in the last 24 h</span>}
+      right={checks.length > 0 && <span className="rounded-full bg-raised px-3 py-1 text-label text-ink-2"><b className="text-ink">{done} of {checks.length}</b> checks done in the last 24 h</span>}
     >
       <Card className="flex flex-col gap-3">
         {checks.length > 0 && <Progress value={done / checks.length} />}
@@ -300,7 +300,7 @@ export default function CrewProfile() {
               {active === sec && <motion.span layoutId="profile-tab" className="absolute inset-0 rounded-xl bg-accent" transition={{ type: "spring", stiffness: 420, damping: 36 }} />}
               <span className="relative inline-flex items-center gap-1.5">
                 {label}
-                {sec === "messages" && inTransit > 0 && <span className="rounded-full bg-white/25 px-1.5 text-[11px] font-bold">{inTransit}</span>}
+                {sec === "messages" && inTransit > 0 && <span className="rounded-full bg-white/25 px-1.5 text-caption font-bold">{inTransit}</span>}
               </span>
             </button>
           ))}
@@ -318,7 +318,7 @@ export default function CrewProfile() {
 
       <MissionRisk summary={summary.data} mission={mission.data} content={content.data} />
 
-      <Section id="messages" title={`Messages with ${person.name}`} right={<span className="text-[13px] text-muted">Every message waits out the comms delay to {mission.data?.profile?.label || "the crew"}.</span>}>
+      <Section id="messages" title={`Messages with ${person.name}`} right={<span className="text-label text-muted">Every message waits out the comms delay to {mission.data?.profile?.label || "the crew"}.</span>}>
         <Card><Thread astroId={id} name={person.name} viewer="surgeon" canReply /></Card>
       </Section>
     </>

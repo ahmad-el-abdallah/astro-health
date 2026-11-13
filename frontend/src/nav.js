@@ -10,7 +10,7 @@
 export const CREW_NAV = [
   {
     group: null,
-    items: [{ to: "/", label: "Overview", title: "Mission overview", eyebrow: "Crew health · Live", icon: "overview", end: true }],
+    items: [{ to: "/", label: "Overview", title: "Mission overview", icon: "overview", end: true }],
   },
   {
     group: "Daily check-ins",
@@ -23,14 +23,14 @@ export const CREW_NAV = [
   {
     group: "Health",
     items: [
-      { to: "/body", label: "Astra & body", eyebrow: "Digital twin", icon: "doctor-ai" },
-      { to: "/trends", label: "Trends", eyebrow: "Health analytics", icon: "trends" },
+      { to: "/body", label: "Astra & body", eyebrow: "Health", icon: "doctor-ai" },
+      { to: "/trends", label: "Trends", eyebrow: "Health", icon: "trends" },
     ],
   },
   {
     group: "Mission",
     items: [
-      { to: "/mission", label: "Mission health", eyebrow: "Mission environment", icon: "mission" },
+      { to: "/mission", label: "Mission health", eyebrow: "Mission", icon: "mission" },
     ],
   },
 ];
@@ -46,7 +46,7 @@ export const DOCTOR_NAV = [
   {
     group: "Crew data",
     items: [
-      { to: "/", label: "Live overview", title: "Mission overview", eyebrow: "Crew health · Live", icon: "overview", end: true },
+      { to: "/", label: "Live overview", title: "Mission overview", icon: "overview", end: true },
       { to: "/today", label: "Today", title: "Today’s check-ins", icon: "schedule" },
       { to: "/mind", label: "Mind & mood", icon: "mind" },
       { to: "/sleep", label: "Sleep lab", icon: "sleep" },

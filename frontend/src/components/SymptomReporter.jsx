@@ -47,7 +47,7 @@ export function SymptomReporter({ open, onClose, astroId }) {
               onClick={() => toggle(s.id)}
               aria-pressed={on}
               className={cx(
-                "min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] transition-colors duration-200",
+                "min-h-9 cursor-pointer rounded-full border px-3.5 text-label transition-colors duration-200",
                 on ? "border-accent bg-accent font-semibold text-accent-on" : "border-line-strong bg-raised text-ink hover:border-accent-text/60",
               )}
             >
@@ -70,7 +70,7 @@ export function SymptomReporter({ open, onClose, astroId }) {
                 className="rounded-xl border border-line bg-raised p-3"
               >
                 <strong className="text-sm">{s.label}</strong>
-                <p className="m-0 mt-1 text-[13px] text-muted">{s.guidance}</p>
+                <p className="m-0 mt-1 text-label text-muted">{s.guidance}</p>
               </motion.div>
             ) : null;
           })}

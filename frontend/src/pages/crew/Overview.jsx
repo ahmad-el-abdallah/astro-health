@@ -12,7 +12,7 @@ import { fmtTime, formatHours, INDICATORS, MOOD_LABELS, moodScore, sleepHours, S
 import { worstOf } from "../../lib/levels.js";
 import { useContent, useHealthRules, useHistory, useMission, useSummary, useSymptomCatalog } from "../../lib/queries.js";
 import { useSocketEvent } from "../../lib/socket.js";
-import { Avatar, Button, Card, CardTitle, Progress, StatusChip, cx } from "../../components/ui/index.jsx";
+import { Avatar, Button, Card, CardTitle, Progress, Shimmer, StatusChip, TrendLabel, cx } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
 import { EASE_ENTER, rise } from "../../components/ui/motion.js";
 import { VitalTile } from "../../components/VitalTile.jsx";
@@ -68,19 +68,14 @@ function Hero({ summary }) {
   const a = summary?.astronaut;
   const level = heroLevel(summary);
   return (
-    <Card className="flex flex-[2_1_560px] flex-wrap items-center gap-7 p-7 max-md:gap-5 max-md:p-5">
-      <motion.div
-        className={cx("rounded-full border-4 p-1.5 transition-colors duration-500", RING[level])}
-        animate={level === "RED" ? { scale: [1, 1.03, 1] } : { scale: 1 }}
-        transition={level === "RED" ? { duration: 1.6, repeat: Infinity } : undefined}
-      >
-        <Avatar name={a?.name} color={a?.color} size={96} />
-      </motion.div>
+    <Card className="flex min-w-0 flex-[2_1_560px] flex-wrap items-center gap-7 p-7 max-md:gap-5 max-md:p-5">
+      <div className={cx("rounded-full border-4 p-1.5 transition-colors duration-500", RING[level])}>
+        <Avatar name={a?.name} color={a?.color} size={104} />
+      </div>
       {/* 240px basis: on a phone the text drops under the avatar instead of being squeezed. */}
-      <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-2.5">
+      <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <strong className="text-base">{a?.name}</strong>
-          <span className="text-muted">· Overall status</span>
           <StatusChip level={level} />
         </div>
         <AnimatePresence mode="wait">
@@ -90,7 +85,7 @@ function Hero({ summary }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.3 }}
-            className="m-0 font-display text-[22px] leading-[1.3] font-semibold tracking-[-0.01em]"
+            className="m-0 font-display text-display font-semibold tracking-[-0.015em]"
           >
             {statusLine(summary)}
           </motion.p>
@@ -111,13 +106,10 @@ function SymptomCard({ summary, onReport }) {
 
   if (!labels.length) {
     return (
-      <Card className="flex flex-[1_1_300px] flex-col gap-3 p-6">
-        <div className="flex items-center justify-between">
-          <StatusChip level="GREEN" text="Clear" />
-          <span className="text-[13px] text-muted">Symptoms</span>
-        </div>
-        <h2 className="m-0 font-display text-[26px] font-semibold tracking-tight">How are you feeling?</h2>
-        <p className="m-0 text-sm text-ink-2">No symptoms reported today. Report anything unusual so Astra and the flight surgeon can help.</p>
+      <Card className="flex min-w-0 flex-[1_1_300px] flex-col gap-3 p-6">
+        <StatusChip level="GREEN" text="No symptoms today" className="self-start" />
+        <h2 className="m-0 font-display text-display font-semibold tracking-tight">How are you feeling?</h2>
+        <p className="m-0 text-sm text-ink-2">Report anything unusual so Astra and the flight surgeon can help.</p>
         <div className="mt-auto flex flex-wrap gap-2">
           <Button variant="primary" onClick={onReport}>Report a symptom</Button>
           <Link to="/body" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-accent-text hover:underline">Talk to Astra</Link>
@@ -130,15 +122,15 @@ function SymptomCard({ summary, onReport }) {
   return (
     <Card
       className={cx(
-        "flex flex-[1_1_300px] flex-col gap-3 p-6",
-        red ? "border-alert-border bg-alert-surface" : "border-check-edge/60 bg-[#241f12]",
+        "flex min-w-0 flex-[1_1_300px] flex-col gap-3 p-6",
+        red ? "border-alert-border bg-alert-surface" : "border-check-edge/60 bg-check-bg/50",
       )}
     >
       <div className="flex items-center justify-between">
         <StatusChip level={s.level} />
-        <span className="text-[13px] text-muted">Reported symptom{labels.length > 1 ? "s" : ""}</span>
+        <span className="text-label text-muted">Reported symptom{labels.length > 1 ? "s" : ""}</span>
       </div>
-      <h2 className="m-0 font-display text-[28px] leading-tight font-semibold tracking-tight">{labels[0]}</h2>
+      <h2 className="m-0 font-display text-display leading-tight font-semibold tracking-tight">{labels[0]}</h2>
       {labels.length > 1 && <p className="m-0 text-sm text-ink-2">Also: {labels.slice(1).join(", ")}</p>}
       <p className="m-0 text-sm text-ink-2">Describe it to Astra or tap your digital twin to get next steps.</p>
       <div className="mt-auto flex flex-wrap items-center gap-2">
@@ -162,11 +154,11 @@ function TrendSection({ astroId }) {
   const [indicator, setIndicator] = useState("heart_rate");
   const [days, setDays] = useState(30);
   return (
-    <Card className="flex flex-[2_1_560px] flex-col gap-4">
+    <Card className="flex min-w-0 flex-[2_1_560px] flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="m-0 text-base font-semibold">Trend</h2>
-          <p className="m-0 text-[13px] text-muted">Shaded bands show the normal and caution ranges</p>
+          <p className="m-0 text-label text-muted">Shaded bands show the normal and caution ranges</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <label className="flex flex-col gap-1 text-xs text-muted">
@@ -197,11 +189,11 @@ function Wellbeing({ astroId, mission }) {
   const latest = rows.at(-1);
   const score = latest ? moodScore(latest.value) : null;
   const prev = rows.length > 1 ? moodScore(rows.at(-2).value) : null;
-  const trend = score == null ? "–" : prev == null || score === prev ? "→ Stable" : score > prev ? "↗ Improving" : "↘ Lower";
+  const trend = score == null || prev == null ? null : score === prev ? "flat" : score > prev ? "up" : "down";
   const level = score == null ? "GRAY" : score >= 4 ? "GREEN" : score === 3 ? "YELLOW" : "RED";
   const risk = mission?.health?.body_risks?.brain?.risk;
   return (
-    <Card className="flex flex-[1_1_300px] flex-col gap-5">
+    <Card className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
       <CardTitle title="Wellbeing today" right={<StatusChip level={level} text={score ? MOOD_LABELS[score] : "No data"} plain />} className="mb-0" />
       <div className="flex flex-wrap items-center gap-6">
         <RingGauge value={score == null ? null : Math.round((score / 5) * 100)} ariaLabel={`Wellbeing ${score ? Math.round((score / 5) * 100) : "unknown"} percent`} />
@@ -211,7 +203,7 @@ function Wellbeing({ astroId, mission }) {
             <dt className="text-ink-2">Mission risk (mind)</dt>
             <dd className={cx("m-0 font-semibold", RISK_TEXT[risk])}>{risk ? risk.charAt(0) + risk.slice(1).toLowerCase() : "–"}</dd>
           </div>
-          <div className="flex justify-between py-2.5"><dt className="text-ink-2">7-day trend</dt><dd className="m-0 font-semibold">{trend}</dd></div>
+          <div className="flex justify-between py-2.5"><dt className="text-ink-2">7-day trend</dt><dd className="m-0"><TrendLabel direction={trend} text={trend ? undefined : "–"} /></dd></div>
         </dl>
       </div>
       <Button className="mt-auto w-full" onClick={() => navigate("/mind")}>Daily check-in</Button>
@@ -282,18 +274,18 @@ function NewReading({ astroId, eva = false }) {
 
   const steps = guide && content.data?.measure_guides?.[guide];
   return (
-    <Card className="flex flex-[2_1_560px] flex-col gap-5">
+    <Card className="flex min-w-0 flex-[2_1_560px] flex-col gap-5">
       <CardTitle
         title="Take a new reading"
         subtitle={eva ? "On a spacewalk: your suit's sensors are included, and the AI watches them" : "Enter today's vitals, then assess them against your baseline"}
         className="mb-0"
         right={
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" className="min-h-9 px-3 text-[13px]" onClick={() => fillSimulated()}>
+            <Button variant="ghost" className="min-h-9 px-3 text-label" onClick={() => fillSimulated()}>
               <Icon name="simulator" size={15} /> Use simulated vitals
             </Button>
             {eva && (
-              <Button variant="ghost" className="min-h-9 px-3 text-[13px] text-check-fg" onClick={() => fillSimulated(astroId, true)}>
+              <Button variant="ghost" className="min-h-9 px-3 text-label text-check-fg" onClick={() => fillSimulated(astroId, true)}>
                 <Icon name="alert" size={15} /> Simulate suit problem
               </Button>
             )}
@@ -305,7 +297,7 @@ function NewReading({ astroId, eva = false }) {
           <div key={f.key} className="flex flex-col gap-1.5">
             <span className="text-sm font-semibold">
               {f.label} <span className="font-normal text-muted">{f.unit}</span>
-              {f.suit && <span className="ml-2 rounded-full bg-check-bg px-2 py-0.5 text-[11px] font-semibold text-check-fg">EVA suit</span>}
+              {f.suit && <span className="ml-2 rounded-full bg-check-bg px-2 py-0.5 text-caption font-semibold text-check-fg">EVA suit</span>}
             </span>
             {f.key === "blood_pressure" ? (
               <div className="flex gap-2">
@@ -330,7 +322,7 @@ function NewReading({ astroId, eva = false }) {
               type="button"
               onClick={() => setGuide((g) => (g === f.key ? null : f.key))}
               aria-expanded={guide === f.key}
-              className="w-fit cursor-pointer text-left text-[13px] text-accent-text underline underline-offset-2 hover:text-ink"
+              className="w-fit cursor-pointer text-left text-label text-accent-text underline underline-offset-2 hover:text-ink"
             >
               {STRINGS.howToMeasure}
             </button>}
@@ -350,7 +342,7 @@ function NewReading({ astroId, eva = false }) {
           >
             <div className="rounded-2xl border border-line bg-raised p-4">
               <strong className="text-sm">{steps.title}</strong>
-              <ol className="m-0 mt-2 list-decimal space-y-1 pl-5 text-[13px] text-ink-2">
+              <ol className="m-0 mt-2 list-decimal space-y-1 pl-5 text-label text-ink-2">
                 {steps.steps.map((s, i) => <li key={i}>{s}</li>)}
               </ol>
             </div>
@@ -359,7 +351,7 @@ function NewReading({ astroId, eva = false }) {
       </AnimatePresence>
 
       <div className="flex flex-wrap items-center gap-4">
-        <Button variant="primary" onClick={assess} disabled={busy}>{STRINGS.assessButton}</Button>
+        <Button variant="primary" onClick={assess} busy={busy}>{STRINGS.assessButton}</Button>
         <AnimatePresence mode="wait">
           {result?.overall_level ? (
             <motion.div key="r" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} className="flex flex-wrap items-center gap-2 text-sm">
@@ -368,7 +360,7 @@ function NewReading({ astroId, eva = false }) {
               {result.analysis_pending && <span className="text-accent-text">· the AI is analyzing, see the AI card above</span>}
             </motion.div>
           ) : (
-            <motion.span key="h" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-[13px] text-muted">
+            <motion.span key="h" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-label text-muted">
               {result?.empty ? "Enter at least one reading first." : "Results update your status and mission checks"}
             </motion.span>
           )}
@@ -386,7 +378,7 @@ function SleepCard({ summary }) {
     <Card className="flex flex-col gap-3.5">
       <CardTitle title="Last night's sleep" right={<StatusChip level={r?.level || "GRAY"} />} className="mb-0" />
       <div className="flex flex-wrap items-baseline gap-3">
-        <span className="font-display text-[34px] leading-none font-bold tracking-tight">{r ? formatHours(sleepHours(r.value)) : "No data"}</span>
+        <span className="font-display text-hero leading-none font-bold tracking-tight">{r ? formatHours(sleepHours(r.value)) : "No data"}</span>
         {v.bedtime && <span className="text-sm text-ink-2">{v.bedtime} → {v.wake_time}</span>}
       </div>
       <StageBar />
@@ -407,7 +399,7 @@ function MissionChecks({ summary, mission, rules }) {
   const rows = [...plan].sort((a, b) => (today[a.indicator] ? 1 : 0) - (today[b.indicator] ? 1 : 0)).slice(0, 4);
   return (
     <Card className="flex flex-col gap-3.5">
-      <CardTitle title="Mission checks" right={<span className="text-[13px] text-muted">{done} of {plan.length} · last 24 h</span>} className="mb-0" />
+      <CardTitle title="Mission checks" right={<span className="text-label text-muted">{done} of {plan.length} · last 24 h</span>} className="mb-0" />
       <Progress value={plan.length ? done / plan.length : 0} />
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
         {rows.map((m) => {
@@ -437,21 +429,23 @@ const TASK_CHIP = {
 };
 function TodayStrip({ astroId }) {
   const t = useToday(astroId);
-  if (!t.ready || !t.total) return null;
+  if (!t.ready) return <Shimmer className="h-[84px]" />; // loading: same height as the strip
+  if (!t.total) return null;
   return (
     <Card className="flex flex-wrap items-center gap-x-6 gap-y-3 p-5">
       <div className="flex min-w-[220px] flex-1 flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-2">
           <span className="ah-eyebrow">Daily check-ins</span>
           <span className="text-sm font-semibold">{t.done} of {t.total} done today</span>
-          {t.next && <span className="text-[13px] text-muted">· Next: {t.next.time} {t.next.text}</span>}
+          {t.next && <span className="text-label text-muted">· Next: {t.next.time} {t.next.text}</span>}
         </div>
         <Progress value={t.done / t.total} />
       </div>
       <ul className="m-0 flex list-none flex-wrap gap-2 p-0" aria-label="Today's tasks">
         {t.entries.map((e) => (
-          <li key={e.time + e.kind} title={`${e.text}: ${e.status}`} aria-label={`${e.time} ${e.text}: ${e.status}`} className={cx("rounded-full border px-3 py-1 text-xs font-semibold", TASK_CHIP[e.status] || TASK_CHIP.upcoming)}>
-            {e.time} {e.status === "done" ? "✓" : e.status === "missed" ? "· missed" : e.status === "due" ? "· due" : ""}
+          <li key={e.time + e.kind} title={`${e.text}: ${e.status}`} aria-label={`${e.time} ${e.text}: ${e.status}`} className={cx("inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold", TASK_CHIP[e.status] || TASK_CHIP.upcoming)}>
+            <span className="ah-num">{e.time}</span>
+            {e.status === "done" ? <Icon name="tick" size={12} /> : e.status === "missed" ? " · missed" : e.status === "due" ? " · due" : ""}
           </li>
         ))}
       </ul>
@@ -481,12 +475,12 @@ export default function Overview() {
 
       <TodayStrip astroId={id} />
 
-      <AiAnalysisCard astroId={id} summary={s} />
+      <AiAnalysisCard astroId={id} summary={s} repeatSummary={!(s?.analysis && s.analysis_current)} />
 
       <motion.section variants={rise} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
-          <h2 className="m-0 text-base font-semibold">Latest readings</h2>
-          <span className="text-[13px] text-muted">{eva ? "On a spacewalk: suit sensors first" : "From CYD sensor and check-ins"}</span>
+          <h2 className="m-0 text-title font-semibold">Latest readings</h2>
+          {eva && <span className="text-label text-check-fg">On a spacewalk: suit sensors first</span>}
         </div>
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
           {[...(eva ? SUIT_INDICATORS : []), ...MAIN_TILES, ...extras].map((k) => <VitalTile key={k} indicator={k} reading={today[k]} />)}
@@ -500,7 +494,7 @@ export default function Overview() {
 
       <Row>
         <NewReading astroId={id} eva={eva} />
-        <div className="flex flex-[1_1_300px] flex-col gap-5">
+        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-5">
           <SleepCard summary={s} />
           <MissionChecks summary={s} mission={mission.data} rules={rules.data} />
         </div>

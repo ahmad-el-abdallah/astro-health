@@ -33,13 +33,13 @@ function CrewRow({ person }) {
     }
   }
   return (
-    <form onSubmit={save} className="flex flex-wrap items-center gap-2.5 rounded-2xl bg-raised p-2.5">
+    <form onSubmit={save} className="flex flex-wrap items-center gap-2.5 rounded-[var(--radius-inner)] bg-raised p-2.5">
       <Avatar name={name} color={person.color} size={38} />
       <input className="ah-input min-h-10 min-w-0 flex-1" value={name} onChange={(e) => setDraft(e.target.value)} aria-label={`Name for ${person.name}`} maxLength={60} />
-      <Button type="submit" variant={changed ? "primary" : "secondary"} disabled={!changed} className="min-h-10 px-3.5 text-[13px]">Save</Button>
+      <Button type="submit" variant={changed ? "primary" : "secondary"} disabled={!changed} className="min-h-10 px-3.5 text-label">Save</Button>
       <a
         href={`/api/export/${person.id}.csv`}
-        className="flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold text-accent-text hover:bg-control"
+        className="flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-label font-semibold text-accent-text hover:bg-control"
         title={`Download ${person.name}'s readings as CSV`}
       >
         <Icon name="download" size={15} /> CSV
@@ -80,8 +80,8 @@ function ResetDialog({ open, onClose }) {
           <li key={t} className="flex gap-2"><Icon name="alert" size={15} className="mt-0.5 shrink-0 text-alert-fg" />{t}</li>
         ))}
       </ul>
-      <p className="m-0 text-[13px] text-muted">Superuser (/admin) accounts are kept.</p>
-      <label className="mt-4 flex flex-col gap-1.5 text-[13px] text-ink-2">
+      <p className="m-0 text-label text-muted">Superuser (/admin) accounts are kept.</p>
+      <label className="mt-4 flex flex-col gap-1.5 text-label text-ink-2">
         Type <b className="font-mono text-ink">RESET</b> to confirm
         <input className="ah-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
       </label>

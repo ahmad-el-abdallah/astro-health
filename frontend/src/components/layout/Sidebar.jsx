@@ -66,10 +66,10 @@ function RailTip({ enabled, label, extra, children }) {
               exit={{ opacity: 0, x: -4 }}
               transition={{ duration: 0.14 }}
               style={{ left: pos.x, top: pos.y }}
-              className="pointer-events-none fixed z-[80] flex -translate-y-1/2 items-center gap-2 ah-glass-strong rounded-xl px-3 py-2 text-[13px] font-semibold whitespace-nowrap text-ink shadow-[0_12px_30px_rgba(0,0,0,.45)]"
+              className="pointer-events-none fixed z-[80] flex -translate-y-1/2 items-center gap-2 ah-glass-strong rounded-xl px-3 py-2 text-label font-semibold whitespace-nowrap text-ink shadow-[0_12px_30px_rgba(0,0,0,.45)]"
             >
               {label}
-              {extra != null && <span className="rounded-full bg-alert-action px-1.5 text-[11px] font-bold text-white">{extra}</span>}
+              {extra != null && <span className="rounded-full bg-alert-action px-1.5 text-caption font-bold text-white">{extra}</span>}
             </motion.div>
           )}
         </AnimatePresence>,
@@ -100,7 +100,7 @@ function NavItem({ item, badge, collapsed, pillId, onNavigate }) {
             <Icon name={item.icon} size={19} className="relative shrink-0" />
             <Fade hidden={collapsed} className="relative flex-1 truncate">{item.label}</Fade>
             {badge != null && !collapsed && (
-              <span className={cx("relative rounded-full px-1.5 py-px text-[11px] font-bold", isActive ? "bg-white/25 text-white" : "bg-alert-action text-white")}>{badge}</span>
+              <span className={cx("relative rounded-full px-1.5 py-px text-caption font-bold", isActive ? "bg-white/25 text-white" : "bg-alert-action text-white")}>{badge}</span>
             )}
             {badge != null && collapsed && (
               <span className="absolute top-2 left-[30px] h-2.5 w-2.5 rounded-full bg-alert-action ring-2 ring-[var(--ah-surface-1)]" />
@@ -116,7 +116,7 @@ function NavItem({ item, badge, collapsed, pillId, onNavigate }) {
 function GroupLabel({ text, collapsed }) {
   return (
     <div className="relative flex h-7 items-center px-3">
-      <Fade hidden={collapsed} className="text-[11px] font-semibold tracking-[0.12em] text-subtle uppercase">{text}</Fade>
+      <Fade hidden={collapsed} className="text-caption font-semibold tracking-[0.12em] text-subtle uppercase">{text}</Fade>
       <span className={cx("absolute left-[18px] h-px w-4 bg-line-strong transition-opacity duration-200", collapsed ? "opacity-100" : "opacity-0")} />
     </div>
   );
@@ -142,7 +142,7 @@ function DeviceStatus({ collapsed }) {
           <span className={cx("absolute top-1.5 right-1.5 h-2 w-2 rounded-full", tone.dot, status !== "connected" && "animate-[ah-pulse-dot_1.6s_ease-in-out_infinite]")} />
         </span>
         <Fade hidden={collapsed} className="flex flex-col">
-          <span className="text-[11px] font-semibold tracking-[0.1em] text-subtle uppercase">CYD device</span>
+          <span className="text-caption font-semibold tracking-[0.1em] text-subtle uppercase">CYD device</span>
           <motion.span key={status} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} className={cx("text-xs font-semibold", tone.text)}>
             {label}
           </motion.span>
@@ -172,10 +172,10 @@ export function Sidebar({ collapsed = false, drawer = false, onNavigate, onAccou
       {/* Scrolling happens on this inner layer, so the glass rim stays put. */}
       <div className="flex h-full flex-col gap-4 overflow-x-hidden overflow-y-auto px-3 py-4">
         <div className="flex items-center gap-3 px-[7px]">
-          <Logo width={38} height={38} aria-hidden="true" className="shrink-0 drop-shadow-[0_0_14px_rgb(var(--ah-accent-rgb)/.45)]" />
+          <Logo width={38} height={38} aria-hidden="true" className="shrink-0" />
           <Fade hidden={collapsed} className="flex flex-1 flex-col">
             <span className="font-display text-base leading-tight font-bold tracking-tight">Astro Health</span>
-            <span className="text-[11px] tracking-[0.08em] text-muted">{isSurgeon ? "MEDICAL CONSOLE" : "STATION · CREW"}</span>
+            <span className="text-caption tracking-[0.08em] text-muted">{isSurgeon ? "MEDICAL CONSOLE" : "STATION · CREW"}</span>
           </Fade>
           {drawer && (
             <button onClick={onClose} aria-label="Close menu" className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-ink-2 hover:bg-raised hover:text-ink">
@@ -249,12 +249,12 @@ export function Sidebar({ collapsed = false, drawer = false, onNavigate, onAccou
                           isActive ? "bg-control text-ink" : "text-ink-2 hover:bg-raised hover:text-ink",
                         )}
                       >
-                        <span className={cx("relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-control text-[11px] font-bold text-ink ring-2", RING[a.status] || RING.GRAY)}>
+                        <span className={cx("relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-control text-caption font-bold text-ink ring-2", RING[a.status] || RING.GRAY)}>
                           {a.name?.[0]}
                           <span className={cx("absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--ah-surface-1)]", DOT[a.status] || DOT.GRAY)} />
                         </span>
                         <Fade hidden={collapsed} className="flex-1 truncate">{a.name}</Fade>
-                        {a.session_active && !collapsed && <span className="text-[11px] font-semibold text-accent-text">live</span>}
+                        {a.session_active && !collapsed && <span className="text-caption font-semibold text-accent-text">live</span>}
                       </span>
                     )}
                   </NavLink>

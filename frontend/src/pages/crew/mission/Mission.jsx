@@ -47,7 +47,7 @@ function Planet({ profileId }) {
 
 function Stat({ label, value, suffix }) {
   return (
-    <div className="flex flex-col gap-1 rounded-2xl bg-raised p-3.5">
+    <div className="flex flex-col gap-1 rounded-[var(--radius-inner)] bg-raised p-3.5">
       <span className="text-xs text-muted">{label}</span>
       <span className="font-display text-2xl font-bold tracking-tight">
         {typeof value === "number" ? <AnimatedNumber value={value} decimals={value % 1 ? 2 : 0} /> : value}
@@ -79,11 +79,11 @@ function ConfirmMission({ confirm, onCancel, onConfirm, busy }) {
             <span className={cx("mb-3 flex h-11 w-11 items-center justify-center rounded-2xl", c.kind === "stop" ? "bg-alert-bg text-alert-fg" : "bg-accent-soft text-accent-text")}>
               <Icon name={c.kind === "stop" ? "alert" : "mission"} size={22} />
             </span>
-            <h3 className="m-0 mb-2 font-display text-[21px] font-semibold">{copy.title}</h3>
+            <h3 className="m-0 mb-2 font-display text-heading font-semibold">{copy.title}</h3>
             <p className="m-0 text-sm leading-relaxed text-ink-2">{copy.body}</p>
             <div className="mt-5 flex justify-end gap-2.5">
               <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
-              <Button variant={copy.variant} onClick={onConfirm} disabled={busy} autoFocus>{copy.ok}</Button>
+              <Button variant={copy.variant} onClick={onConfirm} busy={busy} autoFocus>{copy.ok}</Button>
             </div>
           </motion.div>
         </div>
@@ -136,7 +136,7 @@ export default function Mission() {
 
   return (
     <>
-      <p className="m-0 max-w-3xl px-1 text-[15px] text-ink-2">
+      <p className="m-0 max-w-3xl px-1 text-body text-ink-2">
         Five real NASA missions, five different ways space hurts the body. Look through them, then press <b className="text-ink">Start mission</b> to make one the crew's current mission.
       </p>
 
@@ -146,7 +146,7 @@ export default function Mission() {
           ? <span className="text-ink-2">Current mission: <b className="text-ink">{active.label}</b></span>
           : <span className="text-ink-2"><b className="text-ink">No mission selected.</b> Pick a mission below and press Start mission.</span>}
         {active && (
-          <Button variant="secondary" className="ml-auto min-h-9 px-3.5 text-[13px]" onClick={() => setConfirm({ kind: "stop", current: nameOf(activeId) })}>
+          <Button variant="secondary" className="ml-auto min-h-9 px-3.5 text-label" onClick={() => setConfirm({ kind: "stop", current: nameOf(activeId) })}>
             Stop mission
           </Button>
         )}
@@ -173,12 +173,12 @@ export default function Mission() {
               <Icon name={ENV_ICON[k]} size={20} className="relative shrink-0" />
               <span className="relative flex flex-col leading-tight">
                 <span className="font-semibold">{m.all_profiles[k].short || m.all_profiles[k].label}</span>
-                <span className={cx("text-[11px]", on ? "text-accent-on/80" : "text-muted")}>
+                <span className={cx("text-caption", on ? "text-accent-on/80" : "text-muted")}>
                   {m.all_profiles[k].kind === "simulation" ? "Simulation · " : ""}{m.all_profiles[k].status}
                 </span>
               </span>
               {running && (
-                <span className="absolute -top-2 right-2 flex items-center gap-1 rounded-full bg-good-bg px-2 py-0.5 text-[10px] font-bold tracking-wide text-good-fg ring-1 ring-good-fg/40">
+                <span className="absolute -top-2 right-2 flex items-center gap-1 rounded-full bg-good-bg px-2 py-0.5 text-caption font-bold tracking-wide text-good-fg ring-1 ring-good-fg/40">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-good-fg" />ACTIVE
                 </span>
               )}
@@ -198,16 +198,16 @@ export default function Mission() {
         <motion.div key={shownId} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.45 }} className="flex flex-col gap-4 p-6">
           <div className="flex flex-wrap items-center gap-2">
             <span className="ah-eyebrow">{p?.label}</span>
-            <span className={cx("rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide",
+            <span className={cx("rounded-full px-2.5 py-0.5 text-caption font-bold tracking-wide",
               p?.kind === "simulation" ? "bg-check-bg text-check-fg" : "bg-good-bg text-good-fg")}>
               {p?.kind === "simulation" ? "GROUND SIMULATION" : "REAL MISSION"}
             </span>
           </div>
-          <p className="m-0 font-display text-[22px] leading-snug font-semibold">{plan?.headline}</p>
+          <p className="m-0 font-display text-heading leading-snug font-semibold">{plan?.headline}</p>
           <div className="flex flex-wrap items-center gap-2.5">
             {activeId === shownId ? (
               <>
-                <span className="flex min-h-10 items-center gap-2 rounded-xl bg-good-bg px-3.5 text-[13px] font-semibold text-good-fg">
+                <span className="flex min-h-10 items-center gap-2 rounded-xl bg-good-bg px-3.5 text-label font-semibold text-good-fg">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-good-fg" />Mission in progress
                 </span>
                 <Button variant="secondary" className="min-h-10" onClick={() => ask("stop")}>Stop mission</Button>
@@ -224,18 +224,18 @@ export default function Mission() {
             <Stat label="Delay to Earth's doctors" value={delay[0]} suffix={delay[1]} />
             <Stat label="When · how long" value={<span className="text-base leading-snug">{p?.dates}</span>} />
           </div>
-          <div className="flex flex-col gap-1.5 text-[13px]">
+          <div className="flex flex-col gap-1.5 text-label">
             <span className="flex gap-2"><Icon name="hazard-radiation" size={16} className="mt-0.5 shrink-0 text-muted" /><span className="text-ink-2">{p?.radiation}</span></span>
             <span className="flex gap-2"><Icon name="crew" size={16} className="mt-0.5 shrink-0 text-muted" /><span className="text-ink-2">{(p?.crew || []).join(" · ")}</span></span>
             <span className="flex gap-2"><Icon name="mission" size={16} className="mt-0.5 shrink-0 text-muted" /><span className="text-ink-2">{p?.where}</span></span>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[13px]">
+          <div className="flex flex-wrap items-center gap-2 text-label">
             <span className="rounded-full bg-alert-bg px-2.5 py-1 font-semibold text-alert-fg">{counts.HIGH} high-risk</span>
             <span className="rounded-full bg-check-bg px-2.5 py-1 font-semibold text-check-fg">{counts.MEDIUM} medium</span>
             <span className="rounded-full bg-good-bg px-2.5 py-1 font-semibold text-good-fg">{counts.LOW} low</span>
             <span className="text-muted">body systems on this mission</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[13px]">
+          <div className="flex flex-wrap items-center gap-2 text-label">
             <span className="text-muted">Main hazards</span>
             {(p?.main_concerns || []).map((h) => (
               <span key={h} className="flex items-center gap-1.5 rounded-full border border-line-strong px-2.5 py-1 text-ink-2">
@@ -249,7 +249,7 @@ export default function Mission() {
       <section className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
           <h2 className="m-0 font-display text-xl font-semibold">What this mission does to your body</h2>
-          <span className="text-[13px] text-muted"><b className="text-ink-2">Mission risk</b> = how hard this mission hit that body system, from what NASA reported. <b className="text-ink-2">Now</b> = this astronaut's latest readings.</span>
+          <span className="text-label text-muted"><b className="text-ink-2">Mission risk</b> = how hard this mission hit that body system, from what NASA reported. <b className="text-ink-2">Now</b> = this astronaut's latest readings.</span>
         </div>
         {!plan ? (
           <Card><p className="m-0 text-sm text-muted">No health plan for this mission yet. Add one to config/mission_health.json.</p></Card>
@@ -267,12 +267,12 @@ export default function Mission() {
                   className={cx("flex cursor-pointer flex-col gap-2.5 ah-glass rounded-card-s border-l-4 p-4 text-left", att?.cls)}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <strong className="text-[15px]">{content.data?.body_parts?.[part]?.label || part}</strong>
+                    <strong className="text-body">{content.data?.body_parts?.[part]?.label || part}</strong>
                     <RiskMeter risk={r.risk} />
                   </div>
                   <StatusChip level={level} label="Now" text={level === "GRAY" ? "no data" : undefined} />
-                  <p className="m-0 text-[13px] text-muted">{r.why}</p>
-                  {att && <span className={cx("text-[13px] font-semibold", att.tone)}>{att.text}</span>}
+                  <p className="m-0 text-label text-muted">{r.why}</p>
+                  {att && <span className={cx("text-label font-semibold", att.tone)}>{att.text}</span>}
                 </motion.button>
               );
             })}
@@ -282,7 +282,7 @@ export default function Mission() {
 
       {plan && (
         <Card className="flex flex-col gap-4">
-          <CardTitle title="What to monitor on this mission" right={<span className="text-[13px] text-muted">{done} of {checks.length} checks done in the last 24 h</span>} className="mb-0" />
+          <CardTitle title="What to monitor on this mission" right={<span className="text-label text-muted">{done} of {checks.length} checks done in the last 24 h</span>} className="mb-0" />
           <Progress value={checks.length ? done / checks.length : 0} />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
@@ -317,7 +317,7 @@ export default function Mission() {
 
       {p?.sources?.length > 0 && (
         <Card className="flex flex-col gap-3">
-          <CardTitle title="Where this comes from" right={<span className="text-[13px] text-muted">Risk levels are our summary; the facts are from these sources</span>} className="mb-0" />
+          <CardTitle title="Where this comes from" subtitle="Risk levels are our summary; the facts are from these sources" className="mb-0" />
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
             {p.sources.map((s) => (
               <li key={s.url}>
@@ -326,7 +326,7 @@ export default function Mission() {
             ))}
           </ul>
           {p.dataset && (
-            <a href={p.dataset.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 self-start rounded-xl bg-accent-soft px-3.5 py-2 text-[13px] font-semibold text-accent-text hover:bg-accent hover:text-accent-on">
+            <a href={p.dataset.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 self-start rounded-xl bg-accent-soft px-3.5 py-2 text-label font-semibold text-accent-text hover:bg-accent hover:text-accent-on">
               <Icon name="download" size={16} />NASA dataset: {p.dataset.title}
             </a>
           )}

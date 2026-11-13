@@ -24,7 +24,7 @@ export function RingGauge({ value, size = 140, stroke = 12, suffix = "%", ariaLa
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="font-display text-[38px] font-bold tracking-tight">
+        <span className="font-display text-hero font-bold tracking-tight">
           {value == null ? "–" : <AnimatedNumber value={value} />}
         </span>
         {value != null && <span className="mt-3 text-sm text-muted">{suffix}</span>}

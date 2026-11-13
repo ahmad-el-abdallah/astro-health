@@ -9,7 +9,7 @@ import { useAstronautPicker } from "../../../auth/AuthProvider.jsx";
 import { post } from "../../../lib/api.js";
 import { fmtTime, MOOD_LABELS, moodScore } from "../../../lib/format.js";
 import { useHistory, useJournal, useMission } from "../../../lib/queries.js";
-import { Button, Card, CardTitle, StatusChip, cx } from "../../../components/ui/index.jsx";
+import { Button, Card, CardTitle, StatusChip, TrendLabel, cx } from "../../../components/ui/index.jsx";
 import { Icon } from "../../../components/ui/Icon.jsx";
 import { EASE_ENTER } from "../../../components/ui/motion.js";
 import { RingGauge } from "../../../components/charts/RingGauge.jsx";
@@ -47,7 +47,7 @@ function CheckIn({ astroId }) {
   }
   return (
     <Card className="flex flex-[2_1_520px] flex-col gap-5">
-      <CardTitle eyebrow="Daily check-in" title="How are you feeling right now?" right={<span className="font-mono text-xs text-subtle">01</span>} className="mb-0" />
+      <CardTitle title="How are you feeling right now?" className="mb-0" />
       <div role="radiogroup" aria-label="Mood" className="grid grid-cols-5 gap-2 max-sm:grid-cols-3">
         {MOODS.map(([id, label, Face]) => {
           const on = mood === id;
@@ -73,10 +73,10 @@ function CheckIn({ astroId }) {
         })}
       </div>
       <label className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-medium">What's on your mind? <span className="text-muted">Optional</span></span>
+        <span className="text-label font-medium">What's on your mind? <span className="text-muted">Optional</span></span>
         <textarea className="ah-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Write a short note about how you're feeling…" />
       </label>
-      <Button variant="primary" className="w-fit" onClick={log} disabled={busy}>Log mood</Button>
+      <Button variant="primary" className="w-fit" onClick={log} busy={busy}>Log mood</Button>
     </Card>
   );
 }
@@ -88,7 +88,7 @@ function Wellbeing({ rows, mission }) {
   const risk = mission?.health?.body_risks?.brain?.risk;
   return (
     <Card className="flex flex-[1_1_300px] flex-col gap-4">
-      <CardTitle eyebrow="Today" title="Wellbeing" right={<StatusChip level={level} text={score ? MOOD_LABELS[score].toUpperCase() : "NO DATA"} plain />} className="mb-0" />
+      <CardTitle title={score ? `Mood today: ${MOOD_LABELS[score]}` : "Mood today"} right={<StatusChip level={level} text={score ? undefined : "No data"} plain />} className="mb-0" />
       <div className="flex justify-center"><RingGauge value={score ? Math.round((score / 5) * 100) : null} size={150} ariaLabel="Wellbeing score" /></div>
       <dl className="m-0 text-sm">
         <div className="flex justify-between border-b border-divider py-2.5"><dt className="text-ink-2">Mood</dt><dd className="m-0 font-semibold">{score ? MOOD_LABELS[score] : "–"}</dd></div>
@@ -102,10 +102,10 @@ function MoodChart({ rows, astroId }) {
   const points = rows.map((r) => ({ t: new Date(r.ts), y: moodScore(r.value), level: r.level })).filter((p) => Number.isFinite(p.y));
   const last = points.at(-1)?.y;
   const prev = points.at(-2)?.y;
-  const trend = last == null || prev == null || last === prev ? "→ Stable" : last > prev ? "↗ Improving" : "↘ Lower";
+  const trend = last == null || prev == null ? null : last === prev ? "flat" : last > prev ? "up" : "down";
   return (
     <Card className="flex w-full flex-col gap-3">
-      <CardTitle eyebrow="Trend" title="Mood over time" subtitle="Last 7 days" right={<span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs text-accent-text">{trend}</span>} className="mb-0" />
+      <CardTitle title="Mood · last 7 days" right={<TrendLabel direction={trend} text={trend ? undefined : "Not enough check-ins"} />} className="mb-0" />
       <LineChart
         points={points}
         height={280}
@@ -150,14 +150,14 @@ function Breathing() {
   const [label, , scale] = running ? STEPS[step] : [step === 3 ? "Complete" : "Ready", 0, 0.9];
   return (
     <Card className="flex flex-[1_1_300px] flex-col items-center gap-5 text-center">
-      <CardTitle eyebrow="Reset" title="4-7-8 breathing" subtitle="Slow down and reset your breathing." className="mb-0 w-full text-left" />
+      <CardTitle title="4-7-8 breathing" subtitle="Slow down and reset your breathing." className="mb-0 w-full text-left" />
       <motion.div
         animate={{ scale }}
         transition={{ duration: running ? STEPS[step][1] : 0.6, ease: "easeInOut" }}
         className="flex h-40 w-40 flex-col items-center justify-center rounded-full border-2 border-accent-text bg-[radial-gradient(circle,rgb(var(--ah-accent-rgb)/.25),transparent_70%)]"
       >
         <span className="text-xs font-semibold text-accent-text">{label}</span>
-        <span className="font-display text-4xl font-bold">{running ? left : step === 3 ? "✓" : "00"}</span>
+        <span className="ah-num font-display text-4xl font-bold">{running ? left : step === 3 ? <Icon name="tick" size={36} className="animate-[ah-pop_.4s_ease-out]" /> : "00"}</span>
       </motion.div>
       <Button variant="primary" onClick={start} disabled={running}>{step === 3 ? "Again" : "Start breathing"}</Button>
     </Card>
@@ -185,10 +185,9 @@ function Journal({ astroId }) {
   return (
     <Card className="flex flex-[2_1_520px] flex-col gap-4">
       <CardTitle
-        eyebrow="Reflection"
         title="Journal"
         subtitle="Write down what's on your mind. Private to you (and the flight surgeon)."
-        right={<Button className="min-h-9 px-3 text-[13px]" onClick={() => setOpen((o) => !o)}>{open ? "Cancel" : <><Icon name="plus" size={14} /> Add entry</>}</Button>}
+        right={<Button className="min-h-9 px-3 text-label" onClick={() => setOpen((o) => !o)}>{open ? "Cancel" : <><Icon name="plus" size={14} /> Add entry</>}</Button>}
         className="mb-0"
       />
       <AnimatePresence initial={false}>
@@ -209,8 +208,8 @@ function Journal({ astroId }) {
           <AnimatePresence initial={false}>
             {entries.map((e) => (
               <motion.li key={e.id ?? e.created_at} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between gap-4 rounded-xl border border-line bg-input p-3">
-                <div className="min-w-0"><h4 className="m-0 text-sm font-semibold">{e.title}</h4><p className="m-0 mt-1 text-[13px] whitespace-pre-wrap text-muted">{e.body}</p></div>
-                <span className="text-[11px] whitespace-nowrap text-subtle">{fmtTime(e.created_at)}</span>
+                <div className="min-w-0"><h4 className="m-0 text-sm font-semibold">{e.title}</h4><p className="m-0 mt-1 text-label whitespace-pre-wrap text-muted">{e.body}</p></div>
+                <span className="text-caption whitespace-nowrap text-subtle">{fmtTime(e.created_at)}</span>
               </motion.li>
             ))}
           </AnimatePresence>
@@ -228,7 +227,7 @@ export default function Mind() {
   const tip = mission.data?.health?.body_risks?.brain?.why;
   return (
     <>
-      <p className="m-0 px-1 text-[15px] text-ink-2">Take a moment to check in with yourself.</p>
+      <p className="m-0 px-1 text-body text-ink-2">Take a moment to check in with yourself.</p>
       <div className="flex flex-wrap gap-5">
         <CheckIn astroId={id} />
         <Wellbeing rows={rows} mission={mission.data} />

@@ -16,7 +16,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { del, get, post, put } from "../../lib/api.js";
 import { fmtTime } from "../../lib/format.js";
-import { Avatar, Button, Card, CardTitle, Field, StatusChip, cx } from "../../components/ui/index.jsx";
+import { Avatar, Button, Card, CardTitle, Field, Shimmer, StatusChip, cx } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
 import { SpaceBackdrop } from "../../components/layout/SpaceBackdrop.jsx";
 import { useToast } from "../../components/overlays/Toasts.jsx";
@@ -153,7 +153,7 @@ function AssignCard({ tag, astronauts }) {
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-text"><Icon name="device" size={18} /></span>
         <code className="font-mono text-base font-bold tracking-wide">{tag.uid}</code>
         <span className="text-xs text-muted">tapped {tag.count}× · last {fmtTime(tag.last_seen)}</span>
-        <button type="button" onClick={dismiss} className="ml-auto min-h-9 cursor-pointer rounded-lg px-3 text-[13px] text-ink-2 hover:bg-control hover:text-ink">Dismiss</button>
+        <button type="button" onClick={dismiss} className="ml-auto min-h-9 cursor-pointer rounded-lg px-3 text-label text-ink-2 hover:bg-control hover:text-ink">Dismiss</button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Assign as">
@@ -190,7 +190,7 @@ function AssignCard({ tag, astronauts }) {
         )}
       </div>
       <div className="flex justify-end">
-        <Button variant="primary" type="submit" disabled={busy}><Icon name="tick" size={16} /> Assign card</Button>
+        <Button variant="primary" type="submit" busy={busy}>{!busy && <Icon name="tick" size={16} />} Assign card</Button>
       </div>
     </motion.form>
   );
@@ -208,7 +208,7 @@ function UnknownCards({ astronauts }) {
         right={<span className="inline-flex items-center gap-1.5 rounded-full bg-good-bg px-2.5 py-1 text-xs font-semibold text-good-fg"><span className="h-1.5 w-1.5 animate-[ah-pulse-dot_1.6s_ease-in-out_infinite] rounded-full bg-current" />Listening</span>}
       />
       {list.length === 0 ? (
-        <p className="m-0 rounded-xl bg-raised p-4 text-sm text-muted">No unassigned taps right now.</p>
+        <p className="m-0 rounded-[var(--radius-inner)] bg-raised p-4 text-sm text-muted">No unassigned taps right now.</p>
       ) : (
         <div className="flex flex-col gap-3">
           <AnimatePresence initial={false}>
@@ -253,7 +253,7 @@ function Registry({ astronauts }) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, x: 24 }}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-xl bg-raised px-3.5 py-2.5 text-sm sm:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)_auto]"
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-[var(--radius-inner)] bg-raised px-3.5 py-2.5 text-sm sm:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)_auto]"
               >
                 <code className="font-mono font-semibold">{t.uid}</code>
                 <span className="truncate text-ink-2 max-sm:order-3">{KIND_LABEL[t.type] || t.type}</span>
@@ -263,11 +263,11 @@ function Registry({ astronauts }) {
                 </span>
                 {confirm === t.uid ? (
                   <span className="flex gap-1.5 max-sm:order-2">
-                    <button onClick={() => remove(t.uid)} className="min-h-9 cursor-pointer rounded-lg bg-alert-action px-3 text-[13px] font-bold text-white">Remove</button>
-                    <button onClick={() => setConfirm(null)} className="min-h-9 cursor-pointer rounded-lg px-3 text-[13px] text-ink-2 hover:bg-control">Keep</button>
+                    <button onClick={() => remove(t.uid)} className="min-h-9 cursor-pointer rounded-lg bg-alert-action px-3 text-label font-bold text-white">Remove</button>
+                    <button onClick={() => setConfirm(null)} className="min-h-9 cursor-pointer rounded-lg px-3 text-label text-ink-2 hover:bg-control">Keep</button>
                   </span>
                 ) : (
-                  <button onClick={() => setConfirm(t.uid)} className="min-h-9 cursor-pointer justify-self-end rounded-lg px-3 text-[13px] text-ink-2 hover:bg-control hover:text-alert-fg max-sm:order-2">Delete</button>
+                  <button onClick={() => setConfirm(t.uid)} className="min-h-9 cursor-pointer justify-self-end rounded-lg px-3 text-label text-ink-2 hover:bg-control hover:text-alert-fg max-sm:order-2">Delete</button>
                 )}
               </motion.li>
             );
@@ -316,14 +316,14 @@ function AccountRow({ a }) {
     }
   }
   return (
-    <li className="flex flex-col gap-3 rounded-2xl bg-raised p-3.5">
+    <li className="flex flex-col gap-3 rounded-[var(--radius-inner)] bg-raised p-3.5">
       <div className="flex flex-wrap items-center gap-3">
         <Avatar name={a.name} color={a.color} size={40} />
         <div className="min-w-[140px] flex-1">
           <div className="font-semibold">{a.name}</div>
           <div className="text-xs text-muted">{a.card_uid ? <>Card <code className="font-mono">{a.card_uid}</code></> : "No card yet"}</div>
         </div>
-        <select className="ah-input min-h-10 w-auto text-[13px]" value={a.role} onChange={(e) => changeRole(e.target.value)} aria-label={`Role for ${a.name}`}>
+        <select className="ah-input min-h-10 w-auto text-label" value={a.role} onChange={(e) => changeRole(e.target.value)} aria-label={`Role for ${a.name}`}>
           {ROLES.map((r) => <option key={r}>{r}</option>)}
         </select>
         <div className="flex flex-wrap gap-1.5">
@@ -332,8 +332,8 @@ function AccountRow({ a }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button className="min-h-9 text-[13px]" onClick={() => setOpen((o) => !o)}>{open ? "Cancel" : a.has_password ? "Reset password" : "Set password"}</Button>
-        <Button className="min-h-9 text-[13px]" onClick={clearFace} disabled={!a.has_face_id}>Clear Face ID</Button>
+        <Button className="min-h-9 text-label" onClick={() => setOpen((o) => !o)}>{open ? "Cancel" : a.has_password ? "Reset password" : "Set password"}</Button>
+        <Button className="min-h-9 text-label" onClick={clearFace} disabled={!a.has_face_id}>Clear Face ID</Button>
       </div>
       <AnimatePresence initial={false}>
         {open && (
@@ -421,7 +421,7 @@ function Segment({ label, options, value, onChange, disabled = false, hint }) {
             aria-checked={value === id}
             disabled={disabled}
             onClick={() => onChange(id)}
-            className={cx("min-h-10 cursor-pointer rounded-xl border px-3.5 text-[13px] font-semibold disabled:cursor-not-allowed",
+            className={cx("min-h-10 cursor-pointer rounded-xl border px-3.5 text-label font-semibold disabled:cursor-not-allowed",
               value === id ? "border-accent-text/60 bg-accent-soft text-accent-text" : "border-line bg-raised text-ink-2 hover:text-ink")}
           >
             {text}
@@ -447,7 +447,7 @@ function VoiceSettings() {
   const saved = useQuery({ queryKey: ["admin-voice"], queryFn: () => get("/admin/voice-settings") });
   const [edits, setEdits] = useState(null); // unsaved changes; null = show what's saved
   const [testing, setTesting] = useState(false);
-  if (!saved.data) return null;
+  if (!saved.data) return <Shimmer className="h-[640px]" />; // loading
   const form = edits || Object.fromEntries(FIELDS.map((k) => [k, saved.data[k]]));
   const set = (patch) => setEdits({ ...form, ...patch });
   const dirty = FIELDS.some((k) => form[k] !== saved.data[k]);
@@ -589,14 +589,14 @@ function Console({ username }) {
       <SpaceBackdrop />
       <div className="mx-auto flex max-w-6xl flex-col gap-[18px]">
         <header className="flex flex-wrap items-center gap-3 px-1">
-          <LogoCrew width={40} height={40} aria-hidden="true" className="drop-shadow-[0_0_14px_rgb(var(--ah-accent-rgb)/.45)]" />
+          <LogoCrew width={40} height={40} aria-hidden="true" />
           <div className="mr-auto">
             <div className="ah-eyebrow">Astro Health · Admin</div>
-            <h1 className="m-0 font-display text-[28px] font-bold tracking-tight">Cards & accounts</h1>
+            <h1 className="m-0 font-display text-display font-bold tracking-tight">Cards & accounts</h1>
           </div>
-          <span className="flex min-h-11 items-center gap-2 ah-glass rounded-full px-4 text-[13px]"><Icon name="lock" size={15} className="text-accent-text" />{username}</span>
-          <Link to="/" className="flex min-h-11 items-center rounded-full px-4 text-[13px] font-semibold text-ink-2 hover:bg-raised hover:text-ink">Back to app</Link>
-          <button onClick={logout} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-4 text-[13px] text-ink-2 hover:bg-raised hover:text-ink"><Icon name="logout" size={16} />Log out</button>
+          <span className="flex min-h-11 items-center gap-2 ah-glass rounded-full px-4 text-label"><Icon name="lock" size={15} className="text-accent-text" />{username}</span>
+          <Link to="/" className="flex min-h-11 items-center rounded-full px-4 text-label font-semibold text-ink-2 hover:bg-raised hover:text-ink">Back to app</Link>
+          <button onClick={logout} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full px-4 text-label text-ink-2 hover:bg-raised hover:text-ink"><Icon name="logout" size={16} />Log out</button>
         </header>
         <div className={cx("grid grid-cols-1 items-start gap-[18px] xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]")}>
           <div className="flex min-w-0 flex-col gap-[18px]">

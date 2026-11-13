@@ -37,9 +37,9 @@ export function ProfileCard({ summary, mission, level }) {
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-xl bg-raised p-2.5"><div className="text-muted">Status</div><div className="mt-1"><StatusChip level={level} /></div></div>
-        <div className="rounded-xl bg-raised p-2.5"><div className="text-muted">Mission</div><div className="mt-1 truncate text-sm font-semibold">{mission?.profile?.label || "–"}</div></div>
-        <div className="col-span-2 rounded-xl bg-raised p-2.5"><div className="text-muted">Last check</div><div className="mt-1 text-sm font-semibold">{fmtTime(summary?.last_check)}</div></div>
+        <div className="rounded-[var(--radius-inner)] bg-raised p-2.5"><div className="text-muted">Status</div><div className="mt-1"><StatusChip level={level} /></div></div>
+        <div className="rounded-[var(--radius-inner)] bg-raised p-2.5"><div className="text-muted">Mission</div><div className="mt-1 truncate text-sm font-semibold">{mission?.profile?.label || "–"}</div></div>
+        <div className="col-span-2 rounded-[var(--radius-inner)] bg-raised p-2.5"><div className="text-muted">Last check</div><div className="mt-1 text-sm font-semibold">{fmtTime(summary?.last_check)}</div></div>
       </div>
     </Card>
   );
@@ -87,7 +87,7 @@ export function RegionCard({ region, info, level, discomfort, onDraft, onCommit,
           </div>
 
           <div>
-            <div className="mb-1.5 flex items-center justify-between text-[13px]">
+            <div className="mb-1.5 flex items-center justify-between text-label">
               <span className="text-ink-2">Discomfort</span>
               <motion.span key={discomfort} initial={{ scale: 1.25 }} animate={{ scale: 1 }} className="min-w-10 rounded-lg border border-line-strong bg-input px-2 py-0.5 text-center font-display text-base font-bold text-accent-text">
                 {discomfort}
@@ -104,11 +104,11 @@ export function RegionCard({ region, info, level, discomfort, onDraft, onCommit,
               onKeyUp={(e) => onCommit(Number(e.currentTarget.value))}
               className="w-full accent-[var(--ah-accent)]"
             />
-            <div className="flex justify-between text-[10px] tracking-[0.08em] text-subtle"><span>NONE</span><span>MODERATE</span><span>SEVERE</span></div>
+            <div className="flex justify-between text-caption tracking-[0.08em] text-subtle"><span>NONE</span><span>MODERATE</span><span>SEVERE</span></div>
           </div>
 
           {firstInd && (
-            <div className="rounded-xl bg-raised p-3">
+            <div className="rounded-[var(--radius-inner)] bg-raised p-3">
               <div className="mb-1 flex justify-between text-xs text-muted"><span>{INDICATORS[firstInd]?.label} · 7 days</span></div>
               <Sparkline points={toPoints(firstInd, history?.[firstInd])} seriesKey={`${region}-${firstInd}`} ariaLabel={`${INDICATORS[firstInd]?.label} over 7 days`} />
             </div>
@@ -122,7 +122,7 @@ export function RegionCard({ region, info, level, discomfort, onDraft, onCommit,
             <AnimatePresence initial={false}>
               {aboutOpen && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.28, ease: EASE_ENTER }} className="overflow-hidden">
-                  <div className="flex flex-col gap-2 px-3.5 pb-3.5 text-[13px] text-ink-2">
+                  <div className="flex flex-col gap-2 px-3.5 pb-3.5 text-label text-ink-2">
                     <p className="m-0 font-medium text-ink">{readings.length ? readings.join(" · ") : "No readings logged yet today."}</p>
                     <p className="m-0"><strong className="text-ink">Function:</strong> {info.what_it_does}</p>
                     <p className="m-0"><strong className="text-ink">Effect of spaceflight:</strong> {info.space_effects}</p>
@@ -139,7 +139,7 @@ export function RegionCard({ region, info, level, discomfort, onDraft, onCommit,
         {anyRed && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col gap-2 rounded-xl border border-alert-border bg-alert-surface p-3.5 text-sm">
             <span><strong className="text-alert-fg">Alert.</strong> Re-measure, then notify the flight surgeon.</span>
-            <Button variant="danger" onClick={sendReport} disabled={sending}>Send report with my consent</Button>
+            <Button variant="danger" onClick={sendReport} busy={sending}>Send report with my consent</Button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -240,7 +240,7 @@ export function LabTile({ indicator, reading, rows }) {
   const points = toPoints(indicator, rows);
   const prev = points.length > 1 ? points[points.length - 2].y : null;
   const cur = points.length ? points[points.length - 1].y : null;
-  const arrow = cur == null || prev == null ? "" : cur > prev ? "↗" : cur < prev ? "↘" : "→";
+  const arrow = cur == null || prev == null ? "" : cur > prev ? "trend-up" : cur < prev ? "trend-down" : "trend-flat";
   const level = reading?.level || "GRAY";
   return (
     <motion.div
@@ -252,12 +252,12 @@ export function LabTile({ indicator, reading, rows }) {
         <span className="flex items-center gap-1.5 border-l-2 pl-2" style={{ borderColor: LEVEL_HEX[level] }}>
           <Icon name={TILE_ICON[indicator]} size={13} />{meta.label}
         </span>
-        <StatusChip level={level} plain className="px-2 py-[1px] text-[10px]" />
+        <StatusChip level={level} plain className="px-2 py-[1px] text-caption" />
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className="font-display text-[26px] leading-none font-bold tracking-tight">{reading ? formatIndicatorValue(indicator, reading.value) : "–"}</span>
+        <span className="font-display text-display leading-none font-bold tracking-tight">{reading ? formatIndicatorValue(indicator, reading.value) : "–"}</span>
         {reading && meta.unit && !["sleep", "mood"].includes(indicator) && <span className="text-xs text-muted">{meta.unit}</span>}
-        {arrow && <span className="ml-auto text-sm text-ink-2">{arrow}</span>}
+        {arrow && <Icon name={arrow} size={16} className="ml-auto text-ink-2" aria-label={arrow.replace("trend-", "trend ")} />}
       </div>
       <Sparkline points={points} height={38} seriesKey={indicator} ariaLabel={`${meta.label}, last 7 days`} />
     </motion.div>
@@ -308,7 +308,7 @@ export function Timeline({ histories }) {
               className="relative z-[1] h-4 w-4 rounded-full border-[3px] border-surface"
               style={{ background: LEVEL_HEX[d.level] }}
             />
-            <span className={cx("text-[11px]", i === 6 ? "font-semibold text-ink" : "text-muted")}>
+            <span className={cx("text-caption", i === 6 ? "font-semibold text-ink" : "text-muted")}>
               {i === 6 ? "Today" : d.date.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
             </span>
             <AnimatePresence>

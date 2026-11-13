@@ -62,7 +62,7 @@ export function Modal({ open, onClose, title, children, size = "md" }) {
             transition={{ type: "spring", stiffness: 360, damping: 30 }}
             className={`relative max-h-[calc(100vh-40px)] w-full overflow-y-auto ah-glass-strong rounded-card-l p-6 shadow-[0_30px_75px_rgba(0,0,0,.6)] ${size === "lg" ? "max-w-2xl" : "max-w-md"}`}
           >
-            <h3 className="m-0 mb-2.5 font-display text-[22px] font-semibold">{title}</h3>
+            <h3 className="m-0 mb-2.5 font-display text-heading font-semibold">{title}</h3>
             {children}
             <button onClick={onClose} className="mt-4 min-h-10 cursor-pointer rounded-xl border border-line-strong bg-control px-4 text-sm font-semibold hover:border-accent-text/60">
               Close

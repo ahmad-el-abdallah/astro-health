@@ -290,7 +290,7 @@ export function VoiceMode({
           <div className="flex w-full max-w-3xl items-center justify-between">
             <div>
               <div className="ah-eyebrow">Astra · voice</div>
-              <div className="text-[13px] text-muted">
+              <div className="text-label text-muted">
                 {settings.engine === "neural" ? "Neural voice" : "Browser voice"}{settings.engine === "neural" && settings.echo !== "off" ? ` · ${settings.echo} echo` : ""}{settings.beeps ? " · comms beeps" : ""}
               </div>
             </div>
@@ -299,7 +299,7 @@ export function VoiceMode({
               onClick={() => roomStore.set(ROOM_ORDER[(ROOM_ORDER.indexOf(room) + 1) % ROOM_ORDER.length])}
               title="How much background noise is around you. Noisy room: Astra only listens to clear, close speech. Quiet room: she catches a soft voice."
               aria-label={`Room: ${roomSettings(room).label}. Click to change.`}
-              className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-line-strong bg-control/60 px-4 text-[13px] font-semibold text-ink-2"
+              className="flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-line-strong bg-control/60 px-4 text-label font-semibold text-ink-2"
             >
               <Icon name="mic" size={16} /><span className="max-sm:hidden">Room:</span> {roomSettings(room).label}
             </button>
@@ -307,7 +307,7 @@ export function VoiceMode({
               onClick={() => setCaptions((c) => !c)}
               aria-pressed={captions}
               title="Captions"
-              className={cx("flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-4 text-[13px] font-semibold",
+              className={cx("flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-4 text-label font-semibold",
                 captions ? "border-accent-text/60 bg-accent-soft text-accent-text" : "border-line-strong bg-control/60 text-ink-2")}
             >
               <Icon name="captions" size={16} /> CC
@@ -319,7 +319,7 @@ export function VoiceMode({
             {activity ? (
               <>
                 <GuidedActivity activity={activity} astroId={astroId} content={content} speak={sayLine} onDone={finishActivity} />
-                <button onClick={() => { voiceRef.current?.cancel(); finishActivity({ text: "Okay, we'll stop there." }); }} className="min-h-10 cursor-pointer rounded-xl border border-line-strong bg-control/60 px-4 text-[13px] font-semibold text-ink-2 hover:text-ink">
+                <button onClick={() => { voiceRef.current?.cancel(); finishActivity({ text: "Okay, we'll stop there." }); }} className="min-h-10 cursor-pointer rounded-xl border border-line-strong bg-control/60 px-4 text-label font-semibold text-ink-2 hover:text-ink">
                   Stop
                 </button>
               </>
@@ -372,8 +372,8 @@ export function VoiceMode({
                 </ul>
                 <div className="flex items-center gap-2">
                   <span className="mr-auto text-xs text-muted">Say “yes” or “no”</span>
-                  <button onClick={() => answerCard(false)} className="min-h-10 cursor-pointer rounded-xl border border-line-strong bg-control px-3.5 text-[13px] font-semibold">No</button>
-                  <button onClick={() => answerCard(true)} className="min-h-10 cursor-pointer rounded-xl bg-accent px-3.5 text-[13px] font-bold text-accent-on hover:bg-accent-hover">Yes</button>
+                  <button onClick={() => answerCard(false)} className="min-h-10 cursor-pointer rounded-xl border border-line-strong bg-control px-3.5 text-label font-semibold">No</button>
+                  <button onClick={() => answerCard(true)} className="min-h-10 cursor-pointer rounded-xl bg-accent px-3.5 text-label font-bold text-accent-on hover:bg-accent-hover">Yes</button>
                 </div>
               </motion.div>
             )}
@@ -396,7 +396,7 @@ export function VoiceMode({
             <button
               onClick={onClose}
               aria-label="End voice conversation"
-              className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-full bg-[#e5484d] text-white shadow-[0_8px_30px_rgba(229,72,77,.45)] hover:bg-[#f05257]"
+              className="flex h-16 w-16 cursor-pointer items-center justify-center rounded-full bg-alert-action text-white hover:brightness-110"
             >
               <Icon name="close" size={26} />
             </button>

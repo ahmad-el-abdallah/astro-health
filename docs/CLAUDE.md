@@ -3195,11 +3195,65 @@ and sends an alert".
     a second line.
   - Browser-checked 8/8.
 
+## Design clean-up against a 20-point checklist (2026-11-13, branch `ui-polish`)
+
+The user pasted a 20-point design list ("delete filler badges … animate useful feedback").
+Decided with the user: **the whole app**, and **keep the frosted glass but drop the extras**.
+Look only: no behaviour, data or route changes.
+
+- **Tokens** (`src/styles/index.css` `@theme`):
+  - a type scale replaces all ~180 one-off `text-[Npx]`: caption 11 · xs 12 · label 13 ·
+    sm 14 · body 15 · base 16 · title 17 · heading 22 · display 28 · hero 40 · jumbo 52
+  - `--radius-inner: 8px` for tiles inside cards (card radius − padding)
+  - muted/subtle text a step lighter in both palettes; `src/styles/contrast.test.js` reads
+    the real tokens and fails if any text colour drops under 4.5:1 on the lightest surface
+  - `h1–h4 { text-wrap: balance }`, `p, li { text-wrap: pretty }`
+  - `.ah-num` (tabular numbers): AnimatedNumber, clocks, counts
+  - **Use these tokens for new UI, not `text-[13px]`-style sizes or raw hex.** The login and
+    3D scene art keep their own colours.
+- **Shared UI** (`components/ui/index.jsx`):
+  - `Button busy` shows a spinner and disables the button. Async buttons use it (Assess,
+    Analyze now, EVA confirm, mood, Thread send, alert ack, admin assign, Today track…).
+  - `Spinner`, and `TrendLabel` with new `trend-up/down/flat` icons in place of ↗/↘/→ text.
+  - The primary button has no glow. Cards and vital tiles don't lift on hover; only things
+    you can click do.
+- **Removed:**
+  - filler: Mind's "01", Today's "×60" chip, the Symptoms corner label, the duplicate badge
+    on the health analysis card, Login's "SECURE ACCESS"
+  - eyebrows that repeat their title (Trends, Sleep, Mind, Today, nav eyebrows for Overview)
+  - glows: logo drop-shadows, primary-button glow, the NFC block glow, the Today corner glow
+  - the glass noise grain, and pulsing dots that weren't live
+  - glyph icons (✕, ✓) in favour of `<Icon>`
+- **Headlines say the fact:**
+  - "Mood today: Good", "Last night’s sleep"
+  - Today "N of 5 done today" as the biggest number
+  - Trends "Heart rate · last 7 days"
+  - doctor "2 crew · 1 to check" (red = "need attention now", the same words as the stat
+    cards)
+- **Overview:** the analysis card hides its summary when the hero already shows it
+  (`repeatSummary`), so it isn't said twice.
+- **Login** shows a real screenshot of the crew Overview (`frontend/public/preview/
+  overview.jpg`, demo data, wide screens only). Retake it after a big Overview change:
+  1440×900, with the Astra notice and the Simulator dock removed from the DOM first.
+- **Phone fixes:**
+  - flex-basis cards on Overview/Sleep got `min-w-0`; without it the trend card made the
+    phone page 658 px wide
+  - Mission's "Where this comes from" note moved from the title's right slot to its subtitle
+- **Top bar** stays on one row at 1440: the "click once for voice" hint shows only at ≥2xl;
+  below that the pill's tooltip says it.
+- **Verified:**
+  - 276 backend and 110 frontend tests (9 new contrast checks); lint clean; dist rebuilt
+  - before/after headless screenshots of every crew, doctor, login and admin page at 1440
+    and 390 px: no horizontal scroll, no console errors
+  - functional pass on an isolated copy: card sign-in, Assess, Analyze now, Today workout
+    start/stop (logged as an activity), EVA confirm cancel and confirm, doctor
+    acknowledge
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 276 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 101 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
+- `cd frontend && npm test` — 110 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

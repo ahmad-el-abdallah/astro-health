@@ -65,21 +65,21 @@ export function SimulatorDock() {
           >
             <div className="flex max-h-[min(70vh,620px)] flex-col gap-4 overflow-y-auto p-4">
             <section>
-              <h4 className="m-0 mb-2 text-[11px] font-semibold tracking-[0.1em] text-subtle uppercase">Crew & surgeon cards</h4>
+              <h4 className="m-0 mb-2 text-caption font-semibold tracking-[0.1em] text-subtle uppercase">Crew & surgeon cards</h4>
               <div className="flex flex-wrap gap-1.5">
                 {cards.map((t) => <SimButton key={t.uid} title={t.uid} onClick={() => scan(t.uid)}>{t.label}</SimButton>)}
               </div>
             </section>
             {objects.length > 0 && (
               <section>
-                <h4 className="m-0 mb-2 text-[11px] font-semibold tracking-[0.1em] text-subtle uppercase">Object tags</h4>
+                <h4 className="m-0 mb-2 text-caption font-semibold tracking-[0.1em] text-subtle uppercase">Object tags</h4>
                 <div className="flex flex-wrap gap-1.5">
                   {objects.map((t) => <SimButton key={t.uid} title={t.uid} onClick={() => scan(t.uid)}>{t.label}</SimButton>)}
                 </div>
               </section>
             )}
             <section>
-              <h4 className="m-0 mb-2 text-[11px] font-semibold tracking-[0.1em] text-subtle uppercase">CYD events (for this astronaut)</h4>
+              <h4 className="m-0 mb-2 text-caption font-semibold tracking-[0.1em] text-subtle uppercase">CYD events (for this astronaut)</h4>
               <select className="ah-input mb-2 min-h-10 text-sm" value={uid} onChange={(e) => setAstroUid(e.target.value)}>
                 {astronauts.map((t) => <option key={t.uid} value={t.uid}>{t.label}</option>)}
               </select>
@@ -88,8 +88,8 @@ export function SimulatorDock() {
               </div>
             </section>
             <section>
-              <h4 className="m-0 mb-2 text-[11px] font-semibold tracking-[0.1em] text-subtle uppercase">Message log</h4>
-              <div ref={logRef} className="max-h-36 overflow-y-auto rounded-lg bg-input p-2 font-mono text-[11px] leading-relaxed text-muted">
+              <h4 className="m-0 mb-2 text-caption font-semibold tracking-[0.1em] text-subtle uppercase">Message log</h4>
+              <div ref={logRef} className="max-h-36 overflow-y-auto rounded-lg bg-input p-2 font-mono text-caption leading-relaxed text-muted">
                 {log.length === 0 && <span>No messages yet.</span>}
                 {log.map((l, i) => (
                   <div key={i} className={l.direction === "out" ? "text-accent-text" : ""}>

@@ -22,20 +22,20 @@ export function AstraNotice({ notice, more, onTalk, onDismiss }) {
     >
       <div className="flex items-center gap-2">
         <Icon name="waveform" size={16} className="text-accent-text" />
-        <span className="text-[13px] font-semibold">Astra · {TITLE[notice.kind] || "Notice"}</span>
-        {more > 0 && <span className="ml-auto text-[11px] text-muted">+{more} more</span>}
+        <span className="text-label font-semibold">Astra · {TITLE[notice.kind] || "Notice"}</span>
+        {more > 0 && <span className="ml-auto text-caption text-muted">+{more} more</span>}
       </div>
       <p className="m-0 text-sm leading-relaxed text-ink-2">{notice.text}</p>
       <div className="flex gap-2">
         <button
           onClick={() => onTalk(notice)}
-          className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl bg-accent px-3.5 text-[13px] font-bold text-accent-on hover:bg-accent-hover"
+          className="flex min-h-10 cursor-pointer items-center gap-2 rounded-xl bg-accent px-3.5 text-label font-bold text-accent-on hover:bg-accent-hover"
         >
           <Icon name="mic" size={15} /> {notice.question ? "Yes, brief me" : notice.actions?.length ? "Answer" : "Talk"}
         </button>
         <button
           onClick={() => onDismiss(notice)}
-          className="min-h-10 cursor-pointer rounded-xl border border-line-strong bg-control px-3.5 text-[13px] font-semibold text-ink-2 hover:text-ink"
+          className="min-h-10 cursor-pointer rounded-xl border border-line-strong bg-control px-3.5 text-label font-semibold text-ink-2 hover:text-ink"
         >
           Dismiss
         </button>

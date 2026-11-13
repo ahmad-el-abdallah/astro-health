@@ -20,7 +20,7 @@ function AstraHearing() {
   }[room];
   return (
     <div className="space-y-3">
-      <h3 className="m-0 text-[15px] font-semibold">Astra’s hearing</h3>
+      <h3 className="m-0 text-body font-semibold">Astra’s hearing</h3>
       <div role="radiogroup" aria-label="Room noise" className="flex flex-wrap gap-1.5">
         {ROOM_ORDER.map((id) => (
           <button
@@ -28,7 +28,7 @@ function AstraHearing() {
             role="radio"
             aria-checked={room === id}
             onClick={() => roomStore.set(id)}
-            className={`min-h-10 cursor-pointer rounded-xl border px-3.5 text-[13px] font-semibold ${room === id ? "border-accent-text/60 bg-accent-soft text-accent-text" : "border-line bg-raised text-ink-2 hover:text-ink"}`}
+            className={`min-h-10 cursor-pointer rounded-xl border px-3.5 text-label font-semibold ${room === id ? "border-accent-text/60 bg-accent-soft text-accent-text" : "border-line bg-raised text-ink-2 hover:text-ink"}`}
           >
             {ROOMS[id].label}
           </button>
@@ -51,12 +51,12 @@ function AstraMemory({ id }) {
   const items = q.data || [];
   return (
     <div className="space-y-3">
-      <h3 className="m-0 text-[15px] font-semibold">What Astra remembers</h3>
+      <h3 className="m-0 text-body font-semibold">What Astra remembers</h3>
       <p className="m-0 text-xs text-muted">Notes she keeps so she can follow up. Only you can see them.</p>
       {q.isSuccess && items.length === 0 && <p className="m-0 text-sm text-muted">Nothing yet. Tell her something like “remember my knee hurts”.</p>}
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {items.map((m) => (
-          <li key={m.id} className="flex items-start gap-3 rounded-xl bg-raised p-3">
+          <li key={m.id} className="flex items-start gap-3 rounded-[var(--radius-inner)] bg-raised p-3">
             <div className="flex-1 text-sm">
               <div>{m.text}</div>
               <div className="text-xs text-muted">
@@ -179,14 +179,14 @@ export function AccountDrawer({ open, onClose }) {
         </div>
 
         <form onSubmit={savePassword} className="space-y-3">
-          <h3 className="m-0 text-[15px] font-semibold">Username & password</h3>
+          <h3 className="m-0 text-body font-semibold">Username & password</h3>
           <Field label="Username"><input className="ah-input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></Field>
           <Field label="New password"><input className="ah-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
           <Button variant="primary" type="submit">Save</Button>
           {pwNotice && <p className="m-0 text-xs text-check-fg" role="status">{pwNotice}</p>}
         </form>
 
-        <div className="flex items-center justify-between gap-4 rounded-xl bg-raised p-3.5">
+        <div className="flex items-center justify-between gap-4 rounded-[var(--radius-inner)] bg-raised p-3.5">
           <div>
             <div className="text-sm font-semibold">Reduce glass effects</div>
             <div className="text-xs text-muted">Turns off the frosted blur. Try this if scrolling feels slow.</div>
@@ -206,12 +206,12 @@ export function AccountDrawer({ open, onClose }) {
         {!isSurgeon && open && <AstraMemory id={id} />}
 
         <div className="space-y-3">
-          <h3 className="m-0 text-[15px] font-semibold">Face ID</h3>
+          <h3 className="m-0 text-body font-semibold">Face ID</h3>
           <div className="overflow-hidden rounded-xl bg-space">
             <video ref={videoRef} muted playsInline className="block max-h-56 w-full -scale-x-100 object-cover" />
           </div>
           <div className="flex gap-2">
-            <Button variant="primary" className="flex-1" onClick={enrollFace} disabled={busy}>Enroll Face ID</Button>
+            <Button variant="primary" className="flex-1" onClick={enrollFace} busy={busy}>Enroll Face ID</Button>
             <Button className="flex-1" onClick={clearFace}>Clear Face ID</Button>
           </div>
           {faceNotice && <p className="m-0 text-xs text-check-fg" role="status">{faceNotice}</p>}

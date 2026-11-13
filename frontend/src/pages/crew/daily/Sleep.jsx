@@ -38,7 +38,7 @@ function StageTimeline() {
           </div>
         </div>
       ))}
-      <div className="ml-[60px] flex justify-between text-[11px] text-subtle">
+      <div className="ml-[60px] flex justify-between text-caption text-subtle">
         {["23:00", "01:00", "03:00", "05:00", "07:00"].map((t) => <span key={t}>{t}</span>)}
       </div>
     </div>
@@ -64,15 +64,15 @@ function Summary({ astroId, summary }) {
     }
   }
   return (
-    <Card className="flex flex-[1_1_320px] flex-col gap-4">
-      <CardTitle eyebrow="Last night" title="Summary" className="mb-0" />
+    <Card className="flex min-w-0 flex-[1_1_320px] flex-col gap-4">
+      <CardTitle title="Last night’s sleep" className="mb-0" />
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-display text-[52px] leading-none font-bold tracking-[-0.03em]">{r ? formatHours(sleepHours(r.value)) : "No data"}</span>
+        <span className="font-display text-jumbo leading-none font-bold tracking-[-0.03em]">{r ? formatHours(sleepHours(r.value)) : "No data"}</span>
         {r && <StatusChip level={r.level} />}
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-raised p-3"><div className="text-xs text-muted">Bedtime</div><div className="mt-1 text-lg font-semibold">{v.bedtime || "–"}</div></div>
-        <div className="rounded-xl bg-raised p-3"><div className="text-xs text-muted">Wake</div><div className="mt-1 text-lg font-semibold">{v.wake_time || "–"}</div></div>
+        <div className="rounded-[var(--radius-inner)] bg-raised p-3"><div className="text-xs text-muted">Bedtime</div><div className="mt-1 text-lg font-semibold">{v.bedtime || "–"}</div></div>
+        <div className="rounded-[var(--radius-inner)] bg-raised p-3"><div className="text-xs text-muted">Wake</div><div className="mt-1 text-lg font-semibold">{v.wake_time || "–"}</div></div>
       </div>
       <button onClick={() => setOpen((o) => !o)} className="w-fit cursor-pointer text-sm text-accent-text underline underline-offset-2">
         {open ? "Cancel" : "Log tonight's sleep manually"}
@@ -107,17 +107,16 @@ export default function Sleep() {
 
   return (
     <>
-      <p className="m-0 px-1 text-[15px] text-ink-2">Sleep trends and how microgravity affects your circadian rhythm.</p>
+      <p className="m-0 px-1 text-body text-ink-2">Sleep trends and how microgravity affects your circadian rhythm.</p>
       <div className="flex flex-wrap gap-5">
         <Summary astroId={id} summary={summary.data} />
-        <Card className="flex flex-[2_1_520px] flex-col gap-4">
-          <CardTitle eyebrow="Illustrative" title="Sleep stages" subtitle="Not measured by any hardware in this demo — for reference only" className="mb-0" />
+        <Card className="flex min-w-0 flex-[2_1_520px] flex-col gap-4">
+          <CardTitle title="Sleep stages" subtitle="Illustrative: not measured by any hardware in this demo" className="mb-0" />
           <StageTimeline />
         </Card>
       </div>
       <Card className="flex flex-col gap-4">
         <CardTitle
-          eyebrow="Trend"
           title="Sleep duration"
           subtitle={`Hours per night · last ${days} nights`}
           right={<Segmented id="sleep-range" size="sm" value={days} onChange={setDays} options={[{ value: 7, label: "7 nights" }, { value: 30, label: "30 nights" }]} />}
@@ -126,15 +125,15 @@ export default function Sleep() {
         <BarChart bars={bars} height={280} target={7} targetLabel="Target 7 h" seriesKey={`sleep-${id}-${days}`} formatValue={formatHours} maxY={9} ariaLabel={`Hours slept per night, ${bars.length} nights`} />
       </Card>
       <div className="flex flex-wrap gap-5">
-        <Card className="flex flex-[1_1_360px] flex-col gap-2">
+        <Card className="flex min-w-0 flex-[1_1_360px] flex-col gap-2">
           <CardTitle eyebrow="Mission context" title="Circadian rhythm" className="mb-0" />
           <p className="m-0 text-sm text-ink-2">
             {brain ? <><strong className="text-ink">{mission.data.profile.label} — {brain.risk.toLowerCase()} risk.</strong> {brain.why}</> : "No mission health plan for this profile yet."}
           </p>
           {monitor && <p className="m-0 text-sm text-muted">Monitoring: {monitor.how_often} — {monitor.why}</p>}
         </Card>
-        <Card className="flex flex-[1_1_360px] flex-col gap-2">
-          <CardTitle eyebrow="Self-care" title="Sleep hygiene tips" className="mb-0" />
+        <Card className="flex min-w-0 flex-[1_1_360px] flex-col gap-2">
+          <CardTitle title="Sleep hygiene tips" className="mb-0" />
           <ul className="m-0 flex list-disc flex-col gap-1.5 pl-5 text-sm text-ink-2">
             <li>Keep lighting dim for the last hour before sleep.</li>
             <li>Stick to the same sleep and wake time, even on rest days.</li>

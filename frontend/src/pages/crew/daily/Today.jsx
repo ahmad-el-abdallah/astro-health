@@ -136,7 +136,7 @@ function Dial({ clock, entries }) {
         </motion.g>
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-display text-[34px] leading-none font-bold tabular-nums tracking-tight">{hhmm(clock.daySec)}</span>
+        <span className="font-display text-hero leading-none font-bold tabular-nums tracking-tight">{hhmm(clock.daySec)}</span>
         <span className="mt-1 text-xs text-muted">Mission day {clock.day}</span>
       </div>
     </div>
@@ -146,7 +146,7 @@ function Dial({ clock, entries }) {
 function ClockCard({ clock, entries }) {
   return (
     <Card className="flex flex-col gap-3">
-      <CardTitle eyebrow="Mission clock" title="Today on station time" right={<StatusChip level="GRAY" plain text={`×${clock.scale}`} />} />
+      <CardTitle title="Station time" />
       <Dial clock={clock} entries={entries} />
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs text-muted">
         {["done", "due", "missed", "upcoming"].map((s) => (
@@ -156,7 +156,7 @@ function ClockCard({ clock, entries }) {
           </span>
         ))}
       </div>
-      <p className="m-0 text-center text-xs text-subtle">
+      <p className="m-0 text-center text-xs text-muted">
         Sped up for the demo: 1 real minute = {missionSpan(60 * clock.scale)} on the mission clock.
       </p>
     </Card>
@@ -171,7 +171,6 @@ function UpNext({ clock, entries, canAct }) {
   const howto = HOWTO[next.kind] || {};
   return (
     <Card className="relative overflow-hidden">
-      <div className="pointer-events-none absolute -top-16 -right-10 h-48 w-48 rounded-full bg-[radial-gradient(closest-side,rgb(var(--ah-accent-rgb)/.28),transparent)]" />
       <div className="relative flex flex-wrap items-center gap-5">
         <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent-text">
           <Icon name={KIND_ICON[next.kind] || "schedule"} size={26} />
@@ -183,7 +182,7 @@ function UpNext({ clock, entries, canAct }) {
               key={next.time + next.kind}
               initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.3 }}
-              className="m-0 font-display text-[22px] leading-tight font-semibold"
+              className="m-0 font-display text-heading leading-tight font-semibold"
             >
               {next.text}
             </motion.h2>
@@ -191,7 +190,7 @@ function UpNext({ clock, entries, canAct }) {
           <p className="m-0 mt-1 text-sm text-muted">{howto.hint}</p>
         </div>
         <div className="flex flex-col items-end">
-          <span className="font-display text-[28px] leading-none font-bold tabular-nums">in {missionSpan(delta)}</span>
+          <span className="font-display text-display leading-none font-bold tabular-nums">in {missionSpan(delta)}</span>
           <span className="mt-1 text-xs text-muted">≈ {realSpan(delta / clock.scale)} real time</span>
         </div>
       </div>
@@ -211,16 +210,16 @@ function ProgressCard({ entries }) {
   const due = entries.filter((e) => e.status === "due").length;
   const missed = entries.filter((e) => e.status === "missed").length;
   return (
-    <Card className="flex flex-col gap-3">
-      <CardTitle eyebrow="Today" title="Routine progress" />
-      <div className="flex items-baseline gap-2">
-        <AnimatedNumber value={done} className="font-display text-[40px] leading-none font-bold" />
-        <span className="text-sm text-muted">of {entries.length} tasks done</span>
-      </div>
+    <Card className="flex flex-col gap-4">
+      {/* The headline is the fact itself: how much of today is done. */}
+      <h2 className="m-0 flex items-baseline gap-2 font-display">
+        <AnimatedNumber value={done} className="text-hero leading-none font-bold" />
+        <span className="text-title font-semibold text-ink-2">of {entries.length} done today</span>
+      </h2>
       <Progress value={entries.length ? done / entries.length : 0} />
       <div className="grid grid-cols-3 gap-2 text-xs">
         {[["Done", done, "text-good-fg"], ["Due now", due, "text-check-fg"], ["Missed", missed, "text-alert-fg"]].map(([label, n, cls]) => (
-          <div key={label} className="rounded-xl bg-raised p-2.5">
+          <div key={label} className="rounded-[var(--radius-inner)] bg-raised p-2.5">
             <div className="text-muted">{label}</div>
             <div className={cx("mt-1 text-lg font-semibold", cls)}><AnimatedNumber value={n} /></div>
           </div>
@@ -238,7 +237,7 @@ function NowMarker({ clock }) {
         <span className="h-3 w-3 rounded-full bg-accent shadow-[0_0_0_4px_rgb(var(--ah-accent-rgb)/.25)]" />
       </span>
       <span className="h-px flex-1 bg-gradient-to-r from-accent-text/70 to-transparent" />
-      <span className="text-[11px] font-semibold tracking-[0.1em] text-accent-text uppercase">Now</span>
+      <span className="text-caption font-semibold tracking-[0.1em] text-accent-text uppercase">Now</span>
     </motion.li>
   );
 }
@@ -265,8 +264,8 @@ function TrackButton({ kind, running, astroId }) {
     }
   }
   return (
-    <Button variant={running ? "secondary" : "primary"} className="min-h-10 px-3.5 text-[13px]" onClick={go} disabled={busy}>
-      <Icon name={kind === "exercise" ? "exercise" : "sleep"} size={15} /> {label}
+    <Button variant={running ? "secondary" : "primary"} className="min-h-10 px-3.5 text-label" onClick={go} busy={busy}>
+      {!busy && <Icon name={kind === "exercise" ? "exercise" : "sleep"} size={16} />} {label}
     </Button>
   );
 }
@@ -297,7 +296,7 @@ function TaskRow({ entry, last, flash, canAct, tracking = {}, astroId, trackRow 
         <span className="mt-4 h-3.5 w-3.5 shrink-0 rounded-full border-[3px] bg-surface transition-colors duration-500" style={{ borderColor: st.color }} />
         {!last && <span className="mt-1 w-px flex-1 bg-line-strong" />}
       </span>
-      <div className="relative mb-2.5 flex min-w-0 flex-1 flex-wrap items-center gap-3 rounded-2xl bg-raised p-3.5">
+      <div className="relative mb-2.5 flex min-w-0 flex-1 flex-wrap items-center gap-3 rounded-[var(--radius-inner)] bg-raised p-3.5">
         <AnimatePresence>
           {flash && (
             <motion.span
@@ -311,13 +310,13 @@ function TaskRow({ entry, last, flash, canAct, tracking = {}, astroId, trackRow 
           <Icon name={entry.status === "done" ? "tick" : KIND_ICON[entry.kind] || "schedule"} size={18} />
         </span>
         <div className="min-w-0 flex-1">
-          <div className={cx("text-[15px] font-semibold", entry.status === "done" && "text-ink-2")}>{entry.text}</div>
+          <div className={cx("text-body font-semibold", entry.status === "done" && "text-ink-2")}>{entry.text}</div>
           <div className="text-xs text-muted">{howto.hint}</div>
         </div>
         <StatusChip level={st.level} text={st.text(entry)} plain={entry.status === "upcoming"} />
         {canAct && trackable && (open || running) && <TrackButton kind={entry.kind} running={running} astroId={astroId} />}
         {canAct && open && howto.to && !running && (
-          <Button variant={trackable ? "secondary" : "primary"} className="min-h-10 px-3.5 text-[13px]" onClick={() => navigate(howto.to)}>
+          <Button variant={trackable ? "secondary" : "primary"} className="min-h-10 px-3.5 text-label" onClick={() => navigate(howto.to)}>
             {howto.cta}
           </Button>
         )}
@@ -332,7 +331,7 @@ function Timeline({ clock, entries, flash, canAct, tracking, astroId }) {
   const rows = trackingRows(entries);
   return (
     <Card>
-      <CardTitle eyebrow="Daily routine" title="Today's tasks" subtitle="Each task is checked off from what was actually logged in its time window." />
+      <CardTitle title="Today’s tasks" subtitle="Each task is checked off from what was actually logged in its time window." />
       {/* One flat, keyed list, so the "Now" line glides into its new slot as tasks pass. */}
       <ol className="m-0 list-none p-0">
         {entries.flatMap((e, i) => [
@@ -350,13 +349,13 @@ function Timeline({ clock, entries, flash, canAct, tracking, astroId }) {
 function FaceCheckSoon() {
   return (
     <Card className="flex items-start gap-4 opacity-75" aria-label="Face check, coming soon">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-raised text-muted">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius-inner)] bg-raised text-muted">
         <Icon name="user" size={20} />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[15px] font-semibold">Face check</span>
-          <span className="rounded-full border border-line-strong px-2 py-0.5 text-[11px] font-semibold tracking-[0.06em] text-muted uppercase">Coming soon</span>
+          <span className="text-body font-semibold">Face check</span>
+          <span className="rounded-full border border-line-strong px-2 py-0.5 text-caption font-semibold tracking-[0.06em] text-muted uppercase">Coming soon</span>
         </div>
         <p className="m-0 text-sm text-muted">Every 2 hours, a quick look at your expression to spot tiredness or stress.</p>
       </div>

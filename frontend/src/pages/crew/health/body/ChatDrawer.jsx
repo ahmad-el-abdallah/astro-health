@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Drawer } from "../../../../components/overlays/Drawer.jsx";
 import { Icon } from "../../../../components/ui/Icon.jsx";
-import { StatusChip, cx } from "../../../../components/ui/index.jsx";
+import { Spinner, StatusChip, cx } from "../../../../components/ui/index.jsx";
 import { VoiceFace } from "../../../../components/VoiceFace.jsx";
 import { useVoice } from "../../../../lib/useVoice.js";
 import { describeAction } from "../../../../lib/astraActions.js";
@@ -31,7 +31,7 @@ function sourceLine(source) {
 
 const CARD_STATUS = {
   saving: ["Saving…", "text-muted"],
-  saved: ["Saved ✓", "text-good-fg"],
+  saved: ["Saved", "text-good-fg"],
   partly: ["Some of it couldn't be saved", "text-check-fg"],
   cancelled: ["Not saved", "text-muted"],
   dismissed: ["Skipped", "text-muted"],
@@ -42,14 +42,18 @@ function ConfirmCard({ confirm, onAnswer }) {
   const [label, tone] = CARD_STATUS[confirm.status] || [];
   return (
     <span className="mt-2.5 flex flex-col gap-2 rounded-xl border border-line-strong bg-input p-3">
-      {confirm.actions.map((a, i) => <span key={i} className="block text-[13px] text-ink">{describeAction(a)}</span>)}
+      {confirm.actions.map((a, i) => <span key={i} className="block text-label text-ink">{describeAction(a)}</span>)}
       {confirm.status === "pending" ? (
         <span className="flex gap-2">
-          <button onClick={() => onAnswer(true)} className="min-h-9 cursor-pointer rounded-lg bg-accent px-3 text-[13px] font-bold text-accent-on hover:bg-accent-hover">Yes</button>
-          <button onClick={() => onAnswer(false)} className="min-h-9 cursor-pointer rounded-lg border border-line-strong bg-control px-3 text-[13px] font-semibold">No</button>
+          <button onClick={() => onAnswer(true)} className="min-h-9 cursor-pointer rounded-lg bg-accent px-3 text-label font-bold text-accent-on hover:bg-accent-hover">Yes</button>
+          <button onClick={() => onAnswer(false)} className="min-h-9 cursor-pointer rounded-lg border border-line-strong bg-control px-3 text-label font-semibold">No</button>
         </span>
       ) : (
-        <span className={cx("text-xs font-semibold", tone)}>{label}</span>
+        <span className={cx("inline-flex items-center gap-1.5 text-xs font-semibold", tone)}>
+          {confirm.status === "saving" && <Spinner size={12} />}
+          {confirm.status === "saved" && <Icon name="tick" size={14} className="animate-[ah-pop_.4s_ease-out]" />}
+          {label}
+        </span>
       )}
     </span>
   );
@@ -66,7 +70,7 @@ function Bubble({ m, onAnswer }) {
       className={cx("flex max-w-[88%] gap-2.5", mine ? "flex-row-reverse self-end" : "self-start")}
     >
       {!mine && (
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-bold text-accent-text">AI</span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-caption font-bold text-accent-text">AI</span>
       )}
       <div className="flex flex-col gap-1">
         <div
@@ -82,7 +86,7 @@ function Bubble({ m, onAnswer }) {
           {m.analysis && (
             <span className="mt-2 flex flex-col gap-1.5">
               {m.analysis.map((a) => (
-                <span key={a.region} className="flex flex-col gap-0.5 text-[13px]">
+                <span key={a.region} className="flex flex-col gap-0.5 text-label">
                   <span className="flex items-center gap-2"><StatusChip level={a.level} /><strong>{a.label}</strong></span>
                   <span className="text-muted">{a.todo}</span>
                 </span>
@@ -90,7 +94,7 @@ function Bubble({ m, onAnswer }) {
             </span>
           )}
         </div>
-        <span className={cx("text-[11px] text-subtle", mine && "text-right")}>{mine ? "You" : "Astra"} · {m.time}</span>
+        <span className={cx("text-caption text-subtle", mine && "text-right")}>{mine ? "You" : "Astra"} · {m.time}</span>
       </div>
     </motion.div>
   );
@@ -145,7 +149,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
         <div className="min-w-0 flex-1">
           <h2 className="m-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-base font-semibold">
             Consultation
-            <span role="status" aria-live="polite" className={cx("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold", chip.cls)}>
+            <span role="status" aria-live="polite" className={cx("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-caption font-semibold", chip.cls)}>
               <span className={cx("h-1.5 w-1.5 rounded-full", chip.dot)} />{chip.label}
             </span>
           </h2>
@@ -156,7 +160,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
             onClick={openVoiceMode}
             title="Voice mode: a hands-free conversation"
             aria-label="Voice mode"
-            className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-accent px-3 text-[13px] font-semibold text-accent-on hover:bg-accent-hover"
+            className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-accent px-3 text-label font-semibold text-accent-on hover:bg-accent-hover"
           >
             <Icon name="waveform" size={16} /><span className="max-sm:hidden">Voice mode</span>
           </button>
@@ -173,7 +177,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
             <Icon name={voice.voiceOn ? "volume" : "volume-off"} size={18} />
           </button>
         )}
-        <button onClick={closeDrawer} aria-label="Close consultation" className="min-h-11 cursor-pointer rounded-xl px-2 text-ink-2 hover:bg-raised">✕</button>
+        <button onClick={closeDrawer} aria-label="Close consultation" className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-xl text-ink-2 hover:bg-raised"><Icon name="close" size={20} /></button>
       </div>
 
       <div ref={logRef} className="flex flex-1 flex-col gap-3.5 overflow-y-auto bg-input px-5 py-5">
@@ -195,7 +199,7 @@ export function ChatDrawer({ open, onClose, consultation, onAnalyze, astroId, on
               key={c}
               whileTap={{ scale: 0.95 }}
               onClick={() => send(c)}
-              className="min-h-9 cursor-pointer rounded-full border border-line-strong bg-raised px-3.5 text-[13px] text-ink hover:border-accent-text/60"
+              className="min-h-9 cursor-pointer rounded-full border border-line-strong bg-raised px-3.5 text-label text-ink hover:border-accent-text/60"
             >
               {c}
             </motion.button>

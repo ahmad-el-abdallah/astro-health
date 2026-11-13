@@ -6,6 +6,7 @@ import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
 import { LEVEL_WORD } from "../../lib/levels.js";
 import { initials } from "../../lib/format.js";
 import { rise } from "./motion.js";
+import { Icon } from "./Icon.jsx";
 
 export function cx(...parts) {
   return parts.filter(Boolean).join(" ");
@@ -30,10 +31,10 @@ export function CardTitle({ eyebrow, title, subtitle, right, className = "" }) {
     <div className={cx("mb-4 flex items-start justify-between gap-3", className)}>
       <div className="min-w-0">
         {eyebrow && <div className="ah-eyebrow mb-1">{eyebrow}</div>}
-        {title && <h2 className="m-0 text-base font-semibold text-ink">{title}</h2>}
-        {subtitle && <p className="m-0 mt-0.5 text-[13px] text-muted">{subtitle}</p>}
+        {title && <h2 className="m-0 text-title font-semibold text-ink">{title}</h2>}
+        {subtitle && <p className="m-0 mt-1 text-label text-muted">{subtitle}</p>}
       </div>
-      {right}
+      {right && <div className="shrink-0 self-center">{right}</div>}
     </div>
   );
 }
@@ -58,7 +59,7 @@ export function StatusChip({ level = "GRAY", label, text, className = "", plain 
     >
       {!plain && (
         <span
-          className={cx("h-1.5 w-1.5 rounded-full bg-current", lvl === "RED" && "animate-[ah-pulse-dot_1.4s_ease-in-out_infinite]")}
+          className="h-1.5 w-1.5 rounded-full bg-current"
         />
       )}
       {label ? `${label}: ` : ""}
@@ -68,36 +69,49 @@ export function StatusChip({ level = "GRAY", label, text, className = "", plain 
 }
 
 const BTN = {
-  primary:
-    "bg-accent text-accent-on font-bold shadow-[0_6px_20px_rgb(var(--ah-accent-rgb)/.25)] hover:bg-accent-hover hover:shadow-[0_12px_34px_rgb(var(--ah-accent-rgb)/.45)]",
+  // The one call to action on a card/page: solid accent, bold, a little wider. No glow.
+  primary: "bg-accent text-accent-on font-bold px-5 hover:bg-accent-hover",
   secondary: "bg-control text-ink border border-line-strong hover:border-accent-text/60",
   ghost: "bg-transparent text-ink-2 hover:bg-raised",
-  danger: "bg-alert-action text-[#1a0b10] font-bold hover:brightness-110",
-  pill: "rounded-full bg-raised border border-line text-ink text-[13px] hover:border-accent-text/50",
+  danger: "bg-alert-action text-bg font-bold hover:brightness-110",
+  pill: "rounded-full bg-raised border border-line text-ink text-label hover:border-accent-text/50",
 };
 
-export function Button({ variant = "secondary", className = "", children, ...rest }) {
+// busy: shows a spinner and blocks clicks while the action runs (the label can say what's
+// happening, e.g. "Saving…"). The press scale is the only motion: it's feedback.
+export function Button({ variant = "secondary", className = "", busy = false, disabled, children, ...rest }) {
   return (
     <motion.button
-      whileHover={{ y: -1 }}
-      whileTap={{ y: 0, scale: 0.98 }}
-      transition={{ duration: 0.15 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ duration: 0.12 }}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
       className={cx(
-        "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl px-[18px] text-sm font-semibold transition-[background-color,box-shadow,border-color] duration-200 disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-[background-color,border-color,opacity] duration-200 disabled:cursor-not-allowed disabled:opacity-50",
         BTN[variant],
         className,
       )}
       {...rest}
     >
+      {busy && <Spinner />}
       {children}
     </motion.button>
+  );
+}
+
+export function Spinner({ size = 14, className = "" }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cx("inline-block shrink-0 animate-[ah-spin_.7s_linear_infinite] rounded-full border-2 border-current border-r-transparent", className)}
+      style={{ width: size, height: size }}
+    />
   );
 }
 
 export function IconButton({ label, className = "", children, ...rest }) {
   return (
     <motion.button
-      whileHover={{ y: -1 }}
       whileTap={{ scale: 0.95 }}
       aria-label={label}
       title={label}
@@ -125,7 +139,7 @@ export function Segmented({ options, value, onChange, id = "seg", className = ""
             aria-checked={selected}
             onClick={() => onChange(o.value)}
             className={cx(
-              "relative cursor-pointer rounded-[10px] px-3.5 text-[13px] transition-colors duration-200",
+              "relative cursor-pointer rounded-[10px] px-3.5 text-label transition-colors duration-200",
               size === "sm" ? "min-h-8" : "min-h-9",
               selected ? "font-semibold text-accent-on" : "text-ink-2 hover:text-ink",
             )}
@@ -165,8 +179,8 @@ export function AnimatedNumber({ value, decimals = 0, className = "" }) {
   const smooth = useSpring(mv, { stiffness: 90, damping: 20, mass: 0.6 });
   const text = useTransform(smooth, (v) => v.toFixed(decimals));
   useEffect(() => { if (!Number.isNaN(target)) mv.set(target); }, [target, mv]);
-  if (value == null || Number.isNaN(target)) return <span className={className}>–</span>;
-  return <motion.span className={className}>{text}</motion.span>;
+  if (value == null || Number.isNaN(target)) return <span className={cx("ah-num", className)}>–</span>;
+  return <motion.span className={cx("ah-num", className)}>{text}</motion.span>;
 }
 
 const RING = { GREEN: "ring-good-fg", YELLOW: "ring-check-fg", RED: "ring-alert-fg", GRAY: "ring-line-strong" };
@@ -190,7 +204,7 @@ export function Avatar({ name, color, level, size = 42, className = "" }) {
 
 export function Shimmer({ className = "" }) {
   return (
-    <div className={cx("relative overflow-hidden rounded-xl bg-raised", className)}>
+    <div aria-hidden="true" className={cx("relative overflow-hidden rounded-card-l bg-raised", className)}>
       <div className="absolute inset-0 animate-[ah-shimmer_1.4s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
     </div>
   );
@@ -199,9 +213,22 @@ export function Shimmer({ className = "" }) {
 export function Field({ label, hint, children, className = "" }) {
   return (
     <label className={cx("flex flex-col gap-1.5", className)}>
-      <span className="text-[13px] font-medium text-ink">{label}</span>
+      <span className="text-label font-medium text-ink">{label}</span>
       {children}
       {hint}
     </label>
+  );
+}
+
+// A trend in words with a matching icon -- one look everywhere (Mind, Overview, profile).
+// direction: "up" | "down" | "flat" | null (no trend yet).
+const TREND = { up: ["trend-up", "Improving"], down: ["trend-down", "Lower"], flat: ["trend-flat", "Stable"] };
+export function TrendLabel({ direction, text, className = "" }) {
+  const [icon, word] = TREND[direction] || [null, text || "–"];
+  return (
+    <span className={cx("inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-text", className)}>
+      {icon && <Icon name={icon} size={14} />}
+      {text || word}
+    </span>
   );
 }
