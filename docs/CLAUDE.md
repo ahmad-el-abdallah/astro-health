@@ -3032,11 +3032,206 @@ Re-verified with the controllable fake mic, 17/17:
 
 94 frontend tests pass.
 
+## "Wanna talk?": local Wav2Vec2 voice tone estimates (2026-11-13, branch `feature/wav2vec2-wanna-talk`)
+
+The user asked for their Kaggle-tested model `Dpngtm/wav2vec2-emotion-recognition` (7 labels:
+angry, calm, disgust, fearful, happy, sad, surprised) on the Mind page, through Astra's
+existing voice experience. Decided with the user:
+- estimates stay separate from self-reported mood;
+- no live tone during the call, and none sent to Astra's AI;
+- one estimate per phrase, not continuous audio;
+- the shared microphone is reused, and only scores are kept, never recordings.
+
+**Not committed. Master untouched.**
+
+- **The model is optional.**
+  - `requirements-emotion.txt` pins `torch==2.15.0+cpu` (PyTorch's CPU-only index) and
+    `transformers==5.22.2`. Both have Python 3.14 Windows wheels; confirmed with a pip dry-run
+    before installing. `requirements.txt` is unchanged.
+  - `backend/services/emotion.py` only imports torch in a background thread, so a missing
+    install can't break startup. status() reports `missing-deps` / `missing-model` / `loading`
+    / `ready` / `error` / `disabled`, and the API answers 503.
+  - Tests set `ASTRO_NO_EMOTION=1` (conftest).
+- **The model, pinned.**
+  - Revision `033a5751a5bb...`. Only `config.json`, `model.safetensors` and
+    `preprocessor_config.json` go into `models/wav2vec2-emotion/` (gitignored), with the
+    weights' SHA-256 checked.
+  - It loads with `local_files_only=True` and is checked to have exactly those 7 labels at
+    16 kHz.
+  - Preprocessing is the model's own `Wav2Vec2FeatureExtractor`. It matches a plain
+    transformers `pipeline("audio-classification")` call to within 0.00004 (a test).
+  - **Not yet compared with the user's own Kaggle WAV**: ask for it, and run
+    `python -m backend.services.emotion predict <file>`. That CLI resamples other rates with
+    an FFT (close to librosa, not bit-identical; a 16 kHz export from the notebook gives an
+    exact match).
+- **Measured on this laptop** (Intel Core 7 240H, 16 threads; default `THREADS = 4`):
+  - Load is 3 s and adds about 490 MB of RAM (about 720 MB for the process).
+  - Per phrase: 2 s takes about 105 ms, 5 s about 250 ms, 10 s about 490 ms, 15 s about
+    830 ms.
+  - One inference runs at a time (lock), outside the DB write lock.
+- **API** (`routes.py`):
+  - `GET /voice-tone/status` (open).
+  - `POST /astronauts/<id>/voice-tone?talk=<id>`: raw `audio/wav` body, the astronaut
+    themself only (not the surgeon). 16 kHz mono 16-bit, 1-15 s, <= 1 MB, decoded with the
+    stdlib `wave` module.
+  - `GET /astronauts/<id>/voice-tone?days=7`: self or surgeon, like the journal.
+  - New `voice_tone` table (scores only; no column can hold audio, which a test checks).
+    `readings` is never written, which a test also checks. The `voice_tone` socket event
+    invalidates `["voice-tone"]`.
+- **Capture** (`lib/toneCapture.js` + `lib/toneClip.js` + `public/worklets/pcm-capture.js`):
+  - An AudioWorklet on `stationAudio.input.source`, the shared micMeter's MediaStreamSource,
+    which is now exposed. It never calls getUserMedia itself.
+  - The worklet is a plain static file because Vite inlined it as a data: URL.
+  - `VoiceMode` gets a `toneCapture` prop, off for every other call. In that mode it:
+    - starts a recording when listening starts;
+    - in `onFinal` takes the window, but only sends it at the point where the phrase is
+      accepted as you, never for echo, room noise or "stop";
+    - turns off the cabin hum.
+  - `AstraProvider.talk()` opens the call with an opening line, added to the conversation via
+    `announce()`.
+- **Phrase boundaries: a real limitation, reported to the user.**
+  - The browser recognizer gives no timestamps. A window is from the recognizer start to
+    ENDPOINT_MS (1.2 s) after the words stop changing, and it also runs while Astra talks.
+  - A probe in headless Edge with a real speech WAV as the fake mic showed its boundaries
+    don't match the audio: "speech start" during silence, a sentence split across two
+    windows, ends seconds late.
+  - Mitigations:
+    - blocks recorded while `voiceState.speaking` are dropped, plus a 700 ms echo guard;
+    - the first 300 ms are dropped (the beep);
+    - the clip is trimmed to the loud part (`trimToVoice`);
+    - under 0.6 s of voice gives no clip.
+  - Even so, a clip can be part of a sentence. The user was told; an audio-based segmenter
+    (VAD on the continuous stream) is the proposed fix, not built.
+- **Verified:**
+  - 288 backend tests (22 new), 106 frontend tests (12 new), lint clean, dist rebuilt.
+  - On an isolated copy (port 5057, own data dir, no AI key), Edge with the fake mic plus a
+    fake recognizer and synth passed 27/27 checks:
+    - 3 phrases → 3 real estimates, with Astra's voice dropped;
+    - saved under one talk id, and mood history identical;
+    - the Mind card shows it;
+    - a normal call and the wake word send nothing;
+    - no request left the laptop, and no page errors;
+    - the surgeon can view, but the start button is disabled and a POST gets 403.
+  - With `ASTRO_NO_EMOTION=1` the talk still works (one 503, then capture stops, nothing
+    saved).
+  - **Not yet tried with a real microphone and real recognizer.**
+- **Integration pass (same day):**
+  - **Offline is now forced.** `load()` sets `HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` (setdefault)
+    before the first transformers import, on top of `local_files_only=True`.
+    `test_real_model_loads_offline_in_a_fresh_process` checks that a new process with sockets
+    blocked loads from `models/wav2vec2-emotion/` with 0 connection attempts.
+  - **Real-model API test.** `test_real_model_full_api_flow_offline` POSTs
+    `tests/fixtures/voice_phrase.wav` (4.3 s of Windows offline-TTS speech, 16 kHz) through
+    Flask to the real model, then checks the row and list route have 7 probabilities summing to
+    1, mood is unchanged, no audio is stored, and there's no network.
+  - **The seven probabilities are shown.** The Mind card has a "Tone mix", all seven
+    averaged over the last talk (`talkMix()` in `toneClip.js`), plus an "Each phrase"
+    breakdown.
+  - **Records only when the model is ready.** `AstraProvider` reads `useVoiceToneStatus()`:
+    `talkMode` (header, no hum) is separate from `toneCapture` (recording, only when the status
+    is "ready"). So without the model nothing is recorded or sent; it used to send one clip and
+    get a 503.
+  - **Capture tests.** `toneCapture.test.js` (Web Audio and fetch faked) covers:
+    - it attaches to the shared mic and never calls getUserMedia;
+    - re-attaching after the mic reopens;
+    - Astra tagging;
+    - an abort during begin;
+    - each reason a clip is skipped;
+    - resampling;
+    - a relative URL, and a 503 meaning unavailable.
+  - **The browser test is in the project.** `frontend/scripts/e2e-wanna-talk.mjs` (dev
+    dependency `playwright-core`, uses the installed Edge or Chrome) builds its fake mic from
+    the fixture and refuses port 5000. Its header has the isolated-copy steps. It passed 30/30
+    with the model, and 23/23 with `ASTRO_NO_EMOTION=1`.
+  - **Live backend restarted** (user's OK) on the branch code. The model is ready, the live DB
+    gained an empty `voice_tone` table, and the readings / mood counts are unchanged (19 / 3).
+    A copy of the DB from before the restart is in the session scratchpad.
+  - 290 backend and 119 frontend tests.
+- **Real-mic fix: speech-based segmentation (same day).** The user's real-mic diagnostics
+  showed phrases thrown away as "only Astra's voice", and clips kept at 0.7–0.8 s. One clip
+  had a peak of 0.0021 RMS against a 0.008 cutoff, so 0 s of it counted as voiced.
+  Two root causes:
+  1. Blocks were tagged as hers using `voiceState.speaking`, which covers her whole turn:
+     - before the start beep;
+     - the neural echo wait (up to 0.77 s);
+     - the 320 ms end beep;
+     - a late or missing Chrome `onend`, worth up to 6 s plus 110 ms per character.
+
+     A 0.7 s guard came on top of that. So the start of the reply, or all of it, was
+     discarded.
+  2. The loudness cutoff was an absolute 0.008, but this mic (noise suppression on, no
+     auto-gain) peaks at -54 dBFS.
+
+  Now:
+  - `stationAudio.astraAudible()` follows her actual sound:
+    - the beeps and chimes for their real length (`markAstraSound`);
+    - the neural voice by its real output level, echo included;
+    - the browser voice by `speechSynthesis.speaking`.
+
+    Plus a 200 ms guard.
+  - `lib/toneCapture.js` records continuously during the Wanna Talk call (in memory, last
+    20 s, cleared on close).
+  - `lib/toneClip.js` cuts each accepted phrase by the audio itself:
+    - the background is measured (10th percentile of non-Astra frames, never below
+      -74 dBFS);
+    - onset is +10 dB, offset +6 dB, with a 400 ms hangover;
+    - at least 300 ms voiced and enough rise and fall (p90/p10 >= 2.5), so steady noise
+      doesn't count;
+    - 1 s of pre-roll, runs joined into one clip, capped at 15 s;
+    - `after`/`usedUntil` so no speech is sent twice;
+    - frames where you talk over Astra are dropped.
+  - `normalizeGain()` brings the clip to 0.1 RMS before 16-bit. The model normalises its
+    input, which a real-model test checks: the result at -54 dBFS matches full level
+    within 0.01.
+  - Diagnostics: one numbers-only `[astra] voice tone phrase N` line per phrase.
+  - `toneSegmentation.test.js` covers the cases the user listed, at the measured levels and
+    with the real fixture:
+    - you alone;
+    - you right after Astra;
+    - Astra alone, with her echo tail;
+    - fan noise and slow swells;
+    - quiet speech, and speech too near the background;
+    - talking over her;
+    - short, long, pauses, consecutive phrases with Astra between.
+- **Conversations (the Mind page's "Latest Conversation Analysis").**
+  - **New table `voice_talks`.** The server makes the id `talk-<uuid4>`, and
+    `backend/logic/voice_talks.py` runs open → close → finish. New table only: nothing
+    existing was migrated, and a test checks old rows survive. The live DB was backed up
+    first to `data/backup-2026-11-13-before-voice-talks-astro.db` (gitignored).
+  - **Phrases belong to a conversation.** `POST /voice-tone` now requires a talk that
+    exists, belongs to that astronaut, and is still active or analysing: unknown ids get
+    404, finished ones 409.
+  - **The result** is the plain mean of that conversation's phrase probabilities,
+    renormalised. The dominant tone is the highest mean.
+  - **Stale conversations finish themselves.** `finalize_stale()` (90 s after close, or
+    30 min idle) completes them as "timed out", so a closed tab never leaves the page
+    loading.
+  - **Browser side.** `lib/toneTalks.js` opens the conversation from `AstraProvider.talk()`;
+    recording waits for the id. Each phrase is tracked with `trackPhrase`. On close,
+    `finishTalk` closes it, awaits pending analyses (kept in this module, so unmounting
+    loses nothing), then finishes it.
+  - **The UI.** `GET .../voice-talks/latest` gives the latest *ended* conversation. The
+    page polls it every 2 s while it's "analysing", and the `voice_talk` event refreshes it.
+    `pages/crew/mind/ConversationAnalysis.jsx` has a pure `conversationView()` plus the
+    view, with loading / analysing / success / empty / error states, tested in
+    `ConversationAnalysis.test.jsx` with `react-dom/server`. The section sits below the
+    Wanna talk and voice-tone cards; the history card and mood are unchanged.
+- **Verified:**
+  - 305 backend and 146 frontend tests, lint clean, build done.
+  - `scripts/e2e-wanna-talk.mjs` passed 36/36 at normal level, 36/36 with `--level 0.0021`
+    (the user's measured mic level), and 23/23 with the model off.
+
+  That browser test fakes speech-to-text and Astra's voice. **Real-mic reliability still
+  needs the user's own test.**
+- **Existing bug found, not fixed (unrelated):** while an Astra notice card is showing, the
+  first real click on any "Talk to Astra" button (Body page too) doesn't open the call; the
+  second does.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 266 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 305 tests (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 94 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
+- `cd frontend && npm test` — 146 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

@@ -44,6 +44,7 @@ export function quindar(kind = "start") {
   osc.connect(g).connect(c.destination);
   osc.start(t);
   osc.stop(t + 0.26);
+  markAstraSound(290);
   return new Promise((resolve) => setTimeout(resolve, 320));
 }
 
@@ -62,6 +63,7 @@ export function chime(freq = 440, ms = 260, volume = 0.05) {
   osc.connect(g).connect(c.destination);
   osc.start(t);
   osc.stop(t + ms / 1000 + 0.05);
+  markAstraSound(ms + 60);
 }
 
 // ---- cabin hum ----
@@ -112,6 +114,24 @@ export function ambience(on) {
 // analyser: live loudness of the neural voice; startedAtMs/durationMs: how far into the clip
 // she is (for "what had she said when you interrupted").
 export const output = { analyser: null, startedAtMs: null, durationMs: null };
+
+// ---- is Astra's sound coming out of the speakers RIGHT NOW? ----
+// For "Wanna talk?" (lib/toneCapture.js): audio recorded while this is true is hers, not the
+// astronaut's. Deliberately NOT useVoice's voiceState.speaking, which covers her whole turn
+// (before the start beep, the echo wait, the end beep, and a late or missing browser onend)
+// and so also covered the astronaut's reply right after she stopped. This follows the sound:
+//   * beeps/chimes: their real length (markAstraSound);
+//   * the neural voice: its real output level, echo tail included (output.analyser);
+//   * the browser voice (no level available to the page): speechSynthesis.speaking.
+let soundUntil = 0;
+export function markAstraSound(ms) { soundUntil = Math.max(soundUntil, performance.now() + ms); }
+export const AUDIBLE_LEVEL = 0.01; // levelOf() of her output above this = audible
+export function astraAudible() {
+  if (performance.now() < soundUntil) return true;
+  if (output.analyser && levelOf(output.analyser) > AUDIBLE_LEVEL) return true;
+  const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
+  return !!(synth && synth.speaking && !synth.paused);
+}
 let current = null; // { src, resolve }
 const impulses = {};
 
@@ -232,7 +252,9 @@ export async function playNeural(arrayBuffer, { echo = "medium", radio = false }
 }
 
 // ---- microphone level (voice-mode orb while listening) ----
-export const input = { analyser: null };
+// source: the microphone's MediaStreamSource, so the "Wanna talk?" voice tone capture
+// (lib/toneCapture.js) records from this SAME microphone instead of opening its own.
+export const input = { analyser: null, source: null };
 let micStream = null;
 let micUsers = 0;
 let micTimer = null;
@@ -264,8 +286,10 @@ export const micMeter = {
     micStream = stream;
     const analyser = c.createAnalyser();
     analyser.fftSize = 1024;
-    c.createMediaStreamSource(micStream).connect(analyser); // measured only, never played back
+    const source = c.createMediaStreamSource(micStream);
+    source.connect(analyser); // measured only, never played back
     input.analyser = analyser;
+    input.source = source;
     micLevels.reset();
     micTimer = setInterval(() => { if (c.state === "running") micLevels.push(levelOf(analyser), Date.now()); }, 60);
     return true;
@@ -278,6 +302,7 @@ export const micMeter = {
     micStream?.getTracks().forEach((t) => t.stop());
     micStream = null;
     input.analyser = null;
+    input.source = null;
   },
 };
 

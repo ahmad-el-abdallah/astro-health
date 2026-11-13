@@ -8,7 +8,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAstronautPicker } from "../../auth/AuthProvider.jsx";
 import { post } from "../../lib/api.js";
 import { fmtTime, MOOD_LABELS, moodScore } from "../../lib/format.js";
-import { useHistory, useJournal, useMission } from "../../lib/queries.js";
+import { useHistory, useJournal, useMission, useVoiceTone, useVoiceToneStatus } from "../../lib/queries.js";
+import { countTones, latestTalk, pct, talkMix, TONE_DISCLAIMER, TONE_LABELS, TONE_ORDER, TONE_PRIVACY } from "../../lib/toneClip.js";
+import { useAstra } from "../../components/AstraProvider.jsx";
+import { LatestConversationAnalysis } from "./mind/ConversationAnalysis.jsx";
 import { Button, Card, CardTitle, StatusChip, cx } from "../../components/ui/index.jsx";
 import { Icon } from "../../components/ui/Icon.jsx";
 import { EASE_ENTER } from "../../components/ui/motion.js";
@@ -220,6 +223,107 @@ function Journal({ astroId }) {
   );
 }
 
+// "Wanna talk?": a hands-free chat with Astra (her usual voice screen), during which each
+// phrase also gets a voice tone ESTIMATE made on this laptop. Shown only here, afterwards, and
+// kept apart from the self-reported mood above (own table, own card, never in the mood chart).
+const TONE_STATUS_TEXT = {
+  ready: "Voice tone estimates are on for this talk.",
+  loading: "The voice tone model is still loading…",
+  idle: "The voice tone model is still loading…",
+};
+
+function WannaTalk({ astroId }) {
+  const astra = useAstra();
+  const status = useVoiceToneStatus();
+  const st = status.data?.state;
+  const Recognition = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+  const own = astra.available && Number(astra.astroId) === Number(astroId);
+  const why = !own ? "Only the astronaut can start a talk, from their own sign-in."
+    : !Recognition ? "Voice needs Chrome or Edge."
+    : typeof window !== "undefined" && !window.isSecureContext ? "Voice needs the app opened as http://localhost:5000 (or https)."
+    : "";
+  return (
+    <Card className="flex flex-[1_1_300px] flex-col gap-4">
+      <CardTitle eyebrow="Talk it through" title="Wanna talk?" subtitle="A short, hands-free chat with Astra about how you're doing." className="mb-0" />
+      <Button variant="primary" className="w-fit" onClick={() => astra.talk()} disabled={!!why}>
+        <Icon name="mic" size={16} /> Talk to Astra
+      </Button>
+      {why && <p className="m-0 text-[13px] text-muted">{why}</p>}
+      <p className="m-0 text-[13px] text-ink-2">
+        {TONE_STATUS_TEXT[st] || "Voice tone estimates aren’t set up on this laptop. The talk works the same without them."}
+      </p>
+      <p className="m-0 text-xs text-subtle">{TONE_PRIVACY}</p>
+    </Card>
+  );
+}
+
+function VoiceTone({ astroId }) {
+  const tone = useVoiceTone(astroId, 7);
+  const rows = tone.data || [];
+  const last = latestTalk(rows);
+  const week = countTones(rows);
+  const max = Math.max(1, ...Object.values(week));
+  return (
+    <Card className="flex flex-[2_1_520px] flex-col gap-4">
+      <CardTitle eyebrow="Voice tone · estimate" title="How your voice sounded" subtitle={TONE_DISCLAIMER} className="mb-0" />
+      {!last ? (
+        <p className="m-0 py-4 text-center text-sm text-muted">No voice tone estimates yet. They appear here after a “Wanna talk?” chat.</p>
+      ) : (
+        <>
+          <div>
+            <div className="text-[13px] text-ink-2">
+              Last talk · {fmtTime(last.ts)} · {last.phrases.length} phrase{last.phrases.length === 1 ? "" : "s"} · mostly <span className="font-semibold text-ink">{TONE_LABELS[last.top].toLowerCase()}</span>
+            </div>
+          </div>
+          <div>
+            <div className="ah-eyebrow mb-2">Tone mix · last talk</div>
+            <dl aria-label="All seven voice tone probabilities, averaged over the last talk" className="m-0 flex flex-col gap-1.5">
+              {talkMix(last.phrases).map(({ tone: t, p }) => (
+                <div key={t} className="flex items-center gap-3 text-[13px]">
+                  <dt className="w-20 text-ink-2">{TONE_LABELS[t]}</dt>
+                  <dd className="m-0 h-2 flex-1 overflow-hidden rounded-full bg-raised">
+                    <div className="h-full rounded-full bg-accent-text/50" style={{ width: `${p * 100}%` }} />
+                  </dd>
+                  <span className="w-10 text-right text-subtle">{pct(p)}</span>
+                </div>
+              ))}
+            </dl>
+            <details className="mt-3 text-[13px]">
+              <summary className="cursor-pointer text-ink-2">Each phrase ({last.phrases.length})</summary>
+              <ol aria-label="Voice tone probabilities of each phrase in the last talk" className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
+                {last.phrases.map((ph, i) => (
+                  <li key={ph.id} className="rounded-xl border border-line bg-input px-3 py-2">
+                    <div className="text-ink-2">
+                      Phrase {i + 1} · {fmtTime(ph.ts)} · {ph.duration_s} s · most likely <span className="font-semibold text-ink">{TONE_LABELS[ph.label].toLowerCase()}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-subtle">
+                      {talkMix([ph]).map(({ tone: t, p }) => <span key={t}>{TONE_LABELS[t]} {pct(p)}</span>)}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          </div>
+          <div>
+            <div className="ah-eyebrow mb-2">Most likely tone per phrase · last 7 days · {rows.length} phrase{rows.length === 1 ? "" : "s"}</div>
+            <dl className="m-0 flex flex-col gap-1.5">
+              {TONE_ORDER.filter((t) => week[t]).map((t) => (
+                <div key={t} className="flex items-center gap-3 text-[13px]">
+                  <dt className="w-20 text-ink-2">{TONE_LABELS[t]}</dt>
+                  <dd className="m-0 h-2 flex-1 overflow-hidden rounded-full bg-raised">
+                    <div className="h-full rounded-full bg-accent-text/50" style={{ width: `${(week[t] / max) * 100}%` }} />
+                  </dd>
+                  <span className="w-6 text-right text-subtle">{week[t]}</span>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function Mind() {
   const { id } = useAstronautPicker();
   const history = useHistory(id, "mood", 7);
@@ -234,6 +338,11 @@ export default function Mind() {
         <Wellbeing rows={rows} mission={mission.data} />
       </div>
       <MoodChart rows={rows} astroId={id} />
+      <div className="flex flex-wrap gap-5">
+        <WannaTalk astroId={id} />
+        <VoiceTone astroId={id} />
+      </div>
+      <LatestConversationAnalysis astroId={id} />
       <div className="flex flex-wrap gap-5">
         <Breathing />
         <Journal astroId={id} />

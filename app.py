@@ -22,6 +22,7 @@ from backend import db, seed
 from backend.logic import analysis, astra_memory, sessions
 from backend.jobs import comms, scheduler
 from backend.routes import routes, admin_routes
+from backend.services import emotion
 from backend import config
 from backend.config import DATA_DIR
 from backend.hardware.pico_bridge import PicoBridge
@@ -130,6 +131,9 @@ def create_app(args):
     bridge = choose_bridge(args, on_message, on_status, on_send)
     handle_cyd_message = routes.create_routes(app, socketio, bridge)
     analysis.start_worker()  # runs queued AI health analyses one at a time
+    # Optional voice tone model for "Wanna talk?": loads in the background, and is simply
+    # unavailable (the API answers 503) without requirements-emotion.txt or the model files.
+    emotion.start_loading()
     admin_routes.create_admin_routes(app)
     bridge.start()
 

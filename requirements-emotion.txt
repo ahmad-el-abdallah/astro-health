@@ -1,0 +1,13 @@
+# OPTIONAL: voice tone estimates for "Wanna talk?" (backend/services/emotion.py).
+# The app runs without these -- requirements.txt alone is enough for everything else.
+#
+#   .venv/bin/python -m pip install -r requirements-emotion.txt   (Windows: .venv\Scripts\python)
+#   .venv/bin/python -m backend.services.emotion download          (the model, ~378 MB)
+#
+# CPU-only PyTorch: this laptop has no NVIDIA GPU, and the CUDA build is ~2.5 GB.
+# Checked 2026-11-13: both have Python 3.14 Windows wheels (torch cp314, transformers py3).
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+--only-binary=:all:
+torch==2.15.0+cpu
+transformers==5.22.2

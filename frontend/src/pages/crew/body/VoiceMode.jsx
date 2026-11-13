@@ -20,6 +20,8 @@ import { describeAction, isCancelPhrase } from "../../../lib/astraActions.js";
 import { isYou, loudEnough, micLevels, ROOM_ORDER, roomSettings, roomStore } from "../../../lib/hearing.js";
 import { EmergencyCountdown } from "../../../components/astra/EmergencyCountdown.jsx";
 import { GuidedActivity } from "../../../components/astra/GuidedActivity.jsx";
+import { describeClip, phraseToWav, sendClip, toneCapture } from "../../../lib/toneCapture.js";
+import { finishTalk, trackPhrase } from "../../../lib/toneTalks.js";
 
 const WORD = { listening: "Listening…", thinking: "Thinking…", speaking: "Speaking…" };
 
@@ -36,10 +38,19 @@ const WORD = { listening: "Listening…", thinking: "Thinking…", speaking: "Sp
 //                             already said it out loud before the screen opened
 //   announcement {text, key} -- something new to say while the call is open (waits until idle)
 //   activity / onActivityDone -- a guided activity (breathing, reaction test, measuring guide)
+//   talkMode              -- "Wanna talk?" (Mind page): its header, and no cabin hum.
+//   toneAvailable         -- this laptop's voice tone model is ready (for the header; recording
+//                            itself waits for toneCapture, i.e. the conversation id too).
+//   toneCapture / talkId  -- in that talk, and only while the model is ready: the shared
+//                            microphone is recorded (in memory, last 20 s) and YOUR speech in
+//                            each accepted phrase is sent to THIS laptop's backend for a voice
+//                            tone estimate (lib/toneCapture.js). Off for every other call.
+//                            Nothing is shown during the call, and Astra's AI is never told.
 //   emergency / onCancelEmergency -- the "calling for help in 5…" countdown
 export function VoiceMode({
   onClose, astroId, submit, thinking, initialQuestion = "", pending, onConfirm, onCancelPending, onNavigate, onInterrupted,
   opening = null, announcement = null, activity = null, onActivityDone, emergency = null, onCancelEmergency, content,
+  talkMode = false, toneAvailable = false, toneCapture: toneMode = false, talkId = "",
 }) {
   const [micOn, setMicOn] = useState(true);
   const [captions, setCaptions] = useState(false);
@@ -88,8 +99,45 @@ export function VoiceMode({
     onInterrupted?.(soFar);
   }, [onInterrupted]);
 
+  // "Wanna talk?": turn one accepted phrase into a clip of just your voice and send it to this
+  // laptop's backend. In the background: never delays or changes Astra's reply.
+  // Diagnostics: one `[astra] voice tone phrase N` console line per accepted phrase, with
+  // numbers and reasons only (never audio or what was said).
+  // Each phrase's analysis is tracked against this call's conversation (lib/toneTalks.js), so
+  // one still running when the call ends is waited for, counted and kept, not lost.
+  const toneOff = useRef(false);
+  const phraseNo = useRef(0);
+  const talkIdRef = useRef(talkId);
+  useEffect(() => { if (talkId) talkIdRef.current = talkId; }, [talkId]);
+  const analyseTone = useCallback((rec) => {
+    if (!toneMode || !talkId) return;
+    const n = ++phraseNo.current;
+    const talk = talkId; // the conversation this phrase belongs to, whatever happens later
+    trackPhrase(talk, async () => {
+      if (toneOff.current) { console.info(`[astra] voice tone phrase ${n}: NO CLIP (analysis unavailable on this laptop)`); return "failed"; }
+      if (!rec) { console.info(`[astra] voice tone phrase ${n}: NO CLIP (not recording: ${toneCapture.lastStart})`); return "skipped"; }
+      try {
+        const clip = await phraseToWav(rec);
+        if (clip.skip) { console.info(describeClip(n, clip)); return "skipped"; }
+        toneCapture.markUsed(clip.usedUntil); // never send the same speech twice
+        const t0 = performance.now();
+        const r = await sendClip(astroId, talk, clip.wav);
+        if (r?.unavailable) { toneOff.current = true; console.info(describeClip(n, clip, "HTTP 503: analysis unavailable on this laptop")); return "failed"; }
+        console.info(describeClip(n, clip, `HTTP 200 in ${Math.round(performance.now() - t0)} ms (model ${r.ms} ms): saved #${r.id}, ${Object.keys(r.scores || {}).length} probabilities, top ${r.label} ${Math.round(r.confidence * 100)}%`));
+        return "analysed";
+      } catch (err) {
+        console.warn(`[astra] voice tone phrase ${n}: upload failed: ${err?.message || err}`);
+        return "failed";
+      }
+    });
+  }, [astroId, talkId, toneMode]);
+
   const [stuckNote, setStuckNote] = useState("");
   const onFinal = useCallback(async (text, meta = {}) => {
+    // Tone mode: a snapshot of the recording around this phrase's listening window (the
+    // recognizer's clock is Date.now(), the recording's performance.now()). Used only if the
+    // phrase is accepted below as YOU -- never when it's thrown away as Astra's echo or the room.
+    const toneRec = toneMode && meta.startedAt ? toneCapture.phrase(performance.now() - (Date.now() - meta.startedAt)) : null;
     // "Cancel" during the help countdown wins over everything -- even while she's talking
     // (her own words say "say cancel", so the echo check below would throw it away).
     if (live.current.emergency && isCancelPhrase(text)) {
@@ -101,13 +149,15 @@ export function VoiceMode({
     }
     // Browsers deliver your words as they come, so she's usually already stopped (cutInRef)
     // by the time the finished sentence arrives here.
-    if (voiceState.speaking && isEcho(text, voiceRef.current?.currentText())) { listenAgain(100); return; } // her own voice
+    const notUsed = (why) => { if (toneMode) console.info(`[astra] voice tone: heard a phrase but didn't use it (${why})`); };
+    if (voiceState.speaking && isEcho(text, voiceRef.current?.currentText())) { notUsed("Astra's own voice"); listenAgain(100); return; } // her own voice
     // Too quiet or too unclear to be the astronaut (someone across the room, a video, noise
     // turned into words): ignore it and keep listening (lib/hearing.js, the "Room" setting).
     const since = meta.startedAt ? Date.now() - meta.startedAt + 400 : 6000;
     // While she's talking, only someone close to the mic may cut in (same rule as onInterim).
-    if (voiceState.speaking && !loudEnough(micLevels, since)) { listenAgain(100); return; }
+    if (voiceState.speaking && !loudEnough(micLevels, since)) { notUsed("too quiet to cut in"); listenAgain(100); return; }
     if (!isYou({ confidence: meta.confidence, sinceMs: since }, micLevels)) {
+      notUsed("too quiet or unclear");
       console.info(`[astra] ignored "${text}" (too quiet or unclear: probably the room)`);
       cutInRef.current = false;
       setHeard(text);
@@ -118,10 +168,11 @@ export function VoiceMode({
     const cutIn = voiceState.speaking || cutInRef.current;
     cutInRef.current = false;
     if (voiceState.speaking) interrupt();
-    if (cutIn && isStopCommand(text)) { cutInRef.current = false; setHeard(""); listenAgain(100); return; } // just "stop": wait for you
+    if (cutIn && isStopCommand(text)) { notUsed("a stop word"); cutInRef.current = false; setHeard(""); listenAgain(100); return; } // just "stop": wait for you
     const turn = ++turnRef.current;
     setHeard(text);
     setStuckNote("");
+    analyseTone(toneRec);
     const reply = await submit(text);
     if (!live.current.open || turn !== turnRef.current) return;
     if (reply?.text && !reply.activity) { // an activity speaks for itself
@@ -131,7 +182,7 @@ export function VoiceMode({
     if (!live.current.open || turn !== turnRef.current) return; // you interrupted her
     if (reply?.navigate) { onNavigate?.(reply.navigate); return; } // closes this screen
     listenAgain(150);
-  }, [submit, listenAgain, onNavigate, interrupt]);
+  }, [submit, listenAgain, onNavigate, interrupt, toneMode, analyseTone]);
 
   const onInterim = useCallback((text) => {
     setHeard(text);
@@ -193,7 +244,7 @@ export function VoiceMode({
   useEffect(() => {
     const state = live.current; // the same object for the whole life of this component
     state.open = true;
-    ambience(settings.hum);
+    ambience(talkMode ? false : settings.hum); // a quiet "Wanna talk?" (and no hum under its recordings)
     micMeter.start();
     const t = setTimeout(async () => {
       if (state.activity) return; // the activity speaks for itself
@@ -216,9 +267,20 @@ export function VoiceMode({
       abortListening();
       cancel();
       ambience(false);
+      toneCapture.stop(); // and forget everything it had in memory
+      if (talkIdRef.current) finishTalk(talkIdRef.current); // waits for its pending analyses, then finishes it
       micMeter.stop();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Tone mode: record continuously from the shared microphone for the whole call (in memory,
+  // the last 20 s only); each accepted phrase takes its speech from it (lib/toneClip.js).
+  // Retried when listening starts, in case the mic or sound wasn't ready the first time.
+  useEffect(() => {
+    if (!toneMode || toneOff.current) return;
+    if (!toneCapture.recording) toneCapture.start();
+  }, [toneMode, voice.listening]);
+  useEffect(() => (toneMode ? () => toneCapture.stop() : undefined), [toneMode]);
 
   const busy = thinking || voice.preparing;
   // She may be listening while she talks (so you can cut in) -- show "Speaking" then.
@@ -289,9 +351,9 @@ export function VoiceMode({
           <SpaceBackdrop />
           <div className="flex w-full max-w-3xl items-center justify-between">
             <div>
-              <div className="ah-eyebrow">Astra · voice</div>
+              <div className="ah-eyebrow">{talkMode ? "Wanna talk? · Astra" : "Astra · voice"}</div>
               <div className="text-[13px] text-muted">
-                {settings.engine === "neural" ? "Neural voice" : "Browser voice"}{settings.engine === "neural" && settings.echo !== "off" ? ` · ${settings.echo} echo` : ""}{settings.beeps ? " · comms beeps" : ""}
+                {talkMode ? (toneAvailable ? "Voice tone is estimated on this laptop, recordings aren’t kept" : "Voice tone estimates aren’t set up on this laptop") : <>{settings.engine === "neural" ? "Neural voice" : "Browser voice"}{settings.engine === "neural" && settings.echo !== "off" ? ` · ${settings.echo} echo` : ""}{settings.beeps ? " · comms beeps" : ""}</>}
               </div>
             </div>
             <div className="flex items-center gap-2">

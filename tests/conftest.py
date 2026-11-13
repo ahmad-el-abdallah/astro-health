@@ -10,6 +10,9 @@ from backend.logic import analysis, sessions
 # Test apps never start the Pico NFC reader thread (see app.py): it would outlive its test,
 # could open the real reader plugged into a dev laptop, and races test_pico_bridge.py.
 os.environ["ASTRO_NO_PICO"] = "1"
+# ...nor load the optional voice tone model (~1 GB RAM, seconds per test app): tests use a
+# fake predictor (test_emotion.py), and the real-model test loads it itself.
+os.environ["ASTRO_NO_EMOTION"] = "1"
 
 
 @pytest.fixture(autouse=True)

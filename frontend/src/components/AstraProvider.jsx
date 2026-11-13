@@ -18,7 +18,8 @@ import { useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { get, post } from "../lib/api.js";
-import { useContent, useMission, useSchedule } from "../lib/queries.js";
+import { useContent, useMission, useSchedule, useVoiceToneStatus } from "../lib/queries.js";
+import { openTalk } from "../lib/toneTalks.js";
 import { audioCtx, micMeter } from "../lib/stationAudio.js";
 import { micLevels, wakeIsYou } from "../lib/hearing.js";
 import { useVoice, voiceState } from "../lib/useVoice.js";
@@ -34,7 +35,8 @@ import { VoiceMode } from "../pages/crew/body/VoiceMode.jsx";
 
 const PREF_KEY = "ah-astra";
 const NO_ASTRA_ROUTES = ["/admin", "/status-board"];
-const AstraContext = createContext({ available: false, open() {}, linkBody() { return () => {}; } });
+const AstraContext = createContext({ available: false, open() {}, talk() {}, linkBody() { return () => {}; } });
+const WANNA_TALK_OPENING = "Hi, I'm here. How are you feeling today? Take your time.";
 
 function readPref() {
   try { return localStorage.getItem(PREF_KEY) !== "off"; } catch { return true; }
@@ -55,6 +57,11 @@ export function AstraProvider({ children }) {
   const [enabled, setEnabledState] = useState(readPref);
   const [listenerState, setListenerState] = useState("off");
   const [call, setCall] = useState(null); // { question, key } while the voice screen is open
+  // "Wanna talk?" records phrases only while this laptop's voice tone model is ready.
+  const toneStatus = useVoiceToneStatus();
+  const toneReady = toneStatus.data?.state === "ready";
+  const toneReadyRef = useRef(toneReady);
+  useEffect(() => { toneReadyRef.current = toneReady; }, [toneReady]);
   const [activated, setActivated] = useState(() => !!navigator.userActivation?.hasBeenActive);
   const [owner, setOwner] = useState(true); // this tab has the microphone (see below)
   const bodyLink = useRef(null);
@@ -89,6 +96,22 @@ export function AstraProvider({ children }) {
     audioCtx(); // inside a click this unlocks sound; from the wake word it's a no-op if never clicked
     setCall({ question, key: Date.now() });
   }, []);
+
+  // "Wanna talk?" (Mind page): the same voice screen and conversation, with a gentle opening
+  // and voice tone capture on (VoiceMode's toneCapture; estimates are made on this laptop and
+  // only shown on the Mind page afterwards -- never during the call, never sent to the AI).
+  // Each talk is its own conversation on the server (lib/toneTalks.js): opened here, its id
+  // attached to the call once the server answers (milliseconds -- long before the first
+  // phrase), finished by the voice screen when the call ends.
+  const talk = useCallback(async () => {
+    audioCtx(); // called from a click: unlocks sound and the microphone recording
+    const key = Date.now();
+    await consultation.announce(WANNA_TALK_OPENING);
+    setCall({ question: "", key, talk: true, talkId: "", opening: { text: WANNA_TALK_OPENING, speak: true } });
+    if (!toneReadyRef.current || !astroId) return;
+    const talkId = await openTalk(astroId);
+    if (talkId) setCall((c) => (c && c.key === key ? { ...c, talkId } : c));
+  }, [consultation, astroId]);
 
   // ---- the wake word listener ----
   const secure = typeof window === "undefined" || window.isSecureContext;
@@ -289,8 +312,8 @@ export function AstraProvider({ children }) {
   }, [available, schedule.data, schedule.dataUpdatedAt, push]);
 
   const value = useMemo(() => ({
-    available, astroId, consultation, open, enabled, setEnabled, state, activated, linkBody,
-  }), [available, astroId, consultation, open, enabled, setEnabled, state, activated, linkBody]);
+    available, astroId, consultation, open, talk, enabled, setEnabled, state, activated, linkBody,
+  }), [available, astroId, consultation, open, talk, enabled, setEnabled, state, activated, linkBody]);
 
   return (
     <AstraContext.Provider value={value}>
@@ -303,6 +326,10 @@ export function AstraProvider({ children }) {
           key={call.key}
           initialQuestion={call.question}
           opening={call.opening || null}
+          talkMode={!!call.talk}
+          toneAvailable={toneReady}
+          toneCapture={!!call.talk && toneReady && !!call.talkId}
+          talkId={call.talkId || ""}
           announcement={call.announcement || null}
           activity={call.activity || null}
           onActivityDone={(result) => {

@@ -117,4 +117,6 @@ export const EVENT_INVALIDATIONS = {
   unknown_tag: [["admin-unknown"]],
   astra_memory: [["memory"]],
   astra_followup: [["memory"]],
+  voice_tone: [["voice-tone"], ["voice-talk-latest"]],
+  voice_talk: [["voice-talk-latest"], ["voice-tone"]],
 };
