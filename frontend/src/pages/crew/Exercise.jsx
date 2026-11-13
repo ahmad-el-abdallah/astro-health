@@ -106,6 +106,7 @@ export default function Exercise() {
   const elapsed = useElapsed(data?.running);
   const runningMin = Math.floor(elapsed / 60);
   const [count, setCount] = useState(null);       // { id, n }: countdown before a start
+  const [confirmReset, setConfirmReset] = useState(null);
   const exercise = data?.exercises.find((e) => e.id === sel);
   const step = exercise ? Math.floor(demo.t / STEP_S) % exercise.steps.length : 0;
   const stepProgress = ((demo.t % STEP_S) / STEP_S) * 100;
@@ -132,6 +133,17 @@ export default function Exercise() {
     } catch (e) {
       setError(e?.message || "Couldn't update the workout.");
     } finally { setBusy(null); setCount(null); }
+  }
+
+  async function resetProgress(exId) {
+    if (confirmReset !== exId) { setConfirmReset(exId); setTimeout(() => setConfirmReset((c) => (c === exId ? null : c)), 4000); return; }
+    setConfirmReset(null); setBusy(exId); setError(null);
+    try {
+      await post(`/astronauts/${id}/exercise/reset`, { exercise: exId });
+      await qc.invalidateQueries({ queryKey: ["exercise"] });
+    } catch (e) {
+      setError(e?.message || "Couldn't reset the progress.");
+    } finally { setBusy(null); }
   }
 
   if (!data) {
@@ -189,7 +201,23 @@ export default function Exercise() {
                     </span>
                   </div>
                   <div className="mt-auto">
-                    <div className="mb-1.5 flex justify-between text-xs"><span className="text-ink-2">Session progress</span><span className="font-mono text-muted">{done} / {e.target_min} min</span></div>
+                    <div className="mb-1.5 flex items-center justify-between gap-2 text-xs">
+                      <span className="text-ink-2">Session progress</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-muted">{done} / {e.target_min} min</span>
+                        {!isSurgeon && e.done_min > 0 && !running && (
+                          <button
+                            onClick={(ev) => { ev.stopPropagation(); resetProgress(e.id); }}
+                            disabled={!!busy}
+                            title="Reset today's progress for this exercise"
+                            className={cx("flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold transition-colors",
+                              confirmReset === e.id ? "bg-alert-bg text-alert-fg" : "text-muted hover:bg-raised hover:text-ink")}
+                          >
+                            <Icon name="reset" size={12} />{confirmReset === e.id ? "Sure? Tap again" : "Reset"}
+                          </button>
+                        )}
+                      </span>
+                    </div>
                     <Progress value={done / e.target_min} />
                   </div>
                   <div className="flex items-center justify-between gap-2">
