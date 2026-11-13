@@ -18,6 +18,8 @@ import { spokenPart } from "./bargeIn.js";
 // Shared, mutable on purpose: the face/orb read `mouth` every animation frame without
 // making React re-render 60 times a second.
 export const voiceState = { speaking: false, listening: false, mouth: 0 };
+export const ENDPOINT_MS = 1200; // your words stopped changing this long = you've finished
+export const MAX_PHRASE_MS = 12000; // never listen to one phrase longer than this
 
 export const MAX_SPOKEN_CHARS = 600;
 export const MIC_DENIED = "Microphone permission denied - text input still works";
@@ -253,6 +255,11 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
     rec.interimResults = true;
     rec.continuous = false;
     heardRef.current = { final: "", interim: "", failed: false, aborted: false, confidence: 0, startedAt: Date.now() };
+    // End of speech, decided here too: in a noisy room the browser keeps "hearing" the
+    // background and can wait a long time before it finishes a phrase. Once your words stop
+    // changing for ENDPOINT_MS (or you've talked for MAX_PHRASE_MS), stop and use them.
+    let lastText = "", quietTimer = null, capTimer = null;
+    const finishNow = () => { clearTimeout(quietTimer); clearTimeout(capTimer); try { rec.stop(); } catch { /* already ended */ } };
     rec.onresult = (e) => {
       let fin = "", interim = "", confidence = 0;
       for (let i = 0; i < e.results.length; i++) {
@@ -263,7 +270,14 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
       heardRef.current.final = fin;
       heardRef.current.interim = interim;
       heardRef.current.confidence = confidence;
-      live.current.onInterim?.(`${fin}${interim}`.trim());
+      const text = `${fin}${interim}`.trim();
+      if (text && text !== lastText) {
+        lastText = text;
+        clearTimeout(quietTimer);
+        quietTimer = setTimeout(finishNow, ENDPOINT_MS);
+        if (!capTimer) capTimer = setTimeout(finishNow, MAX_PHRASE_MS);
+      }
+      live.current.onInterim?.(text);
     };
     rec.onerror = (e) => {
       if (e.error === "aborted") return;
@@ -272,6 +286,8 @@ export function useVoice({ astroId, onInterim, onFinal, onNoSpeech, alwaysSpeak 
       setError(voiceErrorMessage(e.error));
     };
     rec.onend = () => {
+      clearTimeout(quietTimer);
+      clearTimeout(capTimer);
       recRef.current = null;
       voiceState.listening = false;
       setListening(false);

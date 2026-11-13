@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confidentEnough, createLevelTracker, loudEnough, ROOMS } from "./hearing.js";
+import { confidentEnough, createLevelTracker, isYou, loudEnough, ROOMS, wakeIsYou } from "./hearing.js";
 
 // A room: 6 s of background at `noise`, then `speech` for the last second.
 function room(noise, speech) {
@@ -34,8 +34,9 @@ describe("is that you or the room?", () => {
   });
   it("the recognizer's confidence", () => {
     expect(confidentEnough(0.2, "normal")).toBe(false);
+    expect(confidentEnough(0.3, "normal")).toBe(true);
     expect(confidentEnough(0.45, "normal")).toBe(true);
-    expect(confidentEnough(0.45, "noisy")).toBe(false);
+    expect(confidentEnough(0.4, "noisy")).toBe(false);
     expect(confidentEnough(0, "noisy")).toBe(true); // no score given
     expect(confidentEnough(undefined, "normal")).toBe(true);
     expect(confidentEnough(0.1, "quiet")).toBe(true);
@@ -43,5 +44,23 @@ describe("is that you or the room?", () => {
   it("noisy room takes 3 new words to talk over her", () => {
     expect(ROOMS.noisy.bargeWords).toBe(3);
     expect(ROOMS.normal.bargeWords).toBe(2);
+  });
+});
+
+describe("never miss the astronaut", () => {
+  it("what the recognizer heard clearly is trusted, however quiet", () => {
+    const { t, now } = room(0.03, 0.04); // barely above the background
+    expect(isYou({ confidence: 0.9, sinceMs: 1500 }, t, "normal", now)).toBe(true);
+    expect(isYou({ confidence: 0.5, sinceMs: 1500 }, t, "normal", now)).toBe(false); // unsure AND quiet
+    expect(isYou({ confidence: 0.5, sinceMs: 1500 }, t, "quiet", now)).toBe(true);
+    expect(isYou({ confidence: 0, sinceMs: 1500 }, t, "normal", now)).toBe(true); // no score: trusted
+    expect(isYou({ confidence: 0.95, sinceMs: 1500 }, t, "noisy", now)).toBe(false); // noisy: loud or nothing
+  });
+  it("her name is only loudness-checked in a noisy room", () => {
+    const { t, now } = room(0.03, 0.04);
+    expect(wakeIsYou(0.6, t, "normal", now)).toBe(true);
+    expect(wakeIsYou(0, t, "normal", now)).toBe(true); // an unfinished phrase has no score
+    expect(wakeIsYou(0.6, t, "noisy", now)).toBe(false);
+    expect(wakeIsYou(0.1, t, "normal", now)).toBe(false); // too unclear
   });
 });

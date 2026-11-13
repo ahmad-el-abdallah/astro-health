@@ -17,7 +17,7 @@ import { STT_UNAVAILABLE, useVoice, voiceState } from "../../../lib/useVoice.js"
 import { isBargeIn, isEcho, isStopCommand } from "../../../lib/bargeIn.js";
 import { ambience, audioCtx, micMeter, quindar } from "../../../lib/stationAudio.js";
 import { describeAction, isCancelPhrase } from "../../../lib/astraActions.js";
-import { confidentEnough, loudEnough, micLevels, ROOM_ORDER, roomSettings, roomStore } from "../../../lib/hearing.js";
+import { isYou, loudEnough, micLevels, ROOM_ORDER, roomSettings, roomStore } from "../../../lib/hearing.js";
 import { EmergencyCountdown } from "../../../components/astra/EmergencyCountdown.jsx";
 import { GuidedActivity } from "../../../components/astra/GuidedActivity.jsx";
 
@@ -105,9 +105,13 @@ export function VoiceMode({
     // Too quiet or too unclear to be the astronaut (someone across the room, a video, noise
     // turned into words): ignore it and keep listening (lib/hearing.js, the "Room" setting).
     const since = meta.startedAt ? Date.now() - meta.startedAt + 400 : 6000;
-    if (!loudEnough(micLevels, since) || !confidentEnough(meta.confidence)) {
-      console.debug(`[astra] ignored "${text}" (too quiet or unclear: probably the room)`);
+    // While she's talking, only someone close to the mic may cut in (same rule as onInterim).
+    if (voiceState.speaking && !loudEnough(micLevels, since)) { listenAgain(100); return; }
+    if (!isYou({ confidence: meta.confidence, sinceMs: since }, micLevels)) {
+      console.info(`[astra] ignored "${text}" (too quiet or unclear: probably the room)`);
       cutInRef.current = false;
+      setHeard(text);
+      setStuckNote("I didn’t catch that clearly. Say it again a little closer, or set Room to “Quiet room”.");
       listenAgain(100);
       return;
     }

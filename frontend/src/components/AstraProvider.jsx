@@ -20,7 +20,7 @@ import { useAuth } from "../auth/AuthProvider.jsx";
 import { get, post } from "../lib/api.js";
 import { useContent, useMission, useSchedule } from "../lib/queries.js";
 import { audioCtx, micMeter } from "../lib/stationAudio.js";
-import { confidentEnough, loudEnough, micLevels } from "../lib/hearing.js";
+import { micLevels, wakeIsYou } from "../lib/hearing.js";
 import { useVoice, voiceState } from "../lib/useVoice.js";
 import { useSocketEvent } from "../lib/socket.js";
 import { missionDaySeconds, withLiveStatus } from "../lib/schedule.js";
@@ -101,7 +101,7 @@ export function AstraProvider({ children }) {
     const l = createWakeListener({
       Recognition,
       onState: setListenerState,
-      accept: (hit) => confidentEnough(hit.confidence) && loudEnough(micLevels, 3500),
+      accept: (hit) => wakeIsYou(hit.confidence, micLevels),
       onWake: (hit) => {
         if (voiceState.speaking) return; // her own voice
         l.pause(); // right away: the voice screen starts its own recognition

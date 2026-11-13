@@ -2998,11 +2998,45 @@ which way they meant, and they picked both: she doesn't hear me, AND noise sets 
   266 backend and 92 frontend tests pass. **Not yet tried in a real noisy room.** If Normal
   drops the user's own voice, use Quiet room or lower `ROOMS.normal.ratio`/`minLevel`.
 
+### Follow-up: "still not answering me, and slow to hear my voice" (2026-11-13)
+
+The AI was not the cause: three real calls took 0.5–0.8 s each. Two hearing problems were:
+
+1. **The first version's checks were too strict for a real laptop mic.** A soft but real voice
+   could be dropped with no message, and she just kept listening.
+   - The checks were redone (`hearing.js` `isYou` / `wakeIsYou`).
+   - **Normal** trusts the recognizer: a phrase with confidence ≥ 0.7, or with no score at
+     all, counts as you. Loudness only decides when the recognizer was unsure.
+   - Her name is never loudness-checked in Normal.
+   - **Noisy room** always needs a loud voice (`trustConfidence: 0`), name included.
+   - An ignored phrase now shows "I didn’t catch that clearly. Say it again a little closer,
+     or set Room to “Quiet room”" on the voice screen, and `[astra] ignored …` in the console.
+2. **In noise the browser's endpointer never decides you've finished**, so the final result
+   came very late. `useVoice.startListening` now ends the phrase itself:
+   - It stops `ENDPOINT_MS = 1200` after the words stop changing, or at `MAX_PHRASE_MS =
+     12000`.
+   - `rec.stop()` makes Chrome finalize what it has.
+
+   **Gotcha:** a phrase ended this way can arrive with no confidence while she is talking. So
+   `onFinal` also requires `loudEnough` whenever `voiceState.speaking`, the same rule as
+   `onInterim`. Without it, a quiet nearby voice could cut her off.
+
+Re-verified with the controllable fake mic, 17/17:
+- a soft but clear "Astra" wakes her in Normal; confidence 0.1 doesn't
+- in Noisy, a soft "Astra" doesn't wake her, and a loud "Asta" does
+- an unsure and quiet phrase is ignored, with the on-screen message
+- a clear soft phrase is answered
+- a phrase the browser never finishes is answered in 1.9 s (it was 8 s and more)
+- barge-in: a quiet voice doesn't stop her, a loud one does
+- the Room setting works, and there are no page errors
+
+94 frontend tests pass.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 266 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 92 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
+- `cd frontend && npm test` — 94 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

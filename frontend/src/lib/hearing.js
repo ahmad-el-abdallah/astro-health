@@ -9,16 +9,20 @@
 //   * confidence -- the recognizer's own 0..1 score for what it heard; noise turned into words
 //     usually scores low.
 // The "room" setting (per browser, localStorage "ah-astra-hearing") picks how strict:
-//   quiet  -- no gates at all: catches a soft voice from across a quiet room
-//   normal -- the default: speech must be clearly above the background
-//   noisy  -- busy room: louder and clearer speech only, and 3 new words to talk over her
-// Every gate fails OPEN: no microphone level (meter not running, sound not unlocked yet) or no
-// confidence score means "let it through", so a gate can never make Astra deaf.
+//   quiet  -- no checks at all: catches a soft voice from across a quiet room
+//   normal -- the default. Trusts what the recognizer heard clearly; only when it's UNSURE
+//             must the speech also be louder than the background. Her name is never
+//             loudness-checked here (missing your call is worse than a rare false wake), and
+//             a voice across the room can't cut her off.
+//   noisy  -- busy room: louder and clearer speech only, also for her name, and 3 new words
+//             to talk over her
+// Every check fails OPEN: no microphone level (meter not running, sound not unlocked yet) or
+// no confidence score means "let it through", so a check can never make Astra deaf.
 
 export const ROOMS = {
-  quiet: { label: "Quiet room", ratio: 0, minLevel: 0, minConfidence: 0, bargeWords: 2 },
-  normal: { label: "Normal", ratio: 2.2, minLevel: 0.025, minConfidence: 0.3, bargeWords: 2 },
-  noisy: { label: "Noisy room", ratio: 3.2, minLevel: 0.045, minConfidence: 0.5, bargeWords: 3 },
+  quiet: { label: "Quiet room", ratio: 0, minLevel: 0, minConfidence: 0, trustConfidence: 0, wakeLoudness: false, bargeWords: 2 },
+  normal: { label: "Normal", ratio: 1.8, minLevel: 0.015, minConfidence: 0.25, trustConfidence: 0.7, wakeLoudness: false, bargeWords: 2 },
+  noisy: { label: "Noisy room", ratio: 3.0, minLevel: 0.04, minConfidence: 0.45, trustConfidence: 0, wakeLoudness: true, bargeWords: 3 },
 };
 export const ROOM_ORDER = ["quiet", "normal", "noisy"];
 const KEY = "ah-astra-hearing";
@@ -79,6 +83,22 @@ export function loudEnough(tracker, sinceMs, r = room, now = Date.now()) {
 export function confidentEnough(confidence, r = room) {
   const min = roomSettings(r).minConfidence;
   return !min || !confidence || confidence >= min;
+}
+
+/** Is this phrase the astronaut? Clear enough, and loud enough over the last `sinceMs` --
+ *  except in a normal room, where a phrase the recognizer is sure about (or gave no score
+ *  for, e.g. one Astra ended herself) is trusted. A noisy room always checks loudness. */
+export function isYou({ confidence, sinceMs }, tracker, r = room, now = Date.now()) {
+  if (!confidentEnough(confidence, r)) return false;
+  const trust = roomSettings(r).trustConfidence;
+  if (trust && (!confidence || confidence >= trust)) return true;
+  return loudEnough(tracker, sinceMs, r, now);
+}
+
+/** May her name wake her? Loudness only matters in a noisy room. */
+export function wakeIsYou(confidence, tracker, r = room, now = Date.now()) {
+  if (!confidentEnough(confidence, r)) return false;
+  return !roomSettings(r).wakeLoudness || isYou({ confidence, sinceMs: 3500 }, tracker, r, now);
 }
 
 /** The one shared tracker, fed by stationAudio's micMeter. */
