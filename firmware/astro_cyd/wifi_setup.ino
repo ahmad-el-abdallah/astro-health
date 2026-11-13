@@ -292,12 +292,33 @@ void beginWifiStaConnect(const String& ssid, const String& password, bool isSetu
   else WiFi.begin(ssid.c_str());  // open network
 }
 
+// Join Wi-Fi mode, after the first join: if the link drops (router restart, a signal blip)
+// and stays down this long, join again ourselves. The ESP32's own auto-reconnect sometimes
+// gives up for good, and the screen then said "Wi-Fi: reconnecting..." forever -- only a
+// restart brought it back. Not while a Wi-Fi setup screen is open (a scan or a new join).
+static const uint32_t WIFI_LOST_GRACE_MS = 8000;
+static uint32_t wifiLostSinceMs = 0;
+static bool mdnsUp = false;
+
+static void watchWifiLink() {
+  bool setupOpen = screen == SCR_WIFI_MENU || screen == SCR_WIFI_SCAN || screen == SCR_WIFI_KEYBOARD || screen == SCR_WIFI_CONNECTING;
+  if (!staMode || wifiRestartAtMs || setupOpen || WiFi.status() == WL_CONNECTED) { wifiLostSinceMs = 0; return; }
+  if (!wifiLostSinceMs) {
+    wifiLostSinceMs = millis();
+    Serial.println("[wifi] link lost, waiting for it to come back...");
+  } else if (millis() - wifiLostSinceMs > WIFI_LOST_GRACE_MS) {
+    wifiLostSinceMs = 0;
+    Serial.println("[wifi] still down, joining again...");
+    beginWifiStaConnect(wifiSelectedSsid, prefs.getString("staPassword", ""), false);  // retries until it's back
+  }
+}
+
 void pollWifiConnect() {
-  if (!wifiConnectPending) return;
+  if (!wifiConnectPending) { watchWifiLink(); return; }
   if (WiFi.status() == WL_CONNECTED) {
     wifiConnectPending = false;
-    startTcpServer();  // wifi_bridge.ino -- same server either Wi-Fi mode ends up using
-    if (MDNS.begin("astro-cyd")) MDNS.addService("astro-health", "tcp", TCP_PORT);
+    startTcpServer();  // wifi_bridge.ino -- same server either Wi-Fi mode ends up using (a no-op if already listening)
+    if (!mdnsUp && MDNS.begin("astro-cyd")) { MDNS.addService("astro-health", "tcp", TCP_PORT); mdnsUp = true; }
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC directly -- 0 offset, 0 DST
     Serial.printf("[wifi] joined \"%s\", IP %s, port %u (also at astro-cyd.local)\n",
                   wifiSelectedSsid.c_str(), WiFi.localIP().toString().c_str(), TCP_PORT);
