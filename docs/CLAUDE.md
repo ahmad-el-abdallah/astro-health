@@ -3237,9 +3237,9 @@ Look only: no behaviour, data or route changes.
     cards)
 - **Overview:** the analysis card hides its summary when the hero already shows it
   (`repeatSummary`), so it isn't said twice.
-- **Login** shows a real screenshot of the crew Overview (`frontend/public/preview/
-  overview.jpg`, demo data, wide screens only). Retake it after a big Overview change:
-  1440×900, with the Astra notice and the Simulator dock removed from the DOM first.
+- **Login** showed a real screenshot of the crew Overview here (`public/preview/overview.jpg`).
+  **Removed 2026-11-13 at the user's request**: the login page's right side is the space video
+  now (see the login-video entry).
 - **Phone fixes:**
   - flex-basis cards on Overview/Sleep got `min-w-0`; without it the trend card made the
     phone page 658 px wide
@@ -3492,8 +3492,16 @@ The voice-tone side worked (it runs on the laptop). The AI side kept failing, an
   looping, playsInline) under the same left-to-right dark gradient as before, plus a soft
   bottom fade. The old hand-animated stars/SVG Earth are in git history.
 - The branch hand-patched `frontend/dist` (its sandbox had no npm). On merging, dist was
-  rebuilt from source, so that patch is gone. The login page's product preview
-  (`public/preview/overview.jpg`, wide screens) sits on top of the video's right side.
+  rebuilt from source, so that patch is gone.
+- **2026-11-13, the clip was swapped and the screenshot removed:**
+  - The clip is now the user's "Cinematic Space Background" (a nebula drift to Earth's
+    sunrise edge): 4K, 20 s, 16.8 MB, re-encoded to 1080p, no audio, CRF 26, faststart,
+    2.6 MB. Same file names, so `LoginScene.jsx`'s paths didn't change; the exact ffmpeg
+    command is in its header comment, and the poster is the new first frame.
+  - The Overview screenshot on the right is gone (the user didn't want it), and the left
+    fade is a little lighter (.7 → 0 by 62%) so Earth shows.
+  - Checked headless at 1440/390: the video loads at 1920 wide, no `<figure>`, no preview
+    request, no sideways scroll, no errors.
 
 ## Live monitor: a real NASA crew recording replayed as a wearable (2026-11-13)
 

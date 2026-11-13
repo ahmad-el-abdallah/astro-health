@@ -167,7 +167,7 @@ export function Login() {
         </span>
       </header>
 
-      <main className="relative z-[1] flex flex-1 items-center gap-[clamp(32px,4vw,64px)] px-[clamp(16px,5vw,72px)] pt-3 pb-12">
+      <main className="relative z-[1] flex flex-1 items-center px-[clamp(16px,5vw,72px)] pt-3 pb-12">
         <motion.section
           aria-labelledby="login-title"
           initial={{ opacity: 0, y: 18 }}
@@ -320,24 +320,6 @@ export function Login() {
           </p>
           <p className="m-0 text-center text-caption text-placeholder">{STRINGS.footerDisclaimer}</p>
         </motion.section>
-
-        {/* Show the actual product: a real screenshot of the crew Overview (demo data),
-            wide screens only -- phones go straight to signing in. */}
-        <motion.figure
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.9, ease: EASE_ENTER }}
-          className="m-0 hidden min-w-0 flex-1 lg:block"
-        >
-          <img
-            src="/preview/overview.jpg"
-            width={1440}
-            height={900}
-            alt="The crew Overview after signing in: today's status, Astra's health analysis and the latest readings"
-            className="block h-auto w-full rounded-card-l border border-line shadow-[0_30px_80px_rgba(0,0,0,.45)]"
-          />
-          <figcaption className="mt-3 text-label text-muted">After you sign in: your status, Astra’s health analysis and today’s readings, live.</figcaption>
-        </motion.figure>
       </main>
 
       <Modal open={contactOpen} onClose={() => setContactOpen(false)} title="Mission operations">
