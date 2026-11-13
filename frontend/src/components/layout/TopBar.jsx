@@ -86,8 +86,8 @@ export function TopBar({ eyebrow, title, onAccount, showPicker = true, onMenu = 
         to="/mission"
         className="flex min-h-11 items-center gap-2 ah-glass rounded-full px-3.5 text-[13px] text-ink hover:border-accent-text/50"
       >
-        <span className="h-2.5 w-2.5 rounded-full bg-mars" />
-        Mission: <strong className="font-semibold">{mission.data?.profile?.label || "–"}</strong>
+        <span className={`h-2.5 w-2.5 rounded-full ${mission.data?.profile_id ? "bg-good-fg shadow-[0_0_8px_currentColor] text-good-fg" : "bg-muted"}`} />
+        Mission: <strong className={`font-semibold ${mission.data?.profile_id ? "" : "text-muted"}`}>{mission.data?.profile?.short || mission.data?.profile?.label || "–"}</strong>
       </Link>
 
       {showPicker && (

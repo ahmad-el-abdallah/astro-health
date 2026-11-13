@@ -1,107 +1,107 @@
 {
-  "_comment": "PLACEHOLDER risk levels and monitoring plans, written for the demo from general public knowledge of spaceflight effects. Not NASA rules, not medical advice. Keys under body_risks match content.json body_parts; keys under monitoring match health_rules.json indicators.",
+  "_comment": "Body risks and monitoring for each real mission in missions.json. Risk levels (LOW/MEDIUM/HIGH) are our own summary for the demo, but every 'why' is based on what NASA, ESA or the mission's published study reported (links in missions.json 'sources'). Not medical advice. Keys under body_risks match content.json body_parts; keys under monitoring match health_rules.json indicators.",
   "risk_levels": ["LOW", "MEDIUM", "HIGH"],
   "profiles": {
-    "station": {
-      "headline": "Weightless, close to Earth: gravity loss is the main threat, help is only a call away.",
+    "crew13_iss": {
+      "headline": "Six months weightless: bones and muscles weaken, fluid shifts to the head, but Earth is only a call away.",
       "body_risks": {
-        "skeleton": {"risk": "HIGH", "why": "No gravity means bones carry no weight and slowly lose density."},
-        "muscles": {"risk": "HIGH", "why": "Leg and back muscles shrink fast when they never hold you up."},
-        "heart": {"risk": "MEDIUM", "why": "Blood shifts toward the head and the heart works less, so it can weaken."},
-        "eyes": {"risk": "MEDIUM", "why": "Fluid pushing toward the head can press on the back of the eyes."},
-        "brain": {"risk": "MEDIUM", "why": "Small crew, busy schedule and odd light cycles disturb sleep and mood."},
-        "immune": {"risk": "LOW", "why": "Some radiation and stress, but Earth's magnetic field still shields the station."},
-        "stomach": {"risk": "LOW", "why": "Regular resupply keeps food and water varied."}
+        "skeleton": {"risk": "HIGH", "why": "NASA: astronauts lose about 1–1.5% of bone density per month in microgravity, even with exercise."},
+        "muscles": {"risk": "HIGH", "why": "Leg and back muscles shrink when they never hold you up; ISS crews exercise about 2 hours a day to slow it."},
+        "eyes": {"risk": "HIGH", "why": "About 70% of long-stay ISS astronauts show signs of SANS: fluid pushed toward the head changes the eye and optic nerve."},
+        "heart": {"risk": "MEDIUM", "why": "Blood shifts upward and the heart does less work, so blood pressure and heart shape change over months."},
+        "brain": {"risk": "MEDIUM", "why": "16 sunrises a day and a busy schedule disturb the body clock, sleep and focus."},
+        "immune": {"risk": "MEDIUM", "why": "Stress, a sealed cabin and some radiation (80–160 mSv in 6 months) put the immune system on alert."},
+        "stomach": {"risk": "LOW", "why": "Regular cargo flights keep food varied; the main watch item is drinking enough, because thirst feels weaker in 0 g."}
       },
       "monitoring": [
         {"indicator": "exercise", "how_often": "Daily", "why": "The main defence against bone and muscle loss in 0 g."},
         {"indicator": "blood_pressure", "how_often": "Daily", "why": "Catches changes caused by fluid moving toward the head."},
         {"indicator": "heart_rate", "how_often": "Daily", "why": "Shows if the heart is adapting or struggling."},
         {"indicator": "sleep", "how_often": "Daily", "why": "16 sunrises a day confuse the body clock."},
-        {"indicator": "mood", "how_often": "Daily", "why": "Early sign of stress from confinement."},
+        {"indicator": "mood", "how_often": "Daily", "why": "Early sign of stress from six months in a small crew."},
         {"indicator": "water", "how_often": "Daily", "why": "Thirst feels weaker in 0 g, so crews drink too little."},
-        {"indicator": "oxygen_saturation", "how_often": "Daily", "why": "Recycled cabin air: a low reading can flag a CO2 scrubber or air-quality problem."}
+        {"indicator": "oxygen_saturation", "how_often": "Daily", "why": "Recycled cabin air: a low reading can flag an air-quality problem."}
       ]
     },
-    "lunar_base": {
-      "headline": "Some gravity, more radiation, and dust everywhere: protect your cells and keep moving.",
+    "twin_study": {
+      "headline": "A year in space changed one twin's genes, eyes, arteries and thinking speed. Most came back to normal, a few did not.",
       "body_risks": {
-        "immune": {"risk": "HIGH", "why": "No magnetic field on the Moon, so radiation reaches the crew more easily."},
-        "skeleton": {"risk": "MEDIUM", "why": "1/6 of Earth's gravity still lets bones weaken over months."},
-        "muscles": {"risk": "MEDIUM", "why": "Walking is easier on the Moon, so muscles do less work."},
-        "brain": {"risk": "MEDIUM", "why": "Two-week nights and a cramped base disturb sleep and mood."},
-        "heart": {"risk": "LOW", "why": "Partial gravity keeps blood flow closer to normal."},
-        "eyes": {"risk": "LOW", "why": "Less fluid shift than in 0 g; lunar dust is the bigger eye irritant."},
-        "stomach": {"risk": "LOW", "why": "Supplies arrive in days, not months."}
+        "immune": {"risk": "HIGH", "why": "Twin Study: over 1,000 genes changed, many tied to DNA repair and the immune system; some T-cell changes stayed after landing."},
+        "eyes": {"risk": "HIGH", "why": "Scott's retina thickened and folds formed in the layer behind it (SANS), from fluid shifting toward the head."},
+        "heart": {"risk": "MEDIUM", "why": "His carotid artery wall thickened early in the flight and stayed thicker for the rest of the mission."},
+        "brain": {"risk": "MEDIUM", "why": "Thinking speed and accuracy dropped after landing and stayed lower for up to six months."},
+        "skeleton": {"risk": "MEDIUM", "why": "A year of 0 g means a year of bone loss; exercise slowed it but did not stop it."},
+        "muscles": {"risk": "MEDIUM", "why": "Body mass fell 7% in flight; returning to gravity brought joint and muscle pain for days."},
+        "stomach": {"risk": "LOW", "why": "Gut bacteria changed a lot in flight but stayed diverse and returned to normal on Earth: rated low risk."}
       },
       "monitoring": [
-        {"indicator": "temperature", "how_often": "Daily", "why": "A fever can be the first sign of a weakened immune system."},
-        {"indicator": "sleep", "how_often": "Daily", "why": "Long lunar days and nights break the normal sleep rhythm."},
-        {"indicator": "exercise", "how_often": "Daily", "why": "Low gravity still costs bone and muscle."},
-        {"indicator": "mood", "how_often": "Daily", "why": "Isolation in a small base builds up over weeks."},
-        {"indicator": "reaction_time", "how_often": "Every 2 days", "why": "Radiation and fatigue can slow thinking before you notice."},
-        {"indicator": "heart_rate", "how_often": "Daily", "why": "Baseline check after moonwalks and hard work."}
+        {"indicator": "reaction_time", "how_often": "Every 2 days", "why": "The Twin Study saw thinking speed slow, so track it before it affects work."},
+        {"indicator": "blood_pressure", "how_often": "Daily", "why": "Artery and fluid changes show up in blood pressure first."},
+        {"indicator": "heart_rate", "how_often": "Daily", "why": "Baseline for heart and artery changes over a long stay."},
+        {"indicator": "temperature", "how_often": "Daily", "why": "The immune system stayed on high alert; a fever is an early warning."},
+        {"indicator": "exercise", "how_often": "Daily", "why": "A full year of bone and muscle loss to fight."},
+        {"indicator": "sleep", "how_often": "Daily", "why": "Long missions wear down sleep, which drags down mood and focus."},
+        {"indicator": "mood", "how_often": "Daily", "why": "Almost a year away from family and Earth."}
       ]
     },
-    "mars_transit": {
-      "headline": "Months in 0 g, high radiation, and a 20-minute delay to Earth: the crew is its own doctor.",
+    "artemis2": {
+      "headline": "Ten days in deep space: radiation is the big new risk, inside a capsule the size of a campervan.",
       "body_risks": {
-        "skeleton": {"risk": "HIGH", "why": "Months without gravity: the longest stretch of bone loss of any mission."},
-        "muscles": {"risk": "HIGH", "why": "Muscles must be strong enough to walk on Mars on arrival day."},
-        "immune": {"risk": "HIGH", "why": "Deep-space radiation with no planet or magnetic field for shielding."},
-        "brain": {"risk": "HIGH", "why": "Isolation, no window to Earth, and fixed crew for months: mood and sleep suffer."},
-        "eyes": {"risk": "MEDIUM", "why": "Long 0 g exposure raises the chance of vision changes."},
-        "heart": {"risk": "MEDIUM", "why": "Fluid shift and less work for the heart over many months."},
-        "stomach": {"risk": "MEDIUM", "why": "No resupply: food is packed months ahead and loses nutrients."}
+        "immune": {"risk": "HIGH", "why": "Beyond Earth's magnetic field, galactic cosmic rays reach the crew. NASA's AVATAR chips flew crew bone marrow to study this."},
+        "brain": {"risk": "MEDIUM", "why": "NASA's ARCHeR study tracked sleep, stress and teamwork in a tiny cabin with a demanding schedule."},
+        "eyes": {"risk": "MEDIUM", "why": "The crew had eye and brain health checks before and after, because fluid shifts start within days of launch."},
+        "heart": {"risk": "MEDIUM", "why": "Launch, high-speed reentry and fluid shifts strain the heart; blood samples tracked cardiovascular health."},
+        "muscles": {"risk": "LOW", "why": "Ten days is too short for big muscle loss, but balance and movement were tested after splashdown."},
+        "skeleton": {"risk": "LOW", "why": "Bone loss builds over months, not days."},
+        "stomach": {"risk": "LOW", "why": "Packed food for a short trip; the risk is space motion sickness in the first days."}
       },
       "monitoring": [
-        {"indicator": "exercise", "how_often": "Daily", "why": "Arrive on Mars able to stand and walk."},
-        {"indicator": "mood", "how_often": "Daily", "why": "Earth can't step in quickly, so problems must be caught early."},
-        {"indicator": "sleep", "how_often": "Daily", "why": "Poor sleep is the first domino for mood, focus and immunity."},
-        {"indicator": "reaction_time", "how_often": "Every 2 days", "why": "Checks the brain for radiation and fatigue effects."},
-        {"indicator": "blood_pressure", "how_often": "Daily", "why": "Long-term 0 g changes how the heart and vessels work."},
-        {"indicator": "temperature", "how_often": "Daily", "why": "Early warning for infection when the nearest hospital is months away."},
-        {"indicator": "blood_sugar", "how_often": "Weekly", "why": "Packaged food and low activity can shift metabolism."}
+        {"indicator": "sleep", "how_often": "Daily", "why": "ARCHeR wristbands tracked sleep: tired crews make mistakes far from home."},
+        {"indicator": "mood", "how_often": "Daily", "why": "Stress in a small capsule affects the whole team."},
+        {"indicator": "reaction_time", "how_often": "Daily", "why": "Deep-space radiation and fatigue can slow thinking before you notice."},
+        {"indicator": "heart_rate", "how_often": "Daily", "why": "Watches the heart through launch, flyby and reentry."},
+        {"indicator": "temperature", "how_often": "Daily", "why": "Early warning if radiation or stress weakens the immune system."},
+        {"indicator": "oxygen_saturation", "how_often": "Daily", "why": "Orion's life support flew with people for the first time: check the air is doing its job."}
       ]
     },
-    "mars_base": {
-      "headline": "Back on a surface at 0.38 g after a long trip: rebuild strength, watch radiation, still far from help.",
+    "mars520": {
+      "headline": "No radiation, no weightlessness, just 520 days sealed in: the crew slowed down, slept more and drifted off their body clocks.",
       "body_risks": {
-        "muscles": {"risk": "HIGH", "why": "Weakened muscles from transit now have to carry suits and tools."},
-        "skeleton": {"risk": "MEDIUM", "why": "Mars gravity helps a bit, but bones lost during transit recover slowly."},
-        "immune": {"risk": "HIGH", "why": "Thin atmosphere and no magnetic field let radiation through."},
-        "brain": {"risk": "MEDIUM", "why": "Still isolated, but a planet underfoot and a 24h40m day help routine."},
-        "heart": {"risk": "MEDIUM", "why": "Readjusting to gravity can cause dizziness when standing."},
-        "eyes": {"risk": "LOW", "why": "Gravity pulls fluid back down, easing pressure behind the eyes."},
-        "stomach": {"risk": "MEDIUM", "why": "Long-stored food; any fresh food must be grown on site."}
+        "brain": {"risk": "HIGH", "why": "PNAS 2013: crews got more sedentary every month; one member drifted onto a 25-hour day, and 4 of 6 had issues that could be serious on a real trip."},
+        "muscles": {"risk": "MEDIUM", "why": "Crews moved less and less while awake ('hypokinesis'), so muscles were used less over time."},
+        "immune": {"risk": "MEDIUM", "why": "Mars-520 studies found heightened immune responses and changes in white blood cells during isolation."},
+        "heart": {"risk": "LOW", "why": "Normal gravity, but low activity over months is still bad for the heart."},
+        "skeleton": {"risk": "LOW", "why": "Full Earth gravity, so no space-style bone loss."},
+        "eyes": {"risk": "LOW", "why": "No weightlessness, so no fluid shift toward the head."},
+        "stomach": {"risk": "LOW", "why": "The crew ate an ISS-like diet; food got monotonous but was nutritionally fine."}
       },
       "monitoring": [
-        {"indicator": "heart_rate", "how_often": "Daily", "why": "Spots dizziness and strain while the body readjusts to gravity."},
-        {"indicator": "blood_pressure", "how_often": "Daily", "why": "Standing up can drop pressure after months in 0 g."},
-        {"indicator": "exercise", "how_often": "Daily", "why": "Rebuild the strength lost in transit."},
-        {"indicator": "temperature", "how_often": "Daily", "why": "Infection watch with a 20-minute delay to Earth's doctors."},
-        {"indicator": "sleep", "how_often": "Daily", "why": "A Mars day is 40 minutes longer, which slowly shifts the body clock."},
-        {"indicator": "mood", "how_often": "Daily", "why": "Isolation continues for the whole surface stay."}
+        {"indicator": "sleep", "how_often": "Daily", "why": "Sleep timing drifted badly: keep everyone on the same clock."},
+        {"indicator": "exercise", "how_often": "Daily", "why": "Fights the slow slide into doing less and less."},
+        {"indicator": "mood", "how_often": "Daily", "why": "Monotony and isolation build up over many months."},
+        {"indicator": "reaction_time", "how_often": "Weekly", "why": "Mars-520 tested crews weekly to spot tired or vulnerable members."},
+        {"indicator": "temperature", "how_often": "Daily", "why": "With a 20-minute delay to doctors, catch infections early."},
+        {"indicator": "heart_rate", "how_often": "Daily", "why": "Low activity shows up as a changing resting heart rate."}
       ]
     },
-    "rover": {
-      "headline": "Hard physical work in a cramped cabin, away from the base's medical kit.",
+    "spacewalk": {
+      "headline": "Six to eight hours of hard work in vacuum inside a stiff suit: hands, shoulders and body heat take the hit.",
       "body_risks": {
-        "muscles": {"risk": "HIGH", "why": "Long drives plus heavy work outside in a suit."},
-        "heart": {"risk": "MEDIUM", "why": "Exertion in a suit raises heart rate and body heat."},
-        "stomach": {"risk": "MEDIUM", "why": "Limited water and food on board, so dehydration comes fast."},
-        "brain": {"risk": "MEDIUM", "why": "Tight space, long shifts and little privacy wear down focus."},
-        "immune": {"risk": "MEDIUM", "why": "Less shielding in a rover than inside the base."},
-        "skeleton": {"risk": "LOW", "why": "Same gravity as the base; heavy work actually loads the bones."},
-        "eyes": {"risk": "LOW", "why": "No extra eye risk beyond the base itself."}
+        "muscles": {"risk": "HIGH", "why": "NASA EVA report: hand, wrist and shoulder injuries are common; about 0.26 injuries were reported per spacewalk in one review."},
+        "heart": {"risk": "MEDIUM", "why": "Hours of effort against a pressurised suit raise heart rate and body heat; Gemini 9's Cernan lost 13 lb of sweat."},
+        "immune": {"risk": "MEDIUM", "why": "Only the suit shields you from radiation, so you get less protection than inside the station."},
+        "brain": {"risk": "MEDIUM", "why": "Long, tiring tasks with no room for error; poor suit airflow can build up CO2 and cloud thinking."},
+        "skeleton": {"risk": "MEDIUM", "why": "Decompression sickness can hit joints, so crews pre-breathe pure oxygen to flush out nitrogen first."},
+        "stomach": {"risk": "MEDIUM", "why": "Only a small drink bag in the suit, and heavy sweating dehydrates you fast."},
+        "eyes": {"risk": "LOW", "why": "The visor protects the eyes; water leaking into the helmet (ISS EVA 23, 2013) is the rare but serious exception."}
       },
       "monitoring": [
-        {"indicator": "water", "how_often": "Every shift", "why": "Suit work makes you sweat; the rover carries limited water."},
-        {"indicator": "heart_rate", "how_often": "Every shift", "why": "Catches overexertion before it becomes dangerous."},
-        {"indicator": "temperature", "how_often": "Every shift", "why": "Overheating inside the suit is a real risk."},
-        {"indicator": "reaction_time", "how_often": "Before driving", "why": "A tired driver far from base is a safety risk."},
-        {"indicator": "sleep", "how_often": "Daily", "why": "Short, cramped sleep adds up fast on long trips."},
-        {"indicator": "oxygen_saturation", "how_often": "Every shift", "why": "Hard suit work can drop blood oxygen; check it before and after an excursion."}
+        {"indicator": "heart_rate", "how_often": "Before and after", "why": "Catches overexertion before it becomes dangerous."},
+        {"indicator": "oxygen_saturation", "how_often": "Before and after", "why": "Confirms the oxygen pre-breathe worked and nothing went wrong in the suit."},
+        {"indicator": "water", "how_often": "Before and after", "why": "Heavy sweating in the suit; drink before and rehydrate after."},
+        {"indicator": "temperature", "how_often": "Before and after", "why": "Overheating inside the suit is a real risk."},
+        {"indicator": "reaction_time", "how_often": "Before the spacewalk", "why": "A tired spacewalker is a safety risk to the whole crew."},
+        {"indicator": "blood_pressure", "how_often": "Before and after", "why": "Hard work and pressure changes both move blood pressure."}
       ]
     }
   }

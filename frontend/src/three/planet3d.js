@@ -13,7 +13,7 @@
 // size ("baked"), so each frame is just a texture lookup per pixel.
 //
 // No three.js / CDN: the app has to run offline at the demo.
-// Planet3D.mount(canvas) -> scene;  scene.setProfile("mars_transit");
+// Planet3D.mount(canvas) -> scene;  scene.setProfile("artemis2");
 const Planet3D = (() => {
   const TEX_W = 768, TEX_H = 384;
   const textures = {};   // name -> finished texture
@@ -151,22 +151,41 @@ const Planet3D = (() => {
     }
   }
 
-  // ---------- scenes: what each mission profile shows ----------
+  // ---------- scenes: one per real mission (config/missions.json) ----------
   // x/y are fractions of canvas width/height, r a fraction of the shorter side.
+  // Each scene's objects match its mission: the ISS + a Crew Dragon for Crew-13,
+  // the ISS, an Earth marker and a turning DNA helix for the Twin Study, Orion on
+  // a figure-8 free-return path through the Van Allen belts for Artemis II, the
+  // sealed Mars-520 habitat dreaming of a Mars it never reached, and an astronaut
+  // tethered to the ISS truss above Earth's horizon for spacewalks.
   const EARTH_GLOW = [110, 180, 255], MOON_GLOW = [190, 196, 210], MARS_GLOW = [255, 150, 100];
   const SCENES = {
-    station: { bodies: [{ tex: "earth", x: 0.5, y: 0.54, r: 0.37, spin: 0.1, glow: EARTH_GLOW, atmo: 1 }],
-               craft: { kind: "station", orbit: { cx: 0.5, cy: 0.54, rx: 0.46, ry: 0.12, tilt: -0.16, speed: 0.3 } } },
-    lunar_base: { bodies: [{ tex: "moon", x: 0.55, y: 0.56, r: 0.37, spin: 0.05, glow: MOON_GLOW, atmo: 0.15 },
-                           { tex: "earth", x: 0.13, y: 0.2, r: 0.085, spin: 0.18, glow: EARTH_GLOW, atmo: 1 }],
-                  beacon: { body: 0, lon: 0.04, lat: 0.3 } },
-    mars_transit: { bodies: [{ tex: "earth", x: 0.14, y: 0.64, r: 0.11, spin: 0.18, glow: EARTH_GLOW, atmo: 1 },
-                             { tex: "mars", x: 0.82, y: 0.4, r: 0.21, spin: 0.08, glow: MARS_GLOW, atmo: 0.45 }],
-                    craft: { kind: "ship", path: { from: [0.22, 0.6], ctrl: [0.48, 0.08], to: [0.66, 0.4], speed: 0.06 } } },
-    mars_base: { bodies: [{ tex: "mars", x: 0.5, y: 0.55, r: 0.38, spin: 0.06, glow: MARS_GLOW, atmo: 0.45 }],
-                 beacon: { body: 0, lon: 0.02, lat: 0.22 } },
-    rover: { bodies: [{ tex: "mars", x: 0.5, y: 1.62, r: 1.3, spin: 0.02, glow: MARS_GLOW, atmo: 0.6, tilt: 1.15 }],
-             craft: { kind: "rover" } },
+    crew13_iss: {
+      bodies: [{ tex: "earth", x: 0.5, y: 0.6, r: 0.4, spin: 0.08, glow: EARTH_GLOW, atmo: 1 }],
+      craft: { kind: "iss", dragon: true, orbit: { cx: 0.5, cy: 0.6, rx: 0.44, ry: 0.13, tilt: -0.14, speed: 0.22 } },
+    },
+    twin_study: {
+      bodies: [{ tex: "earth", x: 0.34, y: 0.56, r: 0.32, spin: 0.08, glow: EARTH_GLOW, atmo: 1 }],
+      craft: { kind: "iss", orbit: { cx: 0.34, cy: 0.56, rx: 0.3, ry: 0.11, tilt: -0.16, speed: 0.26 } },
+      beacon: { body: 0, lon: 0.06, lat: 0.5, link: true },
+      helix: { x: 0.82, y: 0.5, h: 0.78, w: 0.07 },
+    },
+    artemis2: {
+      bodies: [{ tex: "earth", x: 0.2, y: 0.58, r: 0.13, spin: 0.14, glow: EARTH_GLOW, atmo: 1 },
+               { tex: "moon", x: 0.8, y: 0.42, r: 0.11, spin: 0.04, glow: MOON_GLOW, atmo: 0.15 }],
+      belts: { body: 0, rings: [1.9, 2.9] },
+      craft: { kind: "orion", speed: 0.045,
+               pts: [[0.29, 0.55], [0.46, 0.66], [0.66, 0.58], [0.86, 0.5], [0.9, 0.36], [0.8, 0.27], [0.66, 0.29], [0.46, 0.44], [0.3, 0.6], [0.2, 0.74], [0.11, 0.6], [0.17, 0.45]] },
+    },
+    mars520: {
+      bodies: [{ tex: "earth", x: 0.13, y: 0.26, r: 0.075, spin: 0.16, glow: EARTH_GLOW, atmo: 1 },
+               { tex: "mars", x: 0.86, y: 0.28, r: 0.12, spin: 0.07, glow: MARS_GLOW, atmo: 0.45 }],
+      craft: { kind: "habitat", loop: { from: [0.2, 0.28], to: [0.78, 0.3], up: 0.04, down: 0.5, speed: 0.05 } },
+    },
+    spacewalk: {
+      bodies: [{ tex: "earth", x: 0.5, y: 2.05, r: 1.55, spin: 0.012, glow: EARTH_GLOW, atmo: 1.2, tilt: 1.05 }],
+      craft: { kind: "eva" },
+    },
   };
 
   // Sun up and to the left, slightly in front; V = straight at the viewer.
@@ -320,92 +339,269 @@ const Planet3D = (() => {
       ctx.drawImage(b.off, b.bake.x0, b.bake.y0);
     }
 
-    function drawBeacon(beacon, t) {
+    // ---- small drawing helpers ----
+    const lin = (x0, y0, x1, y1, stops) => {
+      const g = ctx.createLinearGradient(x0, y0, x1, y1);
+      stops.forEach(([o, c]) => g.addColorStop(o, c));
+      return g;
+    };
+    function rrect(x, y, w, h, r) {
+      ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+    // A shaded cylinder lying along x (from x0 to x1), radius r: body + lit end cap.
+    function cylinder(x0, x1, cy, r, light, dark) {
+      ctx.fillStyle = lin(0, cy - r, 0, cy + r, [[0, dark], [0.28, light], [0.55, light], [1, dark]]);
+      ctx.fillRect(x0, cy - r, x1 - x0, 2 * r);
+      ctx.fillStyle = lin(x1 - r * 0.35, 0, x1 + r * 0.35, 0, [[0, light], [1, dark]]);
+      ctx.beginPath(); ctx.ellipse(x1, cy, r * 0.35, r, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Where a point on a planet's surface is on screen (null when it's on the far side).
+    function surfacePoint(beacon, t) {
       const b = bodies[beacon.body];
-      if (!b || !b.shown) return;
-      // A point on the surface, so it turns with the planet and hides behind it.
+      if (!b || !b.shown) return null;
       const lon = beacon.lon * Math.PI * 2 - t * b.spin, lat = beacon.lat;
       const z = Math.cos(lat) * Math.cos(lon);
-      if (z < 0.05) return;
-      const x = b.cx + Math.cos(lat) * Math.sin(lon) * b.R, y = b.cy - Math.sin(lat) * b.R;
-      const pulse = (t * 0.8) % 1;
+      return { x: b.cx + Math.cos(lat) * Math.sin(lon) * b.R, y: b.cy - Math.sin(lat) * b.R, z };
+    }
+
+    function drawBeacon(beacon, t) {
+      const p = surfacePoint(beacon, t);
+      if (!p || p.z < 0.05) return null;
+      const { x, y, z } = p, pulse = (t * 0.8) % 1;
       ctx.strokeStyle = `rgba(79,209,197,${(1 - pulse) * 0.8 * z})`;
       ctx.lineWidth = 1.5 * dpr;
       ctx.beginPath(); ctx.ellipse(x, y, (4 + pulse * 16) * dpr, (4 + pulse * 16) * dpr * z, 0, 0, Math.PI * 2); ctx.stroke();
       const core = ctx.createRadialGradient(x, y, 0, x, y, 7 * dpr);
       core.addColorStop(0, "rgba(180,255,245,1)"); core.addColorStop(0.35, "rgba(79,209,197,0.8)"); core.addColorStop(1, "rgba(79,209,197,0)");
       ctx.fillStyle = core; ctx.beginPath(); ctx.arc(x, y, 7 * dpr, 0, Math.PI * 2); ctx.fill();
+      return p;
     }
 
-    function drawStation(x, y, s, alpha) {
-      ctx.save(); ctx.translate(x, y); ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#3d74b8"; ctx.fillRect(-11 * s, -2.2 * s, 7 * s, 4.4 * s); ctx.fillRect(4 * s, -2.2 * s, 7 * s, 4.4 * s);
-      ctx.strokeStyle = "rgba(160,200,255,0.6)"; ctx.lineWidth = 0.5 * s;
-      for (let i = -10; i <= 10; i += 2) if (Math.abs(i) > 4) { ctx.beginPath(); ctx.moveTo(i * s, -2.2 * s); ctx.lineTo(i * s, 2.2 * s); ctx.stroke(); }
-      ctx.fillStyle = "#d9e1ea"; ctx.fillRect(-4 * s, -0.6 * s, 8 * s, 1.2 * s); ctx.fillRect(-1.6 * s, -1.8 * s, 3.2 * s, 3.6 * s);
-      ctx.fillStyle = "rgba(255,90,79,0.9)"; ctx.beginPath(); ctx.arc(0, -2.2 * s, 0.7 * s, 0, Math.PI * 2); ctx.fill();
+    // ISS: long truss, four pairs of solar wings that slowly turn (so they catch
+    // the light in 3D), white radiators and the pressurised modules in the middle.
+    function drawISS(x, y, s, t, alpha = 1) {
+      ctx.save(); ctx.translate(x, y); ctx.globalAlpha *= alpha;
+      const turn = 0.55 + 0.45 * Math.cos(t * 0.35);              // wing angle to the viewer
+      ctx.fillStyle = lin(0, -0.9 * s, 0, 0.9 * s, [[0, "#c9d3de"], [0.5, "#8996a6"], [1, "#4d5866"]]);
+      ctx.fillRect(-16 * s, -0.7 * s, 32 * s, 1.4 * s);           // main truss
+      [-14, -10.5, 10.5, 14].forEach((wx) => {                     // solar wings above and below
+        [-1, 1].forEach((side) => {
+          const h = 6.2 * s * turn, yy = side < 0 ? -0.7 * s - h : 0.7 * s;
+          ctx.fillStyle = lin(0, yy, 0, yy + h, side < 0
+            ? [[0, "#2a4f8a"], [1, `rgba(${120 + 100 * turn | 0},${150 + 70 * turn | 0},230,1)`]]
+            : [[0, `rgba(${120 + 100 * turn | 0},${150 + 70 * turn | 0},230,1)`], [1, "#22416f"]]);
+          ctx.fillRect((wx - 1.3) * s, yy, 2.6 * s, h);
+          ctx.strokeStyle = "rgba(255,214,140,0.55)"; ctx.lineWidth = 0.25 * s;
+          for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo((wx - 1.3) * s, yy + h * k / 4); ctx.lineTo((wx + 1.3) * s, yy + h * k / 4); ctx.stroke(); }
+        });
+      });
+      ctx.fillStyle = "rgba(236,242,248,0.9)";                      // radiators
+      ctx.fillRect(-6.5 * s, 0.7 * s, 1.6 * s, 3.2 * s); ctx.fillRect(4.9 * s, 0.7 * s, 1.6 * s, 3.2 * s);
+      ctx.save(); ctx.rotate(Math.PI / 2);                          // modules run across the truss
+      cylinder(-3.2 * s, 3.4 * s, 0, 1.05 * s, "#f4f7fa", "#8e9aa8");
+      ctx.restore();
+      cylinder(-2.6 * s, 2.6 * s, -0.1 * s, 0.75 * s, "#eef2f6", "#97a3b1");
+      ctx.fillStyle = `rgba(255,90,79,${0.6 + 0.4 * Math.sin(t * 3)})`;
+      ctx.beginPath(); ctx.arc(0, -3.6 * s, 0.45 * s, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
 
-    function drawShip(x, y, angle, s, t) {
+    // Crew Dragon: white capsule with a dark nose band, its trunk behind it.
+    function drawDragon(x, y, s, angle) {
       ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-      const len = 16 + Math.sin(t * 20) * 2;
-      const flame = ctx.createLinearGradient(-len * s, 0, -4 * s, 0);
-      flame.addColorStop(0, "rgba(79,209,197,0)"); flame.addColorStop(1, "rgba(190,255,245,0.95)");
-      ctx.fillStyle = flame; ctx.beginPath(); ctx.moveTo(-4 * s, -1.6 * s); ctx.lineTo(-len * s, 0); ctx.lineTo(-4 * s, 1.6 * s); ctx.fill();
-      const body = ctx.createLinearGradient(0, -3 * s, 0, 3 * s);
-      body.addColorStop(0, "#ffffff"); body.addColorStop(1, "#8fa3b8");
-      ctx.fillStyle = body;
-      ctx.beginPath(); ctx.moveTo(8 * s, 0); ctx.quadraticCurveTo(2 * s, -3 * s, -4 * s, -2.6 * s); ctx.lineTo(-4 * s, 2.6 * s); ctx.quadraticCurveTo(2 * s, 3 * s, 8 * s, 0); ctx.fill();
+      ctx.fillStyle = lin(0, -2 * s, 0, 2 * s, [[0, "#3b4552"], [0.5, "#79879a"], [1, "#2a323c"]]);
+      ctx.fillRect(-4.2 * s, -1.9 * s, 2.4 * s, 3.8 * s);           // trunk
+      ctx.fillStyle = lin(0, -2.2 * s, 0, 2.2 * s, [[0, "#9aa6b4"], [0.35, "#ffffff"], [1, "#8592a2"]]);
+      ctx.beginPath(); ctx.moveTo(-1.8 * s, -2.2 * s); ctx.lineTo(1.6 * s, -1.1 * s); ctx.quadraticCurveTo(2.6 * s, 0, 1.6 * s, 1.1 * s); ctx.lineTo(-1.8 * s, 2.2 * s); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#1d2530"; ctx.fillRect(0.9 * s, -1.25 * s, 0.6 * s, 2.5 * s);
       ctx.restore();
+    }
+
+    // Orion: grey capsule on a service module with four solar wings in an X.
+    function drawOrion(x, y, angle, s, t) {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+      const wing = 0.6 + 0.4 * Math.cos(t * 0.8);
+      [[-1, -1], [-1, 1]].forEach(([, sd]) => {
+        ctx.fillStyle = lin(0, 0, 0, sd * 7 * s * wing, [[0, "#2f5a98"], [1, "#7aa6e8"]]);
+        ctx.beginPath(); ctx.moveTo(-3.4 * s, 0); ctx.lineTo(-6.8 * s, sd * 6.6 * s * wing); ctx.lineTo(-4.8 * s, sd * 7.2 * s * wing); ctx.lineTo(-2 * s, 0); ctx.fill();
+      });
+      ctx.fillStyle = lin(0, -2 * s, 0, 2 * s, [[0, "#5d6977"], [0.45, "#dfe5ec"], [1, "#4a5562"]]);
+      rrect(-5 * s, -1.9 * s, 4 * s, 3.8 * s, 0.6 * s); ctx.fill();   // service module
+      ctx.fillStyle = lin(0, -2.6 * s, 0, 2.6 * s, [[0, "#8c96a3"], [0.35, "#f6f8fa"], [1, "#77818e"]]);
+      ctx.beginPath(); ctx.moveTo(-1 * s, -2.6 * s); ctx.lineTo(3.4 * s, -0.7 * s); ctx.lineTo(3.4 * s, 0.7 * s); ctx.lineTo(-1 * s, 2.6 * s); ctx.closePath(); ctx.fill();
+      const glow = ctx.createRadialGradient(-5.4 * s, 0, 0, -5.4 * s, 0, 3 * s);
+      glow.addColorStop(0, "rgba(190,255,245,0.55)"); glow.addColorStop(1, "rgba(79,209,197,0)");
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(-5.4 * s, 0, 3 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // Closed Catmull-Rom curve through the free-return points (fractions of W/H).
+    function loopPoint(pts, u) {
+      const n = pts.length, f = ((u % 1) + 1) % 1 * n, i = Math.floor(f), k = f - i;
+      const P = (j) => pts[(j + n) % n];
+      const [p0, p1, p2, p3] = [P(i - 1), P(i), P(i + 1), P(i + 2)];
+      return [0, 1].map((d) => 0.5 * ((2 * p1[d]) + (-p0[d] + p2[d]) * k + (2 * p0[d] - 5 * p1[d] + 4 * p2[d] - p3[d]) * k * k + (-p0[d] + 3 * p1[d] - 3 * p2[d] + p3[d]) * k * k * k));
+    }
+
+    // Van Allen belts: soft rings around Earth, back half drawn behind the planet.
+    function drawBelts(belts, front, t) {
+      const b = bodies[belts.body];
+      if (!b || !b.shown) return;
+      belts.rings.forEach((k, i) => {
+        const rx = b.R * k, ry = b.R * k * 0.34, a = (0.16 + 0.06 * Math.sin(t * 1.2 + i)) * b.shown;
+        ctx.lineWidth = b.R * (0.22 - i * 0.05);
+        ctx.strokeStyle = i ? `rgba(255,170,110,${a})` : `rgba(140,200,255,${a})`;
+        ctx.beginPath(); ctx.ellipse(b.cx, b.cy, rx, ry, -0.2, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2); ctx.stroke();
+      });
+    }
+
+    // Mars-520 habitat: the real facility was 5 sealed, connected modules.
+    function drawHabitat(cx, cy, s, t) {
+      const sh = ctx.createRadialGradient(cx, cy + 9 * s, 0, cx, cy + 9 * s, 34 * s);
+      sh.addColorStop(0, "rgba(79,209,197,0.12)"); sh.addColorStop(1, "rgba(79,209,197,0)");
+      ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(cx, cy + 9 * s, 34 * s, 7 * s, 0, 0, Math.PI * 2); ctx.fill();
+      cylinder(cx - 26 * s, cx - 12 * s, cy + 2 * s, 3.2 * s, "#e7ecf2", "#6f7c8b");   // living module
+      cylinder(cx - 12 * s, cx + 8 * s, cy, 5.2 * s, "#f1f4f8", "#788596");            // main ship module
+      cylinder(cx + 8 * s, cx + 18 * s, cy + 2.6 * s, 2.6 * s, "#e3e9ef", "#6c7988");   // storage / greenhouse
+      cylinder(cx + 18 * s, cx + 24 * s, cy + 3.2 * s, 2 * s, "#d7dee6", "#647181");     // lander
+      ctx.fillStyle = lin(cx + 22 * s, cy - 4 * s, cx + 34 * s, cy + 6 * s, [[0, "#c8693a"], [1, "#6e2e18"]]);
+      ctx.beginPath(); ctx.moveTo(cx + 25 * s, cy + 6 * s); ctx.quadraticCurveTo(cx + 30 * s, cy - 2 * s, cx + 36 * s, cy + 6 * s); ctx.closePath(); ctx.fill(); // 'Mars surface' module
+      for (let i = 0; i < 6; i++) {                                      // lit windows
+        const on = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 0.6 + i * 1.7));
+        ctx.fillStyle = `rgba(255,214,140,${on})`;
+        ctx.beginPath(); ctx.arc(cx - 9 * s + i * 3 * s, cy - 1.4 * s, 0.7 * s, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.font = `${Math.round(10 * dpr)}px Inter, system-ui, sans-serif`;
+      ctx.fillStyle = "rgba(200,212,226,0.75)"; ctx.textAlign = "center";
+      ctx.fillText("GROUND SIMULATION · MOSCOW", cx + 5 * s, cy + 13 * s);
+      ctx.textAlign = "start";
+    }
+
+    // Astronaut in a white EMU suit with a gold visor, floating on a tether.
+    function drawAstronaut(x, y, s, t) {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.sin(t * 0.4) * 0.22);
+      ctx.fillStyle = lin(-6 * s, 0, 6 * s, 0, [[0, "#8c97a4"], [1, "#d6dde5"]]);   // backpack
+      rrect(-6 * s, -6.5 * s, 12 * s, 13 * s, 2 * s); ctx.fill();
+      ctx.lineCap = "round";
+      const limb = (x0, y0, x1, y1, w) => {
+        ctx.strokeStyle = lin(x0, y0, x1, y1, [[0, "#f5f7fa"], [1, "#b9c3ce"]]); ctx.lineWidth = w * s;
+        ctx.beginPath(); ctx.moveTo(x0 * s, y0 * s); ctx.lineTo(x1 * s, y1 * s); ctx.stroke();
+      };
+      const wave = Math.sin(t * 0.9) * 1.5;
+      limb(-4.5, -2, -9, 3 + wave, 3.2); limb(4.5, -2, 8.5, -6 - wave, 3.2);         // arms
+      limb(-2.4, 6, -4, 13 + wave * 0.5, 3.6); limb(2.4, 6, 4.6, 12.5 - wave * 0.5, 3.6); // legs
+      ctx.fillStyle = "#e9eef3"; [[-9, 3 + wave], [8.5, -6 - wave]].forEach(([gx, gy]) => { ctx.beginPath(); ctx.arc(gx * s, gy * s, 1.6 * s, 0, Math.PI * 2); ctx.fill(); });
+      ctx.fillStyle = lin(-5 * s, -5 * s, 5 * s, 7 * s, [[0, "#ffffff"], [0.6, "#dbe2e9"], [1, "#9fabb8"]]);
+      rrect(-4.8 * s, -5 * s, 9.6 * s, 12 * s, 3 * s); ctx.fill();                   // torso
+      ctx.fillStyle = "#c0392b"; ctx.fillRect(-4.8 * s, 1 * s, 9.6 * s, 0.9 * s);     // suit stripe
+      ctx.fillStyle = "#5b6878"; rrect(-2.6 * s, -2.4 * s, 5.2 * s, 2.6 * s, 0.6 * s); ctx.fill(); // chest controls
+      const helm = ctx.createRadialGradient(-1.6 * s, -10.5 * s, 0.5 * s, 0, -9 * s, 5 * s);
+      helm.addColorStop(0, "#ffffff"); helm.addColorStop(1, "#a9b4c0");
+      ctx.fillStyle = helm; ctx.beginPath(); ctx.arc(0, -9 * s, 4.6 * s, 0, Math.PI * 2); ctx.fill();
+      const visor = ctx.createLinearGradient(-3 * s, -11 * s, 3 * s, -7 * s);
+      visor.addColorStop(0, "#ffe7a3"); visor.addColorStop(0.45, "#d29a2c"); visor.addColorStop(1, "#5a3c0c");
+      ctx.fillStyle = visor; ctx.beginPath(); ctx.ellipse(0.4 * s, -8.8 * s, 3.3 * s, 2.7 * s, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(160,210,255,0.5)"; ctx.beginPath(); ctx.ellipse(-0.8 * s, -9.8 * s, 1.3 * s, 0.6 * s, -0.5, 0, Math.PI * 2); ctx.fill(); // Earth glint
+      ctx.restore();
+    }
+
+    // DNA double helix turning in 3D: depth sorts the beads, so strands pass in front and behind.
+    function drawHelix(hx, t) {
+      const n = 22, cx = hx.x * W, top = (hx.y - hx.h / 2) * H, step = hx.h * H / (n - 1), w = hx.w * W;
+      const beads = [];
+      for (let i = 0; i < n; i++) {
+        const a = i * 0.52 + t * 0.9, y = top + i * step;
+        const p = [[Math.sin(a), Math.cos(a)], [Math.sin(a + Math.PI), Math.cos(a + Math.PI)]];
+        const za = p[0][1], zb = p[1][1];
+        ctx.strokeStyle = `rgba(200,212,226,${0.18 + 0.12 * Math.abs(za)})`; ctx.lineWidth = 1.6 * dpr;
+        ctx.beginPath(); ctx.moveTo(cx + p[0][0] * w, y); ctx.lineTo(cx + p[1][0] * w, y); ctx.stroke();
+        beads.push({ x: cx + p[0][0] * w, y, z: za, c: [79, 209, 197] }, { x: cx + p[1][0] * w, y, z: zb, c: [167, 139, 250] });
+      }
+      beads.sort((a, b) => a.z - b.z).forEach((b) => {
+        const r = (2.4 + 1.6 * (b.z + 1) / 2) * dpr, a = 0.45 + 0.55 * (b.z + 1) / 2;
+        const g = ctx.createRadialGradient(b.x - r * 0.35, b.y - r * 0.35, 0, b.x, b.y, r);
+        g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.4, `rgba(${b.c[0]},${b.c[1]},${b.c[2]},${a})`); g.addColorStop(1, `rgba(${b.c[0] * 0.4 | 0},${b.c[1] * 0.4 | 0},${b.c[2] * 0.5 | 0},${a})`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.font = `${Math.round(10 * dpr)}px Inter, system-ui, sans-serif`;
+      ctx.fillStyle = "rgba(200,212,226,0.75)"; ctx.textAlign = "center";
+      ctx.fillText("1,000+ GENES CHANGED IN SPACE", cx, top + hx.h * H + 16 * dpr);
+      ctx.textAlign = "start";
     }
 
     function drawCraft(craft, t) {
       const s = dpr * Math.max(1.1, unit / dpr / 200);
-      if (craft.kind === "station") {
+      if (craft.kind === "iss") {
         const o = craft.orbit, a = t * o.speed;
-        const ex = Math.cos(a) * o.rx * W, ey = Math.sin(a) * o.ry * H;
-        const x = o.cx * W + ex * Math.cos(o.tilt) - ey * Math.sin(o.tilt);
-        const y = o.cy * H + ex * Math.sin(o.tilt) + ey * Math.cos(o.tilt);
-        // behind the planet (top half of the orbit) it's hidden by drawing order
-        return { behind: Math.sin(a) < 0, draw: () => drawStation(x, y, s, 1) };
+        const pos = (ang) => {
+          const ex = Math.cos(ang) * o.rx * W, ey = Math.sin(ang) * o.ry * H;
+          return [o.cx * W + ex * Math.cos(o.tilt) - ey * Math.sin(o.tilt), o.cy * H + ex * Math.sin(o.tilt) + ey * Math.cos(o.tilt)];
+        };
+        const [x, y] = pos(a), depth = 0.85 + 0.25 * Math.sin(a);       // nearer = bigger: reads as 3D
+        // faint orbit line so the path around Earth is visible
+        ctx.strokeStyle = "rgba(147,164,181,0.16)"; ctx.lineWidth = 1 * dpr; ctx.setLineDash([2 * dpr, 6 * dpr]);
+        ctx.beginPath(); for (let u = 0; u <= 6.3; u += 0.05) { const [px, py] = pos(u); u === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); } ctx.stroke(); ctx.setLineDash([]);
+        const draw = () => {
+          drawISS(x, y, s * 1.7 * depth, t);
+          if (craft.dragon) {                                            // Dragon docked at the front port
+            const [dx, dy] = pos(a + 0.012);
+            drawDragon(x + 9.2 * s * depth, y - 6.8 * s * depth, s * 1.25 * depth, Math.atan2(dy - y, dx - x) - Math.PI / 2);
+          }
+        };
+        return { behind: Math.sin(a) < 0, draw, x, y };
       }
-      if (craft.kind === "ship") {
-        const p = craft.path, k = (t * p.speed) % 1;
-        const q = (u) => [0, 1].map((i) => ((1 - u) ** 2) * p.from[i] + 2 * (1 - u) * u * p.ctrl[i] + u * u * p.to[i]);
-        ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([3 * dpr, 7 * dpr]);
-        ctx.strokeStyle = "rgba(147,164,181,0.35)";
-        ctx.beginPath();
-        for (let u = 0; u <= 1.0001; u += 0.02) { const [px, py] = q(u); u === 0 ? ctx.moveTo(px * W, py * H) : ctx.lineTo(px * W, py * H); }
-        ctx.stroke();
-        ctx.strokeStyle = "rgba(79,209,197,0.75)"; ctx.setLineDash([]);  // the part already flown
-        ctx.beginPath();
-        for (let u = 0; u <= k; u += 0.01) { const [px, py] = q(u); u === 0 ? ctx.moveTo(px * W, py * H) : ctx.lineTo(px * W, py * H); }
-        ctx.stroke();
-        const [x, y] = q(k), [x2, y2] = q(Math.min(1, k + 0.01));
-        const fadeEnds = Math.min(1, k * 12, (1 - k) * 12);
-        ctx.globalAlpha = fadeEnds; drawShip(x * W, y * H, Math.atan2((y2 - y) * H, (x2 - x) * W), s, t); ctx.globalAlpha = 1;
-        return null;
+      if (craft.kind === "orion") {
+        const k = (t * craft.speed) % 1, P = (u) => { const [px, py] = loopPoint(craft.pts, u); return [px * W, py * H]; };
+        ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([3 * dpr, 7 * dpr]); ctx.strokeStyle = "rgba(147,164,181,0.35)";
+        ctx.beginPath(); for (let u = 0; u <= 1.0001; u += 0.005) { const [px, py] = P(u); u === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); } ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "rgba(79,209,197,0.8)"; ctx.lineWidth = 1.6 * dpr;   // the last stretch flown
+        ctx.beginPath(); for (let i = 0; i <= 30; i++) { const [px, py] = P(k - 0.12 + i * 0.004); i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); } ctx.stroke();
+        const [x, y] = P(k), [x2, y2] = P(k + 0.003);
+        return { behind: false, draw: () => drawOrion(x, y, Math.atan2(y2 - y, x2 - x), s * 1.6, t) };
       }
-      if (craft.kind === "rover") {
-        const b = bodies[0];
-        if (!b || !b.shown) return null;
-        const x = W * 0.5 + Math.sin(t * 0.2) * W * 0.16;
-        const y = b.cy - Math.sqrt(Math.max(0, b.R * b.R - (x - b.cx) ** 2));
-        const tilt = Math.asin((x - b.cx) / b.R);
-        ctx.save(); ctx.translate(x, y); ctx.rotate(tilt); ctx.globalAlpha = b.shown;
-        const sh = ctx.createRadialGradient(0, 0, 0, 0, 0, 14 * s); sh.addColorStop(0, "rgba(0,0,0,0.35)"); sh.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = sh; ctx.fillRect(-14 * s, -2 * s, 28 * s, 5 * s);
-        ctx.fillStyle = "#4a5866"; ctx.fillRect(-8 * s, -4 * s, 16 * s, 1.4 * s);
-        const bodyG = ctx.createLinearGradient(0, -9 * s, 0, -4 * s); bodyG.addColorStop(0, "#f2f5f8"); bodyG.addColorStop(1, "#aab6c3");
-        ctx.fillStyle = bodyG; ctx.fillRect(-8 * s, -9 * s, 16 * s, 5 * s);
-        ctx.fillStyle = "#4fd1c5"; ctx.fillRect(2 * s, -8 * s, 5 * s, 2.4 * s);
-        ctx.strokeStyle = "#aab6c3"; ctx.lineWidth = 0.8 * s; ctx.beginPath(); ctx.moveTo(-6 * s, -9 * s); ctx.lineTo(-6 * s, -14 * s); ctx.stroke();
-        ctx.fillStyle = `rgba(79,209,197,${0.5 + 0.5 * Math.sin(t * 4)})`; ctx.beginPath(); ctx.arc(-6 * s, -14 * s, 1.1 * s, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#1c2530";
-        [-6, 0, 6].forEach((wx) => { ctx.beginPath(); ctx.arc(wx * s, -2 * s, 2.2 * s, 0, Math.PI * 2); ctx.fill(); });
-        ctx.restore(); ctx.globalAlpha = 1;
-        return null;
+      if (craft.kind === "habitat") {
+        const L = craft.loop, k = (t * L.speed) % 1;
+        // simulated round trip: out along the top arc, back along the bottom arc
+        const arc = (u, out) => {
+          const mx = (L.from[0] + L.to[0]) / 2, my = out ? L.up : L.down;
+          const a = out ? u : 1 - u;
+          const px = (1 - a) ** 2 * L.from[0] + 2 * (1 - a) * a * mx + a * a * L.to[0];
+          const py = (1 - a) ** 2 * L.from[1] + 2 * (1 - a) * a * my + a * a * L.to[1];
+          return [px * W, py * H];
+        };
+        ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([3 * dpr, 7 * dpr]); ctx.strokeStyle = "rgba(147,164,181,0.3)";
+        [true, false].forEach((out) => { ctx.beginPath(); for (let u = 0; u <= 1.0001; u += 0.02) { const [px, py] = arc(u, out); u === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py); } ctx.stroke(); });
+        ctx.setLineDash([]);
+        const out = k < 0.5, u = out ? k * 2 : (k - 0.5) * 2;
+        const [gx, gy] = arc(u, out);
+        const ghost = ctx.createRadialGradient(gx, gy, 0, gx, gy, 6 * s);
+        ghost.addColorStop(0, "rgba(190,255,245,0.9)"); ghost.addColorStop(1, "rgba(79,209,197,0)");
+        ctx.fillStyle = ghost; ctx.beginPath(); ctx.arc(gx, gy, 6 * s, 0, Math.PI * 2); ctx.fill();
+        return { behind: false, draw: () => drawHabitat(W * 0.47, H * 0.68, s * 2.1, t) };
+      }
+      if (craft.kind === "eva") {
+        const ax = W * 0.62 + Math.sin(t * 0.3) * W * 0.02, ay = H * 0.4 + Math.sin(t * 0.5) * H * 0.03;
+        const draw = () => {
+          // ISS truss running in from the top-left, with a handrail and solar wing
+          ctx.save(); ctx.translate(W * 0.18, H * 0.2); ctx.rotate(0.16);
+          ctx.fillStyle = lin(0, -5 * s, 0, 5 * s, [[0, "#d3dbe4"], [0.5, "#8c98a7"], [1, "#4b5563"]]);
+          ctx.fillRect(-W * 0.3, -4 * s, W * 0.42, 8 * s);
+          ctx.strokeStyle = "rgba(40,48,60,0.7)"; ctx.lineWidth = 0.8 * s;
+          for (let i = -W * 0.3; i < W * 0.12; i += 8 * s) { ctx.beginPath(); ctx.moveTo(i, -4 * s); ctx.lineTo(i + 8 * s, 4 * s); ctx.stroke(); }
+          ctx.fillStyle = "#f3c244"; ctx.fillRect(-W * 0.2, 4 * s, W * 0.26, 1.2 * s);   // yellow handrail
+          ctx.fillStyle = lin(0, 5 * s, 0, 31 * s, [[0, "#6d99dc"], [1, "#1f3c6b"]]);
+          ctx.fillRect(-W * 0.26, 5.2 * s, 18 * s, 26 * s);                                // solar wing
+          ctx.restore();
+          // tether: a soft curve from the handrail to the suit's waist
+          const hx = W * 0.18 + Math.cos(0.16) * W * 0.04, hy = H * 0.2 + 6 * s;
+          ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = 1.1 * dpr;
+          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo((hx + ax) / 2, ay + 26 * s, ax - 3 * s, ay + 2 * s); ctx.stroke();
+          drawAstronaut(ax, ay, s * 2, t);
+        };
+        return { behind: false, draw };
       }
       return null;
     }
@@ -422,11 +618,22 @@ const Planet3D = (() => {
           ctx.fillStyle = `rgba(232,238,244,${st.a * (0.35 + 0.65 * Math.sin(t * 1.4 + st.p) ** 2)})`;
           ctx.fillRect(st.x, st.y, st.size, st.size);
         });
+        if (scene.belts) drawBelts(scene.belts, false, t);
         const craft = scene.craft ? drawCraft(scene.craft, t) : null;
         if (craft && craft.behind) craft.draw();
         bodies.forEach((b) => drawSphere(b, t));
+        if (scene.belts) drawBelts(scene.belts, true, t);
         if (craft && !craft.behind) craft.draw();
-        if (scene.beacon) drawBeacon(scene.beacon, t);
+        const mark = scene.beacon ? drawBeacon(scene.beacon, t) : null;
+        if (scene.beacon && scene.beacon.link && mark && craft && craft.x !== undefined) {
+          // Twin Study: the twin in space and the twin on Earth, compared all year
+          const pulse = (t * 0.6) % 1;
+          ctx.strokeStyle = "rgba(167,139,250,0.45)"; ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([2 * dpr, 5 * dpr]);
+          ctx.lineDashOffset = -pulse * 14 * dpr;
+          ctx.beginPath(); ctx.moveTo(mark.x, mark.y); ctx.lineTo(craft.x, craft.y); ctx.stroke();
+          ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        }
+        if (scene.helix) drawHelix(scene.helix, t);
         if (crossfade > 0) {                                    // old scene dissolving away
           ctx.globalAlpha = crossfade; ctx.drawImage(prev, 0, 0); ctx.globalAlpha = 1;
           crossfade = Math.max(0, crossfade - 0.045);
@@ -446,7 +653,7 @@ const Planet3D = (() => {
         if (id === profile) { kick(); return; }
         if (profile && W) { prevx.clearRect(0, 0, W, H); prevx.drawImage(canvas, 0, 0); crossfade = 1; }
         profile = id;
-        scene = SCENES[id] || SCENES.station;
+        scene = SCENES[id] || SCENES.crew13_iss;
         // generate the textures this scene needs first
         scene.bodies.slice().reverse().forEach((b) => {
           const i = jobs.findIndex((j) => j.name === b.tex);

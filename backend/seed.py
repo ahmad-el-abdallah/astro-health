@@ -259,7 +259,7 @@ def seed_all():
         # see the module docstring. Assign real object tags via /admin.
 
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('mission_profile', ?)",
-                     (missions_cfg["active_profile"],))
+                     (missions_cfg.get("active_profile") or "",))  # "" = no mission running
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('emergency_active', 'false')")
         conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('surgeon_unlocked_until', '')")
 

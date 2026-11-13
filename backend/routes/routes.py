@@ -1238,14 +1238,20 @@ def create_routes(app, socketio, bridge):
         profile_id, profile = comms.current_profile()
         return jsonify({
             "profile_id": profile_id, "profile": profile, "all_profiles": load_missions()["profiles"],
-            "health": load_mission_health()["profiles"].get(profile_id),
+            "health": load_mission_health()["profiles"].get(profile_id) if profile_id else None,
+            # every mission's plan, so the page can show any mission before it's started
+            "all_health": load_mission_health()["profiles"],
         })
 
     @bp.put("/mission")
     def set_mission():
+        # {"profile_id": "<id>"} starts (or switches to) a mission; {"profile_id": null} stops it.
         body = request.get_json(force=True) or {}
+        new_id = body.get("profile_id") or ""
+        if new_id and new_id not in load_missions()["profiles"]:
+            return jsonify({"error": "unknown mission"}), 400
         with db.write_conn() as conn:
-            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('mission_profile', ?)", (body["profile_id"],))
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('mission_profile', ?)", (new_id,))
         profile_id, profile = comms.current_profile()
         emit_fn("mission_changed", {"profile_id": profile_id, "profile": profile})
         return jsonify({"profile_id": profile_id, "profile": profile})

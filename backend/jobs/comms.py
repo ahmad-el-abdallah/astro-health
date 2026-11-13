@@ -12,11 +12,22 @@ from backend import db
 from backend.config import missions as load_missions, TIME_SCALE
 
 
+# What "no mission running" looks like to the rest of the backend: no comms delay,
+# no extra hazards. Missions are started and stopped from the Mission health page.
+NO_MISSION = {"label": "No mission selected", "short": "No mission selected", "comms_delay_s": 0, "main_concerns": []}
+
+
 def current_profile():
+    """(profile_id, profile) of the running mission, or (None, NO_MISSION) when none is.
+    An unknown id -- e.g. "mars_transit" left in a database seeded before the real
+    missions -- also counts as no mission instead of crashing."""
     with db.write_conn() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key = 'mission_profile'").fetchone()
-    profile_id = row["value"] if row else load_missions()["active_profile"]
-    return profile_id, load_missions()["profiles"][profile_id]
+    cfg = load_missions()
+    profile_id = row["value"] if row else cfg.get("active_profile")
+    if not profile_id or profile_id not in cfg["profiles"]:
+        return None, dict(NO_MISSION)
+    return profile_id, cfg["profiles"][profile_id]
 
 
 def delay_seconds():
