@@ -3128,11 +3128,78 @@ The Mission group now holds only Mission health. `config/content.json` is unchan
 measuring guides and body-part text are still used by the voice-screen measuring guide, the
 Body page and Astra. Older entries that mention Learn are historical.
 
+## Inside / outside (EVA) switch with suit readings the AI watches (2026-11-13)
+
+User: "a button next to the Astra button to select if I'm out of the station or in; if out,
+add options like a CO2 sensor and low suit pressure, and the AI analyzes them, detects risk
+and sends an alert".
+
+- **Where the astronaut is:**
+  - The new `backend/logic/location.py` stores it in `settings` `location:<id>` =
+    `{location: inside|eva, since}`.
+  - `counts(indicator, ts, since)`: suit readings count only during the CURRENT EVA (taken
+    since `since`).
+  - `GET/PUT /astronauts/<id>/location`: PUT is self only, otherwise 403/400. It emits
+    `location_changed` and re-runs the analysis.
+- **Suit readings** (`config/health_rules.json`, PLACEHOLDER, `eva_only: true`):
+  - `suit_co2`: mmHg, green 0–4, yellow 4.1–7.5
+  - `suit_pressure`: psi, min-type 4.0 / 3.5
+  - `suit_o2`: %, min-type 40 / 20
+  - `/assess` checks them before the transaction (0–15 / 0–6 / 0–100, no bools) and records
+    them.
+  - `health_rules.sample_suit(problem)`: normal mode is green 94% of the time, so a random red
+    doesn't set off an alarm in every demo. `problem=True` is CO2 red, pressure red, O2 yellow.
+  - `/simulate_vitals` adds them on EVA, or with `?problem=1`.
+- **Filtering:** `_today_snapshot`, `_compute_body_levels` and `analysis.build_context` skip
+  suit readings outside the current EVA. `/summary` and `/crew` return `location`.
+- **The AI:**
+  - `build_context` adds "Location: OUTSIDE … life-critical … set alert_surgeon" or
+    "Location: inside the station."
+  - `facts["eva"]`; the rules fallback's state is `on_eva`, a new state in `ai_analyst.json`,
+    unless RED.
+  - `ai_analyst.json` gets one analysis instruction line and one chat instruction line.
+  - Chat action `set_location {inside|eva}` (yes card), with a prompt example.
+- **Frontend:**
+  - TopBar `LocationPill` beside `AstraPill`, with a live EVA mission-minutes counter from
+    `time_scale`. Read-only for the surgeon.
+  - `useLocationStatus` and the `location_changed` invalidation.
+  - Overview: suit tiles first and `SUIT_FIELDS` in `NewReading` during EVA, plus "Simulate
+    suit problem".
+  - `INDICATORS` / `SUIT_INDICATORS` (left out of `TREND_INDICATORS`).
+  - CrewOverview "On EVA" chip.
+  - Astra `set_location` describe / run (PUT) / done sentence.
+- **Verified with the real Groq key** (isolated copy):
+  - the pill sits after the Astra pill and switches to "Outside · EVA"
+  - suit tiles and fields appear
+  - "Simulate suit problem" → Assess → AI RED: "Suit environment unsafe – CO₂, O₂ and pressure
+    are out of safe range. Return to the airlock now."
+  - the surgeon gets a RED alert, Astra's health notice speaks up, and the doctor card shows
+    "On EVA" with a read-only pill
+  - back inside: suit readings are no longer counted
+  - chat "I'm going outside on a spacewalk now" → `set_location eva` card; "back inside" →
+    `inside`
+  - **Gotcha:** right after a red suit emergency, the AI sensibly refuses to start another EVA
+    and says to return to the airlock. Test the chat action with an astronaut who has no fresh
+    red alert.
+  - A React "removeChild" page error appeared once in the first run and did not come back in
+    three reruns of the same flow. Watch for it.
+- 276 backend and 101 frontend tests pass.
+- **Follow-up, same day: a confirm step.** The user wanted a confirmation before the pill
+  switches.
+  - `ConfirmLocation` in TopBar.jsx copies the Mission page's `ConfirmMission` look and is
+    portalled to `<body>`, so the glass top bar can't clip it.
+  - It asks "Going outside on a spacewalk?" or "Back inside the station?". Cancel, Esc or a
+    backdrop click changes nothing.
+  - The pill is more compact: "Inside" text only at ≥2xl, and "EVA · 12 min" when outside.
+    The top bar now fits on one row at 1440 px again; the extra pill had pushed Log out onto
+    a second line.
+  - Browser-checked 8/8.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 267 tests (rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 276 tests (rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 100 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
+- `cd frontend && npm test` — 101 Vitest tests (format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

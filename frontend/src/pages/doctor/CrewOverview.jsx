@@ -77,6 +77,11 @@ function CrewCard({ c }) {
                 <span className="h-1.5 w-1.5 animate-[ah-pulse-dot_1.6s_ease-in-out_infinite] rounded-full bg-accent-text" />on CYD
               </span>
             )}
+            {c.location?.location === "eva" && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-check-bg px-2 py-px text-[11px] font-semibold text-check-fg">
+                <span className="h-1.5 w-1.5 animate-[ah-pulse-dot_1.6s_ease-in-out_infinite] rounded-full bg-check-fg" />On EVA
+              </span>
+            )}
           </div>
           <div className="truncate text-[13px] text-muted">
             {c.last_reading ? `Last reading ${fmtTime(c.last_reading)}` : "No readings yet"}

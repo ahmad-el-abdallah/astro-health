@@ -239,6 +239,25 @@ Talk or type to Astra (crew only):
 - The Flight Surgeon can still ask about a crew member, but Astra never saves anything on
   their behalf.
 
+### Inside or outside: spacewalk (EVA) mode
+
+Next to the Astra pill in the top bar, the **Location** pill shows **Inside**, or **EVA · 12
+min** while you're outside. Click it when you go out on a spacewalk and again when you're
+back. It asks **"Are you sure?"** first (Cancel or Esc changes nothing). You can also tell
+Astra "I'm heading out for my spacewalk".
+
+**While outside:**
+- Three suit readings join your readings and come first on Overview: **Suit CO2** (mmHg),
+  **Suit pressure** (psi) and **Oxygen supply** (%). Their ranges are PLACEHOLDER figures.
+- "Use simulated vitals" fills them from the suit sensors.
+- **Simulate suit problem** fills high CO2 and low pressure, for the demo.
+- The AI health analyst treats the suit readings as life-critical. A red one makes it say
+  you're unwell, tell you to head back to the airlock, and alert the flight surgeon. Astra's
+  health warning speaks up too.
+- The Flight Surgeon sees **On EVA** on your crew card and your Location pill (read-only).
+
+**Back inside**, suit readings stop counting, so an old red CO2 reading can't keep you red.
+
 ### Astra speaks first
 
 Without being asked, Astra says (or shows in a small card at the bottom right):

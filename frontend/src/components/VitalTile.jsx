@@ -9,13 +9,14 @@ import { rise } from "./ui/motion.js";
 export const TILE_ICON = {
   heart_rate: "heart", blood_pressure: "blood-pressure", blood_sugar: "blood-sugar", temperature: "temperature",
   oxygen_saturation: "lungs", sleep: "sleep", mood: "mood", reaction_time: "mind", exercise: "sun", water: "blood-sugar",
+  suit_co2: "lungs", suit_pressure: "temperature", suit_o2: "lungs",
 };
 
 const EDGE = { GREEN: "border-t-good-edge", YELLOW: "border-t-check-edge", RED: "border-t-alert-edge", GRAY: "border-t-line" };
 
 function Metric({ indicator, value }) {
   if (value == null) return <span>–</span>;
-  if (indicator === "heart_rate" || indicator === "blood_sugar" || indicator === "oxygen_saturation" || indicator === "exercise" || indicator === "water") {
+  if (indicator === "heart_rate" || indicator === "blood_sugar" || indicator === "oxygen_saturation" || indicator === "exercise" || indicator === "water" || indicator.startsWith("suit_")) {
     return <AnimatedNumber value={Number(value)} />;
   }
   if (indicator === "temperature") return <AnimatedNumber value={Number(value)} decimals={1} />;

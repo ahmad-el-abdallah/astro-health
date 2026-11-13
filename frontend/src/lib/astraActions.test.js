@@ -4,6 +4,7 @@ vi.mock("./api.js", () => ({
   post: vi.fn(async () => ({ ok: true })),
   get: vi.fn(async () => ({ heart_rate: 71, blood_pressure: { systolic: 117, diastolic: 75 }, temperature: 36.8 })),
   del: vi.fn(async () => ({ ok: true })),
+  put: vi.fn(async () => ({ ok: true })),
 }));
 import { del, post } from "./api.js";
 import {
@@ -126,5 +127,16 @@ describe("Astra's newer abilities", () => {
     for (const t of ["I need help now", "mayday mayday", "I can't breathe", "this is an emergency"]) expect(isEmergencyPhrase(t)).toBe(true);
     for (const t of ["what do I do in an emergency?", "can you help me log my mood", "help"]) expect(isEmergencyPhrase(t)).toBe(false);
     for (const t of ["cancel", "no I'm okay", "false alarm", "stop"]) expect(isCancelPhrase(t)).toBe(true);
+  });
+});
+
+describe("inside / outside (EVA)", () => {
+  it("describes, runs and confirms the switch", async () => {
+    const { put } = await import("./api.js");
+    expect(describeAction({ type: "set_location", location: "eva" })).toBe("Switch to EVA mode (outside on a spacewalk)");
+    expect(describeAction({ type: "set_location", location: "inside" })).toBe("Back inside the station");
+    expect(doneSentence([{ action: { type: "set_location", location: "eva" }, ok: true }])).toMatch(/^EVA mode is on/);
+    await runActions([{ type: "set_location", location: "eva" }], { astroId: 2 });
+    expect(put).toHaveBeenCalledWith("/astronauts/2/location", { location: "eva" });
   });
 });

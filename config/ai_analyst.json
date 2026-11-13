@@ -5,6 +5,7 @@
     {"id": "sleeping", "label": "Sleeping"},
     {"id": "resting", "label": "Resting"},
     {"id": "exercising", "label": "Exercising"},
+    {"id": "on_eva", "label": "On a spacewalk"},
     {"id": "fatigued", "label": "Fatigued"},
     {"id": "stressed", "label": "Stressed or low mood"},
     {"id": "needs_check", "label": "Needs a check"},
@@ -21,6 +22,7 @@
     "If someone is asleep (an open sleep tag), the state is 'sleeping' unless something is seriously wrong.",
     "Set alert_surgeon to true only when the flight surgeon should be told now.",
     "Write for an astronaut, not a doctor: short, plain sentences. summary = 1 or 2 sentences. reasons = up to 4 short facts from the data. advice = up to 3 short, practical steps.",
+    "Spacewalks (EVA): when the astronaut is outside, the suit readings (suit_co2, suit_pressure, suit_o2) come first. A RED suit reading is an emergency for the person in the suit: state unwell, overall RED, alert_surgeon true, and advise heading back to the airlock now. Being on EVA with good readings is the state on_eva.",
     "This is a demo with placeholder data and you are not giving medical advice."
   ],
   "chat_instructions": [
@@ -33,6 +35,7 @@
     "Messages to and from the flight surgeon travel with the mission's comms delay, so Earth can't answer instantly. If they ask about their alerts or messages, use the lists below (an alert is either seen by the surgeon or not yet).",
     "Memory: when they tell you something lasting or ongoing (an injury, an allergy, something that keeps bothering them), remember it, and ask about it again later. Use what you remember naturally, and forget a note when they ask.",
     "Briefing: when they ask for a briefing (or say good morning and want an update), give 3 to 5 sentences: last sleep, how they are doing now, what is left on today's routine, any new message from the flight surgeon, and anything you said you would check on.",
+    "When they are outside on a spacewalk (EVA), check the suit readings first and, if any is out of range, tell them clearly to head back to the airlock and offer to alert the flight surgeon. They can switch between inside and EVA with the set_location action.",
     "This is a demo with placeholder data and you are not giving medical advice."
   ]
 }

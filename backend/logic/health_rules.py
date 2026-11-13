@@ -203,3 +203,41 @@ def sample_vitals(rules=None):
         "temperature": round(_sample_simple(ind["temperature"], _pick_level()), 1),
         "oxygen_saturation": round(_sample_min(ind["oxygen_saturation"], _pick_level())),
     }
+
+
+# ---- spacewalk suit readings (only while on EVA, backend/logic/location.py) ----
+def _suit_min(cfg, level):
+    """A "higher is better" suit reading on a small scale (psi, %), from its config bands."""
+    g, y, top = cfg["green_min"], cfg["yellow_min"], cfg.get("max", cfg["green_min"] * 1.2)
+    if level == GREEN:
+        return random.uniform(g + (top - g) * 0.1, top - (top - g) * 0.05)
+    if level == YELLOW:
+        return random.uniform(y + (g - y) * 0.1, g - (g - y) * 0.1)
+    return random.uniform(y * 0.7, y * 0.95)
+
+
+def _suit_low_good(cfg, level):
+    """A "lower is better" suit reading (CO2): green from 0, then yellow, then above."""
+    if level == GREEN:
+        return random.uniform(cfg["green"][0] + 0.3, cfg["green"][1] - 0.3)
+    lo, hi = cfg["yellow"][0]
+    if level == YELLOW:
+        return random.uniform(lo + 0.2, hi - 0.2)
+    return random.uniform(hi + 0.6, hi * 1.6)
+
+
+def sample_suit(problem=False, rules=None):
+    """Simulated suit sensors for a spacewalk. problem=True is the demo's "something is
+    wrong" set: CO2 building up and the suit losing pressure (both red), oxygen getting low."""
+    ind = (rules or load_rules())["indicators"]
+    # A normal spacewalk reads green almost always (a random red suit reading would set
+    # off a real alarm in every demo); the problem set is the deliberate exception.
+    def normal(_name):
+        r = random.random()
+        return GREEN if r < 0.94 else YELLOW if r < 0.99 else RED
+    lv = (lambda name: {"suit_co2": RED, "suit_pressure": RED, "suit_o2": YELLOW}[name]) if problem else normal
+    return {
+        "suit_co2": round(_suit_low_good(ind["suit_co2"], lv("suit_co2")), 1),
+        "suit_pressure": round(_suit_min(ind["suit_pressure"], lv("suit_pressure")), 2),
+        "suit_o2": round(_suit_min(ind["suit_o2"], lv("suit_o2"))),
+    }

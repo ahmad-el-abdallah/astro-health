@@ -6,7 +6,7 @@ import { bandsFor } from "../lib/levels.js";
 import { INDICATORS, numericValue } from "../lib/format.js";
 import { BandLegend, LineChart } from "./charts/LineChart.jsx";
 
-export const TREND_INDICATORS = Object.keys(INDICATORS);
+export const TREND_INDICATORS = Object.keys(INDICATORS).filter((k) => !k.startsWith("suit_")); // suit readings only matter during an EVA
 
 export function useTrendSeries(astroId, indicator, days) {
   const history = useHistory(astroId, indicator, days);

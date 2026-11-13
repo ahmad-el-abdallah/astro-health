@@ -235,3 +235,78 @@ def test_schedule_says_what_is_being_tracked(client):
     assert t["exercise"]["mission_min"] >= 0 and t["sleep"] is None
     client.post(f"/api/astronauts/{a}/activity", json={"kind": "exercise", "action": "stop"})
     assert client.get(f"/api/astronauts/{a}/schedule").get_json()["tracking"]["exercise"] is None
+
+
+# ---- inside / outside (EVA) and the suit readings ----
+def test_location_switch_is_the_astronauts_own(client):
+    a = _astro_id(AHMAD_UID)
+    assert client.put(f"/api/astronauts/{a}/location", json={"location": "eva"}).status_code == 401
+    login(client, SURGEON_UID)
+    assert client.get(f"/api/astronauts/{a}/location").get_json()["location"] == "inside"
+    assert client.put(f"/api/astronauts/{a}/location", json={"location": "eva"}).status_code == 403
+    login(client, AHMAD_UID)
+    assert client.put(f"/api/astronauts/{a}/location", json={"location": "moon"}).status_code == 400
+    body = client.put(f"/api/astronauts/{a}/location", json={"location": "eva"}).get_json()
+    assert body["location"] == "eva" and body["since"]
+    assert client.get(f"/api/astronauts/{a}/location").get_json()["location"] == "eva"
+    client.put(f"/api/astronauts/{a}/location", json={"location": "inside"})
+
+
+def test_suit_rules():
+    from backend.logic import health_rules as h
+    assert [h.evaluate("suit_co2", v) for v in (2, 6, 9)] == ["GREEN", "YELLOW", "RED"]
+    assert [h.evaluate("suit_pressure", v) for v in (4.3, 3.7, 3.0)] == ["GREEN", "YELLOW", "RED"]
+    assert [h.evaluate("suit_o2", v) for v in (80, 30, 10)] == ["GREEN", "YELLOW", "RED"]
+    bad = h.sample_suit(problem=True)
+    assert h.evaluate("suit_co2", bad["suit_co2"]) == "RED" and h.evaluate("suit_pressure", bad["suit_pressure"]) == "RED"
+
+
+def test_suit_readings_count_only_during_the_spacewalk(client):
+    login(client, AHMAD_UID)
+    a = _astro_id(AHMAD_UID)
+    client.put(f"/api/astronauts/{a}/location", json={"location": "inside"})
+    assert "suit_co2" not in client.get(f"/api/astronauts/{a}/simulate_vitals").get_json()
+    client.put(f"/api/astronauts/{a}/location", json={"location": "eva"})
+    sim = client.get(f"/api/astronauts/{a}/simulate_vitals").get_json()
+    assert {"suit_co2", "suit_pressure", "suit_o2"} <= set(sim)
+    bad = client.get(f"/api/astronauts/{a}/simulate_vitals?problem=1").get_json()
+    res = client.post(f"/api/astronauts/{a}/assess", json={k: bad[k] for k in ("suit_co2", "suit_pressure", "suit_o2")}).get_json()
+    assert res["overall_level"] == "RED" and res["details"]["suit_co2"]["level"] == "RED"
+    assert client.post(f"/api/astronauts/{a}/assess", json={"suit_co2": 40}).status_code == 400
+    assert client.post(f"/api/astronauts/{a}/assess", json={"suit_pressure": True}).status_code == 400
+    summary = client.get(f"/api/astronauts/{a}/summary").get_json()
+    assert summary["today"]["suit_co2"]["level"] == "RED" and summary["location"]["location"] == "eva"
+    with db.write_conn() as conn:
+        ctx, inds, facts = analysis.build_context(conn, a)
+        assert "OUTSIDE the station on a spacewalk" in ctx and "suit_co2" in inds and facts["eva"]
+        assert analysis.rules_result(facts)["overall_level"] == "RED"
+    # back inside: the red suit reading no longer counts anywhere
+    client.put(f"/api/astronauts/{a}/location", json={"location": "inside"})
+    summary = client.get(f"/api/astronauts/{a}/summary").get_json()
+    assert "suit_co2" not in summary["today"] and summary["location"]["location"] == "inside"
+    with db.write_conn() as conn:
+        ctx, inds, facts = analysis.build_context(conn, a)
+    assert "Location: inside the station." in ctx and "suit_co2" not in inds
+
+
+def test_a_calm_spacewalk_is_its_own_state(client):
+    login(client, AHMAD_UID)
+    a = _astro_id(AHMAD_UID)
+    client.put(f"/api/astronauts/{a}/location", json={"location": "eva"})
+    client.post(f"/api/astronauts/{a}/assess", json={"suit_co2": 1.5, "suit_pressure": 4.3, "suit_o2": 85})
+    with db.write_conn() as conn:
+        _, _, facts = analysis.build_context(conn, a)
+    out = analysis.rules_result(facts)
+    assert out["state"] in ("on_eva", "unwell")  # earlier test data may already be red today
+    client.put(f"/api/astronauts/{a}/location", json={"location": "inside"})
+
+
+def test_crew_cards_show_who_is_outside(client):
+    login(client, AHMAD_UID)
+    a = _astro_id(AHMAD_UID)
+    client.put(f"/api/astronauts/{a}/location", json={"location": "eva"})
+    login(client, SURGEON_UID)
+    me = [c for c in client.get("/api/crew").get_json() if c["id"] == a][0]
+    assert me["location"]["location"] == "eva"
+    login(client, AHMAD_UID)
+    client.put(f"/api/astronauts/{a}/location", json={"location": "inside"})

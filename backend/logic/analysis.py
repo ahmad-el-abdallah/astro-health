@@ -20,7 +20,7 @@ from backend.config import ai_analyst as load_analyst_cfg, content as load_conte
 from backend.config import TIME_SCALE
 from backend.hardware import protocol
 from backend.jobs import comms, scheduler
-from backend.logic import health_rules, sessions
+from backend.logic import health_rules, location, sessions
 from backend.services import analyst
 
 DEBOUNCE_S = 5          # wait for a burst of changes to settle
@@ -178,16 +178,21 @@ def build_context(conn, astro_id, profile=None, for_chat=False):
 
     since24 = (now - timedelta(hours=24)).isoformat()
     since7 = (now - timedelta(days=7)).isoformat()
+    eva_since = location.eva_since(conn, astro_id)  # None = inside the station
     by_ind = {}
     for r in conn.execute(
         "SELECT indicator, ts, value_json, source FROM readings WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC",
         (astro_id, since24),
     ):
+        if not location.counts(r["indicator"], r["ts"], eva_since):
+            continue  # suit readings only count during the current spacewalk
         by_ind.setdefault(r["indicator"], []).append((r["ts"], json.loads(r["value_json"]), r["source"]))
     week = {}
     for r in conn.execute(
-        "SELECT indicator, value_json FROM readings WHERE astronaut_id = ? AND ts >= ?", (astro_id, since7),
+        "SELECT indicator, ts, value_json FROM readings WHERE astronaut_id = ? AND ts >= ?", (astro_id, since7),
     ):
+        if location.is_suit(r["indicator"]):
+            continue
         n = _number(r["indicator"], json.loads(r["value_json"]))
         if n is not None:
             week.setdefault(r["indicator"], []).append(n)
@@ -220,6 +225,13 @@ def build_context(conn, astro_id, profile=None, for_chat=False):
         lines.append(f"Right now: {what} (started {scheduler.to_mission_hhmm(toggle['started_iso'])}, {mission_min} mission minutes ago).")
     else:
         lines.append("Right now: no sleep or workout tracking is running.")
+    if eva_since:
+        lines.append(f"Location: OUTSIDE the station on a spacewalk (EVA) since {scheduler.to_mission_hhmm(eva_since)} "
+                     f"({location.mission_minutes(eva_since)} mission minutes). The suit readings (suit_co2, suit_pressure, "
+                     "suit_o2) are life-critical: any RED suit reading means immediate danger -- set alert_surgeon to true "
+                     "and tell them to head back to the airlock. A YELLOW suit reading needs close watching.")
+    else:
+        lines.append("Location: inside the station.")
     lines.append(f"CYD session open: {'yes' if astro_id in sessions.active_sessions else 'no'}. "
                  f"Emergency: {'ACTIVE - ' + sessions.emergency.get('text', '') if sessions.emergency.get('active') else 'none'}.")
 
@@ -252,6 +264,7 @@ def build_context(conn, astro_id, profile=None, for_chat=False):
     facts = {
         "astro": dict(astro), "latest": {ind: rows[0] for ind, rows in by_ind.items()},
         "symptoms": dict(sym) if sym else None, "toggle": toggle, "discomfort": discomfort,
+        "eva": bool(eva_since),
     }
     return "\n".join(lines), list(by_ind.keys()), facts
 
@@ -318,7 +331,9 @@ def rules_result(facts):
     if sessions.emergency.get("active"):
         state = "emergency"
     elif overall == "RED":
-        state = "unwell"  # a RED reading matters more than being asleep or mid-workout
+        state = "unwell"  # a RED reading matters more than being asleep, mid-workout or on EVA
+    elif facts.get("eva"):
+        state = "on_eva"
     elif toggle and toggle["kind"] == "sleep":
         state = "sleeping"
     elif toggle and toggle["kind"] == "exercise":

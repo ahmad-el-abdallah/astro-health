@@ -116,5 +116,6 @@ export const EVENT_INVALIDATIONS = {
   mission_changed: [["mission"]],
   unknown_tag: [["admin-unknown"]],
   astra_memory: [["memory"]],
+  location_changed: [["location"], ["summary"], ["crew"]],
   astra_followup: [["memory"]],
 };

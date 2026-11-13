@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAstronautPicker } from "../../auth/AuthProvider.jsx";
 import { get, post } from "../../lib/api.js";
-import { fmtTime, formatHours, INDICATORS, MOOD_LABELS, moodScore, sleepHours } from "../../lib/format.js";
+import { fmtTime, formatHours, INDICATORS, MOOD_LABELS, moodScore, sleepHours, SUIT_INDICATORS } from "../../lib/format.js";
 import { worstOf } from "../../lib/levels.js";
 import { useContent, useHealthRules, useHistory, useMission, useSummary, useSymptomCatalog } from "../../lib/queries.js";
 import { useSocketEvent } from "../../lib/socket.js";
@@ -227,23 +227,33 @@ const FIELDS = [
   { key: "temperature", label: "Temperature", unit: "°C", placeholder: "e.g. 36.8", step: "0.1" },
   { key: "oxygen_saturation", label: "Blood oxygen (SpO2)", unit: "%", placeholder: "e.g. 98", min: 1, max: 100 },
 ];
+// Added while outside on a spacewalk (EVA): the suit's own sensors (PLACEHOLDER ranges).
+const SUIT_FIELDS = [
+  { key: "suit_co2", label: "Suit CO2", unit: "mmHg", placeholder: "e.g. 2.0", step: "0.1", min: 0, max: 15, suit: true },
+  { key: "suit_pressure", label: "Suit pressure", unit: "psi", placeholder: "e.g. 4.3", step: "0.01", min: 0, max: 6, suit: true },
+  { key: "suit_o2", label: "Oxygen supply", unit: "%", placeholder: "e.g. 80", min: 0, max: 100, suit: true },
+];
 
-function NewReading({ astroId }) {
+function NewReading({ astroId, eva = false }) {
   const qc = useQueryClient();
   const content = useContent();
-  const [v, setV] = useState({ heart_rate: "", sys: "", dia: "", blood_sugar: "", temperature: "", oxygen_saturation: "" });
+  const [v, setV] = useState({ heart_rate: "", sys: "", dia: "", blood_sugar: "", temperature: "", oxygen_saturation: "", suit_co2: "", suit_pressure: "", suit_o2: "" });
+  const fields = eva ? [...SUIT_FIELDS, ...FIELDS] : FIELDS;
   const [guide, setGuide] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setV((s) => ({ ...s, [k]: e.target.value }));
 
-  async function fillSimulated(id = astroId) {
+  async function fillSimulated(id = astroId, problem = false) {
     if (!id) return;
-    const s = await get(`/astronauts/${id}/simulate_vitals`);
+    const s = await get(`/astronauts/${id}/simulate_vitals${problem ? "?problem=1" : ""}`);
     setV({
       heart_rate: String(s.heart_rate), sys: String(s.blood_pressure.systolic), dia: String(s.blood_pressure.diastolic),
       blood_sugar: String(s.blood_sugar), temperature: String(s.temperature),
       oxygen_saturation: String(s.oxygen_saturation),
+      // the suit's sensors only on a spacewalk
+      suit_co2: s.suit_co2 != null ? String(s.suit_co2) : "", suit_pressure: s.suit_pressure != null ? String(s.suit_pressure) : "",
+      suit_o2: s.suit_o2 != null ? String(s.suit_o2) : "",
     });
   }
 
@@ -259,6 +269,7 @@ function NewReading({ astroId }) {
     if (v.blood_sugar) body.blood_sugar = Number(v.blood_sugar);
     if (v.temperature) body.temperature = Number(v.temperature);
     if (v.oxygen_saturation) body.oxygen_saturation = Number(v.oxygen_saturation);
+    if (eva) for (const k of SUIT_INDICATORS) if (v[k] !== "") body[k] = Number(v[k]);
     if (!Object.keys(body).length) { setResult({ empty: true }); return; }
     setBusy(true);
     try {
@@ -274,18 +285,28 @@ function NewReading({ astroId }) {
     <Card className="flex flex-[2_1_560px] flex-col gap-5">
       <CardTitle
         title="Take a new reading"
-        subtitle="Enter today's vitals, then assess them against your baseline"
+        subtitle={eva ? "On a spacewalk: your suit's sensors are included, and the AI watches them" : "Enter today's vitals, then assess them against your baseline"}
         className="mb-0"
         right={
-          <Button variant="ghost" className="min-h-9 px-3 text-[13px]" onClick={() => fillSimulated()}>
-            <Icon name="simulator" size={15} /> Use simulated vitals
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" className="min-h-9 px-3 text-[13px]" onClick={() => fillSimulated()}>
+              <Icon name="simulator" size={15} /> Use simulated vitals
+            </Button>
+            {eva && (
+              <Button variant="ghost" className="min-h-9 px-3 text-[13px] text-check-fg" onClick={() => fillSimulated(astroId, true)}>
+                <Icon name="alert" size={15} /> Simulate suit problem
+              </Button>
+            )}
+          </div>
         }
       />
       <div className="grid gap-x-5 gap-y-4 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
-        {FIELDS.map((f) => (
+        {fields.map((f) => (
           <div key={f.key} className="flex flex-col gap-1.5">
-            <span className="text-sm font-semibold">{f.label} <span className="font-normal text-muted">{f.unit}</span></span>
+            <span className="text-sm font-semibold">
+              {f.label} <span className="font-normal text-muted">{f.unit}</span>
+              {f.suit && <span className="ml-2 rounded-full bg-check-bg px-2 py-0.5 text-[11px] font-semibold text-check-fg">EVA suit</span>}
+            </span>
             {f.key === "blood_pressure" ? (
               <div className="flex gap-2">
                 <input className="ah-input" type="number" inputMode="numeric" placeholder="Systolic" aria-label="Systolic" value={v.sys} onChange={set("sys")} />
@@ -305,14 +326,14 @@ function NewReading({ astroId }) {
                 onChange={set(f.key)}
               />
             )}
-            <button
+            {!f.suit && <button
               type="button"
               onClick={() => setGuide((g) => (g === f.key ? null : f.key))}
               aria-expanded={guide === f.key}
               className="w-fit cursor-pointer text-left text-[13px] text-accent-text underline underline-offset-2 hover:text-ink"
             >
               {STRINGS.howToMeasure}
-            </button>
+            </button>}
           </div>
         ))}
       </div>
@@ -449,6 +470,7 @@ export default function Overview() {
   const s = summary.data;
   const today = s?.today || {};
   const extras = EXTRA_TILES.filter((k) => today[k]);
+  const eva = s?.location?.location === "eva"; // outside on a spacewalk: the suit's readings come first
 
   return (
     <>
@@ -464,10 +486,10 @@ export default function Overview() {
       <motion.section variants={rise} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
           <h2 className="m-0 text-base font-semibold">Latest readings</h2>
-          <span className="text-[13px] text-muted">From CYD sensor and check-ins</span>
+          <span className="text-[13px] text-muted">{eva ? "On a spacewalk: suit sensors first" : "From CYD sensor and check-ins"}</span>
         </div>
         <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
-          {[...MAIN_TILES, ...extras].map((k) => <VitalTile key={k} indicator={k} reading={today[k]} />)}
+          {[...(eva ? SUIT_INDICATORS : []), ...MAIN_TILES, ...extras].map((k) => <VitalTile key={k} indicator={k} reading={today[k]} />)}
         </div>
       </motion.section>
 
@@ -477,7 +499,7 @@ export default function Overview() {
       </Row>
 
       <Row>
-        <NewReading astroId={id} />
+        <NewReading astroId={id} eva={eva} />
         <div className="flex flex-[1_1_300px] flex-col gap-5">
           <SleepCard summary={s} />
           <MissionChecks summary={s} mission={mission.data} rules={rules.data} />

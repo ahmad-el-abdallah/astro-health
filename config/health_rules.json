@@ -102,7 +102,10 @@
       "green_min": 2000,
       "yellow_min": 1500,
       "note_low": "Water intake is low"
-    }
+    },
+    "suit_co2": {"label": "Suit CO2", "unit": "mmHg", "body_part": "immune", "hazards": ["hostile_environment"], "eva_only": true, "green": [0, 4.0], "yellow": [[4.1, 7.5]], "note_high": "Suit CO2 is high (PLACEHOLDER limit)", "note_low": "Suit CO2 is low"},
+    "suit_pressure": {"label": "Suit pressure", "unit": "psi", "body_part": "heart", "hazards": ["hostile_environment"], "eva_only": true, "green_min": 4.0, "yellow_min": 3.5, "max": 4.5, "note_low": "Suit pressure is low (PLACEHOLDER limit)"},
+    "suit_o2": {"label": "Oxygen supply", "unit": "%", "body_part": "immune", "hazards": ["hostile_environment"], "eva_only": true, "green_min": 40, "yellow_min": 20, "max": 100, "note_low": "Suit oxygen supply is low (PLACEHOLDER limit)"}
   },
   "trend_days": 3,
   "symptom_levels": {

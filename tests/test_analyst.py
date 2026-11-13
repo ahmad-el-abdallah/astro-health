@@ -361,3 +361,8 @@ def test_groq_broken_json_400_is_treated_as_a_bad_answer(monkeypatch):
     monkeypatch.setattr(analyst, "_backoff_until", 0)
     out = analyst.chat("ctx", [], "hi")
     assert out["reply"] == "Fine." and len(calls) == 2
+
+
+def test_set_location_action():
+    raw = json.dumps({"reply": "ok", "actions": [{"type": "set_location", "location": "eva"}, {"type": "set_location", "location": "moon"}]})
+    assert analyst.parse_chat(raw)["actions"] == [{"type": "set_location", "location": "eva"}]

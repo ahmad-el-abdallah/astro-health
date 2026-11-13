@@ -56,7 +56,12 @@ export const INDICATORS = {
   exercise: { label: "Exercise", unit: "min" },
   water: { label: "Water", unit: "ml" },
   reaction_time: { label: "Reaction time", unit: "" },
+  // Spacewalk suit sensors -- only shown and counted while the astronaut is outside (EVA).
+  suit_co2: { label: "Suit CO2", unit: "mmHg" },
+  suit_pressure: { label: "Suit pressure", unit: "psi" },
+  suit_o2: { label: "Oxygen supply", unit: "%" },
 };
+export const SUIT_INDICATORS = ["suit_co2", "suit_pressure", "suit_o2"];
 
 export function fmtTime(iso) {
   if (!iso) return "never";

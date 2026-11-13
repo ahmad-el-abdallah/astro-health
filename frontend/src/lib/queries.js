@@ -26,6 +26,9 @@ export const useHistory = (id, indicator, days = 7) =>
     placeholderData: (prev) => prev,
   });
 
+// Inside the station, or outside on a spacewalk (EVA): the top bar's Location pill.
+export const useLocationStatus = (id) =>
+  useQuery({ queryKey: ["location", id], queryFn: () => get(`/astronauts/${id}/location`), enabled: !!id });
 export const useCrew = (enabled = true) => useQuery({ queryKey: ["crew"], queryFn: () => get("/crew"), enabled });
 export const useMission = () => useQuery({ queryKey: ["mission"], queryFn: () => get("/mission") });
 export const useContent = () => useQuery({ queryKey: ["content"], queryFn: () => get("/content"), ...staticOpts });

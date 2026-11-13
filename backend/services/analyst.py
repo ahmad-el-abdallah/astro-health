@@ -258,6 +258,7 @@ def _chat_prompt(cfg, symptom_ids=(), guide_ids=()):
         '- {"type": "alert_surgeon", "text": "<short message for the flight surgeon>"} (urgent: something is wrong)\n'
         '- {"type": "message_surgeon", "text": "<their message, in their words>"} (a normal, non-urgent message)\n'
         '- {"type": "send_summary", "period": "today" or "week"} (a health summary report to the flight surgeon)\n'
+        '- {"type": "set_location", "location": "eva" or "inside"} (going outside on a spacewalk / back inside the station)\n'
         '- {"type": "start_sleep"} / {"type": "stop_sleep"} (going to bed / woke up: sleep tracking)\n'
         '- {"type": "start_workout"} / {"type": "stop_workout"} (workout tracking)\n'
         '- {"type": "take_vitals"} (take a new vitals reading with the station sensors)\n'
@@ -289,6 +290,8 @@ def _chat_prompt(cfg, symptom_ids=(), guide_ids=()):
         '"tell the doctor I slept well and feel fine" -> {"reply": "Should I send the flight surgeon a message that you slept well and feel fine?", '
         '"actions": [{"type": "message_surgeon", "text": "I slept well and feel fine."}]}\n'
         '"I\'m going to bed" -> {"reply": "Should I start your sleep tracking? Good night.", "actions": [{"type": "start_sleep"}]}\n'
+        '"I\'m heading out for my spacewalk" -> {"reply": "Should I switch you to EVA mode? I\'ll watch your suit readings.", '
+        '"actions": [{"type": "set_location", "location": "eva"}]}\n'
         '"how do I measure my blood pressure?" -> {"reply": "Let\'s do it step by step.", "actions": [{"type": "measure_guide", "indicator": "blood_pressure"}]}\n'
         '"my left knee has hurt since Tuesday" -> {"reply": "I\'ll remember that and check on it later. How bad is it, from 0 to 10?", '
         '"actions": [{"type": "remember", "text": "Left knee has hurt since Tuesday", "follow_up_hours": 6}]}'
@@ -362,6 +365,8 @@ def _clean_action(a, symptom_ids, guide_ids=()):
     if kind == "message_surgeon":
         text = a.get("text") if isinstance(a.get("text"), str) else ""
         return {"type": kind, "text": text.strip()[:MAX_MESSAGE]} if text.strip() else None
+    if kind == "set_location":
+        return {"type": kind, "location": a["location"]} if a.get("location") in ("inside", "eva") else None
     if kind == "send_summary":
         return {"type": kind, "period": a["period"]} if a.get("period") in SUMMARY_PERIODS else None
     if kind in NO_FIELD_ACTIONS:

@@ -12,7 +12,7 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, sessions, health_rules, symptoms
+from backend.logic import analysis, astra_memory, location, sessions, health_rules, symptoms
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
@@ -101,10 +101,13 @@ def _compute_body_levels(conn, astro_id):
     (same logic astronaut_summary always used, factored out so
     /discomfort/report can reuse it without trusting a client-supplied level)."""
     today_levels = {}
+    eva_since = location.eva_since(conn, astro_id)
     for ind_row in conn.execute(
-        "SELECT indicator, level FROM readings WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC",
+        "SELECT indicator, level, ts FROM readings WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC",
         (astro_id, (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()),
     ):
+        if not location.counts(ind_row["indicator"], ind_row["ts"], eva_since):
+            continue
         if ind_row["indicator"] not in today_levels:
             today_levels[ind_row["indicator"]] = ind_row["level"]
     body_cfg = load_content()["body_parts"]
@@ -133,11 +136,14 @@ def _today_snapshot(conn, astro_id):
     Flight Surgeon's crew cards): latest reading per indicator, latest symptom report,
     and a single status -- the worst of those, or GRAY ("no data") when there's nothing."""
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    eva_since = location.eva_since(conn, astro_id)
     today = {}
     for r in conn.execute(
         "SELECT indicator, value_json, level, ts FROM readings WHERE astronaut_id = ? AND ts >= ? ORDER BY ts DESC",
         (astro_id, since),
     ):
+        if not location.counts(r["indicator"], r["ts"], eva_since):
+            continue  # a suit reading from outside the current spacewalk
         if r["indicator"] not in today:
             today[r["indicator"]] = {"value": json.loads(r["value_json"]), "level": r["level"], "ts": r["ts"]}
     sym = conn.execute(
@@ -157,6 +163,7 @@ def _today_snapshot(conn, astro_id):
     return {
         "today": today,
         "symptoms_today": symptoms_today,
+        "location": location.get(conn, astro_id),
         "status": status,
         "analysis": latest,
         "analysis_current": current,
@@ -504,6 +511,7 @@ def create_routes(app, socketio, bridge):
             "discomfort": discomfort,
             "session_active": astro_id in sessions.active_sessions,
             "symptoms_today": snap["symptoms_today"],
+            "location": snap["location"],
         })
 
     @bp.get("/astronauts/<int:astro_id>/history")
@@ -604,7 +612,42 @@ def create_routes(app, socketio, bridge):
 
     @bp.get("/astronauts/<int:astro_id>/simulate_vitals")
     def simulate_vitals(astro_id):
-        return jsonify(health_rules.sample_vitals())
+        """Simulated sensors. On a spacewalk the suit's sensors are added too, and
+        ?problem=1 (the demo's "Simulate suit problem") makes them show real trouble."""
+        out = health_rules.sample_vitals()
+        with db.write_conn() as conn:
+            on_eva = location.eva_since(conn, astro_id) is not None
+        if on_eva or request.args.get("problem"):
+            out.update(health_rules.sample_suit(problem=bool(request.args.get("problem"))))
+        return jsonify(out)
+
+    # ---- where the astronaut is: inside, or outside on a spacewalk (EVA) ----
+    @bp.get("/astronauts/<int:astro_id>/location")
+    def get_location(astro_id):
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            loc = location.get(conn, astro_id)
+        return jsonify({**loc, "mission_min": location.mission_minutes(loc["since"]) if loc["location"] == "eva" else 0,
+                        "time_scale": TIME_SCALE})
+
+    @bp.put("/astronauts/<int:astro_id>/location")
+    def put_location(astro_id):
+        body = request.get_json(force=True) or {}
+        loc = body.get("location")
+        if loc not in location.LOCATIONS:
+            return jsonify({"error": "location must be inside or eva"}), 400
+        with db.write_conn() as conn:
+            viewer, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            if viewer["id"] != astro_id:
+                return jsonify({"error": "only the astronaut can change this"}), 403
+            data = location.set(conn, astro_id, loc)
+        emit_fn("location_changed", {"astronaut_id": astro_id, **data})
+        analysis.request(astro_id, "location")
+        return jsonify(data)
 
     @bp.post("/astronauts/<int:astro_id>/assess")
     def assess(astro_id):
@@ -616,6 +659,11 @@ def create_routes(app, socketio, bridge):
                 spo2 = -1
             if not 0 < spo2 <= 100:
                 return jsonify({"error": "oxygen_saturation must be a percentage between 0 and 100"}), 400
+        for key, lo, hi in (("suit_co2", 0, 15), ("suit_pressure", 0, 6), ("suit_o2", 0, 100)):
+            if key in body:
+                v = body[key]
+                if not isinstance(v, (int, float)) or isinstance(v, bool) or not lo <= v <= hi:
+                    return jsonify({"error": f"{key} must be a number from {lo} to {hi}"}), 400
         now = datetime.now(timezone.utc)
         levels = []
         details = {}
@@ -652,6 +700,10 @@ def create_routes(app, socketio, bridge):
             if "oxygen_saturation" in body:
                 v = float(body["oxygen_saturation"])
                 record("oxygen_saturation", v, health_rules.evaluate("oxygen_saturation", v))
+            for key in ("suit_co2", "suit_pressure", "suit_o2"):  # spacewalk suit sensors
+                if key in body:
+                    v = float(body[key])
+                    record(key, v, health_rules.evaluate(key, v))
 
             # Fold in whatever the CYD already reported today (sleep, mood, reaction, symptoms).
             # indicator_levels tracks every indicator considered for this assessment (name,
@@ -1094,7 +1146,7 @@ def create_routes(app, socketio, bridge):
                     "session_active": a["id"] in sessions.active_sessions,
                     # Crew overview cards: today's status, latest vitals, flags.
                     "status": snap["status"], "today": snap["today"], "symptoms_today": snap["symptoms_today"],
-                    "analysis": snap["analysis"],
+                    "analysis": snap["analysis"], "location": snap["location"],
                     "open_alert": row(open_alert), "last_reading": last_reading,
                 })
         return jsonify(out)
