@@ -366,3 +366,11 @@ def test_groq_broken_json_400_is_treated_as_a_bad_answer(monkeypatch):
 def test_set_location_action():
     raw = json.dumps({"reply": "ok", "actions": [{"type": "set_location", "location": "eva"}, {"type": "set_location", "location": "moon"}]})
     assert analyst.parse_chat(raw)["actions"] == [{"type": "set_location", "location": "eva"}]
+
+
+def test_parse_chat_keeps_a_named_exercise_and_drops_an_unknown_one():
+    out = analyst.parse_chat(chat_answer([{"type": "start_workout", "exercise": "ared"}]), SYMPTOMS)
+    assert out["actions"] == [{"type": "start_workout", "exercise": "ared"}]
+    out = analyst.parse_chat(chat_answer([{"type": "start_workout", "exercise": "yoga"}]), SYMPTOMS)
+    assert out["actions"] == [{"type": "start_workout"}]
+    assert analyst.parse_chat(chat_answer([{"type": "navigate", "page": "exercise"}]), SYMPTOMS)["actions"][0]["page"] == "exercise"

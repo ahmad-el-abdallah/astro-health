@@ -20,7 +20,7 @@ from backend.config import ai_analyst as load_analyst_cfg, content as load_conte
 from backend.config import TIME_SCALE
 from backend.hardware import protocol
 from backend.jobs import comms, scheduler
-from backend.logic import health_rules, location, sessions
+from backend.logic import exercise, health_rules, location, sessions
 from backend.services import analyst
 
 DEBOUNCE_S = 5          # wait for a burst of changes to settle
@@ -232,6 +232,11 @@ def build_context(conn, astro_id, profile=None, for_chat=False):
                      "and tell them to head back to the airlock. A YELLOW suit reading needs close watching.")
     else:
         lines.append("Location: inside the station.")
+    if for_chat:
+        try:
+            lines += exercise.chat_lines(conn, astro_id)
+        except Exception as exc:  # never let the exercise summary break Astra
+            print(f"[astra] exercise context skipped: {exc}", flush=True)
     lines.append(f"CYD session open: {'yes' if astro_id in sessions.active_sessions else 'no'}. "
                  f"Emergency: {'ACTIVE - ' + sessions.emergency.get('text', '') if sessions.emergency.get('active') else 'none'}.")
 

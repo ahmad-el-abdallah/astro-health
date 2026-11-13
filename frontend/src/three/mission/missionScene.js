@@ -23,24 +23,68 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 
 const ASSETS = "/models/missions/";
 
-// ---------------------------------------------------------------- loading (cached)
+// ---------------------------------------------------------------- loading (cached, never stuck)
+// Every asset load has a time limit and a fallback: if a NASA file is missing, blocked or
+// slow on someone's network, the scene still builds (planets keep their colour, models get
+// a simple stand-in) instead of the spinner hanging forever. Failures aren't cached, so the
+// next visit tries the real file again.
+const LOAD_TIMEOUT_MS = 20000;
 let gltfLoader = null;
 const modelCache = {}, texCache = {};
+export const loadIssues = [];
+function withTimeout(promise, what) {
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(`timed out loading ${what}`)), LOAD_TIMEOUT_MS))]);
+}
 function loadModel(name) {
   if (!gltfLoader) {
     const draco = new DRACOLoader(); draco.setDecoderPath("/draco/");
     gltfLoader = new GLTFLoader(); gltfLoader.setDRACOLoader(draco);
   }
-  modelCache[name] ||= gltfLoader.loadAsync(ASSETS + name + ".glb").then((g) => g.scene);
+  modelCache[name] ||= withTimeout(gltfLoader.loadAsync(ASSETS + name + ".glb"), name + ".glb").then((g) => g.scene).catch((err) => {
+    console.warn(`[missions 3D] ${name}.glb failed, using a simple stand-in:`, err);
+    loadIssues.push(name + ".glb"); delete modelCache[name];
+    return fallbackModel(name);
+  });
   return modelCache[name].then((scene) => scene.clone(true));
 }
 function loadTex(name, srgb = true) {
-  texCache[name] ||= new THREE.TextureLoader().loadAsync(ASSETS + name).then((t) => {
+  texCache[name] ||= withTimeout(new THREE.TextureLoader().loadAsync(ASSETS + name), name).then((t) => {
     if (srgb) t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 8;
     return t;
+  }).catch((err) => {
+    console.warn(`[missions 3D] ${name} failed, using a plain colour:`, err);
+    loadIssues.push(name); delete texCache[name];
+    return null;
   });
   return texCache[name];
+}
+// Simple stand-ins built from shapes, only used when a .glb can't be fetched.
+function fallbackModel(name) {
+  const g = new THREE.Group();
+  const white = new THREE.MeshStandardMaterial({ color: "#eef1f5", metalness: 0.2, roughness: 0.45, name: "White" });
+  const metal = new THREE.MeshStandardMaterial({ color: "#b4bcc6", metalness: 0.8, roughness: 0.3, name: "Gray" });
+  const panel = new THREE.MeshStandardMaterial({ color: "#1b3d8f", metalness: 0.5, roughness: 0.3, name: "Solar", side: THREE.DoubleSide });
+  const add = (geo, mat, x, y, z, rx = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); g.add(m); return m; };
+  if (name === "iss") {
+    add(new THREE.BoxGeometry(4, 0.12, 0.12), metal, 0, 0, 0);
+    for (const x of [-1.7, -1.1, 1.1, 1.7]) for (const z of [-0.75, 0.75]) add(new THREE.BoxGeometry(0.42, 0.02, 1.2), panel, x, 0, z);
+    add(new THREE.CylinderGeometry(0.16, 0.16, 1.4, 24), white, 0, 0, 0, Math.PI / 2);
+    add(new THREE.CylinderGeometry(0.15, 0.15, 0.9, 24), white, 0.35, 0, -0.2, 0, Math.PI / 2);
+  } else if (name === "habitat") {
+    add(new THREE.CylinderGeometry(1, 1, 0.9, 48), white, 0, 0, 0);
+    add(new THREE.SphereGeometry(1, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2), white, 0, 0.45, 0);
+    add(new THREE.CylinderGeometry(0.28, 0.28, 0.9, 24), metal, 1.25, -0.1, 0, 0, Math.PI / 2);
+  } else {
+    const suit = new THREE.Group(); g.add(suit);
+    const part = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); suit.add(m); };
+    part(new THREE.CapsuleGeometry(0.28, 0.5, 8, 24), white, 0, 0.1, 0);
+    part(new THREE.SphereGeometry(0.2, 32, 16), new THREE.MeshStandardMaterial({ color: "#c9a14a", metalness: 1, roughness: 0.15 }), 0, 0.72, 0.02);
+    part(new THREE.BoxGeometry(0.5, 0.55, 0.22), white, 0, 0.2, -0.3);
+    for (const x of [-0.4, 0.4]) part(new THREE.CapsuleGeometry(0.1, 0.5, 6, 16), white, x, 0.1, 0);
+    for (const x of [-0.14, 0.14]) part(new THREE.CapsuleGeometry(0.12, 0.55, 6, 16), white, x, -0.55, 0);
+  }
+  return g;
 }
 
 // Scale a loaded model so its largest side is `size`, centred on the origin.
@@ -122,8 +166,8 @@ function latLon(lat, lon, r) {
 async function earth(radius, seg = 128) {
   const [map, rough, clouds] = await Promise.all([loadTex("earth.jpg"), loadTex("earth_rough.jpg", false), loadTex("earth_clouds.png", false)]);
   const g = new THREE.Group();
-  const body = mesh(new THREE.SphereGeometry(radius, seg, seg / 2), std({ map, roughnessMap: rough, roughness: 1, metalness: 0 }));
-  const cloud = mesh(new THREE.SphereGeometry(radius * 1.01, seg, seg / 2), std({ color: "#ffffff", alphaMap: clouds, transparent: true, depthWrite: false, roughness: 1 }));
+  const body = mesh(new THREE.SphereGeometry(radius, seg, seg / 2), std({ map, color: map ? "#ffffff" : "#2f6fb5", roughnessMap: rough, roughness: rough ? 1 : 0.7, metalness: 0 }));
+  const cloud = mesh(new THREE.SphereGeometry(radius * 1.01, seg, seg / 2), std({ color: "#ffffff", alphaMap: clouds, transparent: true, opacity: clouds ? 1 : 0, depthWrite: false, roughness: 1 }));
   g.add(body, cloud, atmosphere(radius * 1.075, "#4d9cff", 3.0, 1.5));
   const tilt = new THREE.Group(); tilt.rotation.z = 0.41; tilt.add(g);
   const wrap = new THREE.Group(); wrap.add(tilt);
@@ -137,7 +181,7 @@ async function moon(radius) {
   // the texture is NASA's photo of the full Moon, so project it straight onto the side facing us
   const pos = geo.attributes.position, uv = geo.attributes.uv;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, 0.5 + 0.5 * pos.getX(i) / radius * 0.985, 0.5 + 0.5 * pos.getY(i) / radius * 0.985);
-  const body = mesh(geo, std({ map, roughness: 0.95, metalness: 0 }));
+  const body = mesh(geo, std({ map, color: map ? "#ffffff" : "#9a9a9a", roughness: 0.95, metalness: 0 }));
   const wrap = new THREE.Group(); wrap.add(body, atmosphere(radius * 1.04, "#c8d0dc", 5, 0.35));
   wrap.userData = { body, spin: () => {}, noHighlight: true, facesCamera: true };
   return wrap;
@@ -145,7 +189,7 @@ async function moon(radius) {
 
 async function mars(radius) {
   const map = await loadTex("mars.jpg");
-  const body = mesh(new THREE.SphereGeometry(radius, 96, 64), std({ map, roughness: 0.95 }));
+  const body = mesh(new THREE.SphereGeometry(radius, 96, 64), std({ map, color: map ? "#ffffff" : "#c1440e", roughness: 0.95 }));
   const wrap = new THREE.Group(); wrap.add(body, atmosphere(radius * 1.06, "#ff9a66", 4, 0.9));
   wrap.userData = { body, spin: (dt, s = 0.1) => { body.rotation.y += dt * s; }, noHighlight: true };
   return wrap;
@@ -408,22 +452,24 @@ const MISSIONS = {
 
 // ---------------------------------------------------------------- overlay (hotspots + tooltip)
 const CSS = `
-.ms-hot{position:absolute;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;cursor:pointer;pointer-events:auto;transition:opacity .3s}
+.ms-hot{position:absolute;left:0;top:0;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;cursor:pointer;pointer-events:auto}
 .ms-hot::before{content:"";position:absolute;inset:6px;border-radius:50%;background:#e6ecff;box-shadow:0 0 10px 2px rgba(143,166,255,.9)}
 .ms-hot::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(143,166,255,.85);animation:msPulse 2.2s ease-out infinite}
 .ms-hot.on::before{background:#fff;box-shadow:0 0 16px 4px rgba(143,166,255,1)}
 @keyframes msPulse{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.9);opacity:0}}
-.ms-tip{position:absolute;left:0;top:0;width:270px;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .18s,transform .18s;
+.ms-tip{position:absolute;left:0;top:0;width:270px;pointer-events:none;visibility:hidden;
   background:rgba(12,18,36,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(143,166,255,.35);
   border-radius:16px;padding:12px 14px;box-shadow:0 12px 40px rgba(0,0,0,.45);color:#e8eefc;font:12px/1.5 Inter,system-ui,sans-serif;z-index:5}
-.ms-tip.show{opacity:1;transform:none}
+.ms-tip.show{visibility:visible;animation:msIn .16s ease-out}
+@keyframes msIn{from{opacity:0}to{opacity:1}}
 .ms-tip b{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:6px;color:#fff}
 .ms-tip b::before{content:"";width:8px;height:8px;border-radius:50%;background:#8fa6ff;box-shadow:0 0 10px #8fa6ff;flex:none}
 .ms-tip .st{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
 .ms-tip .st span{background:rgba(143,166,255,.16);border:1px solid rgba(143,166,255,.3);color:#c9d6ff;border-radius:999px;padding:1px 8px;font-size:11px;font-weight:600}
 .ms-tip p{margin:0;color:#b8c3da}
 .ms-tip .hint{margin-top:7px;font-size:10.5px;color:#7f8db0}
-.ms-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa8c7;font:12px Inter,system-ui,sans-serif;pointer-events:none;transition:opacity .4s}
+.ms-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa8c7;font:12px Inter,system-ui,sans-serif;pointer-events:none}
+.ms-load[hidden]{display:none}
 .ms-load i{width:26px;height:26px;border-radius:50%;border:2px solid rgba(143,166,255,.25);border-top-color:#8fa6ff;animation:msSpin 1s linear infinite;margin-right:10px}
 @keyframes msSpin{to{transform:rotate(360deg)}}`;
 
@@ -449,7 +495,11 @@ export function mountMissionScene(canvas, overlay, { onExplore } = {}) {
 
   // overlay DOM
   const tip = document.createElement("div"); tip.className = "ms-tip"; overlay.appendChild(tip);
-  const loader = document.createElement("div"); loader.className = "ms-load"; loader.innerHTML = "<i></i>Loading NASA models…"; overlay.appendChild(loader);
+  const loader = document.createElement("div"); loader.className = "ms-load"; overlay.appendChild(loader);
+  let loading = false;
+  const showLoader = (html) => { loading = true; loader.innerHTML = html; loader.hidden = false; loader.style.display = "flex"; };
+  const hideLoader = () => { loading = false; loader.hidden = true; loader.style.display = "none"; };
+  showLoader("<i></i>Loading NASA models…");
   let hotEls = [];
 
   const sunView = { value: new THREE.Vector3() };
@@ -580,6 +630,7 @@ export function mountMissionScene(canvas, overlay, { onExplore } = {}) {
   canvas.addEventListener("pointerleave", onLeave);
   canvas.addEventListener("click", onClick);
 
+  let frameErr = false;
   function frame(now) {
     raf = 0;
     if (!canvas.isConnected) return;
@@ -587,7 +638,8 @@ export function mountMissionScene(canvas, overlay, { onExplore } = {}) {
       resize();
       const dt = Math.min(0.05, (now - last) / 1000) * (reduceMotion ? 0.25 : 1); last = now;
       const t = Math.max(0, now - t0) / 1000 * (reduceMotion ? 0.25 : 1);
-      if (current) {
+      if (current && !loading && loader.style.display !== "none") hideLoader();
+      if (current) try {
         current.update(t, dt);
         frameView();
         smoothPar.lerp(parallax, 0.05);
@@ -597,7 +649,7 @@ export function mountMissionScene(canvas, overlay, { onExplore } = {}) {
         look.lerp(lookGoal, 0.07); camera.lookAt(look);
         sunView.value.copy(SUN_DIR).transformDirection(camera.matrixWorldInverse);
         placeHotspots(); placeTip();
-      }
+      } catch (err) { if (!frameErr) console.error("[missions 3D] frame error", err); frameErr = true; }
       renderer.render(scene, camera);
     } else last = now;
     raf = requestAnimationFrame(frame);
@@ -610,21 +662,30 @@ export function mountMissionScene(canvas, overlay, { onExplore } = {}) {
     async setMission(id) {
       if (id === missionId) return;
       missionId = id; const my = ++token;
-      loader.style.opacity = "1"; hideTip(); focus = null;
+      showLoader("<i></i>Loading NASA models…"); hideTip(); focus = null;
       let built;
       try { built = await (MISSIONS[id] || MISSIONS.crew13_iss)({ sunView, camera }); }
-      catch (err) { console.error("Mission 3D failed to load", err); loader.innerHTML = "3D models couldn't load"; return; }
+      catch (err) {
+        console.error("[missions 3D] mission failed to build", err);
+        if (my === token) { showLoader("3D view couldn't load. Check the console (F12) and try refreshing."); missionId = null; }
+        return;
+      }
       if (my !== token) { disposeGroup(built.group); return; }
-      if (current) { scene.remove(current.group); disposeGroup(current.group); }
-      hovered = null;
-      current = built; scene.add(current.group);
-      buildHotspots();
-      frameView();
-      // start further out and swing in, so each switch feels like an arrival
-      camera.position.copy(camGoal).sub(lookGoal).multiplyScalar(1.45).add(lookGoal).add(new THREE.Vector3(0.8, 0.35, 0));
-      look.copy(lookGoal);
-      loader.style.opacity = "0";
-      kick();
+      try {
+        if (current) { scene.remove(current.group); disposeGroup(current.group); }
+        hovered = null;
+        current = built; scene.add(current.group);
+        buildHotspots();
+        frameView();
+        // start further out and swing in, so each switch feels like an arrival
+        camera.position.copy(camGoal).sub(lookGoal).multiplyScalar(1.45).add(lookGoal).add(new THREE.Vector3(0.8, 0.35, 0));
+        look.copy(lookGoal);
+      } catch (err) {
+        console.error("[missions 3D] scene setup error (models still shown)", err);
+      } finally {
+        if (my === token) hideLoader();   // never leave the spinner over a built scene
+        kick();
+      }
     },
     dispose() {
       cancelAnimationFrame(raf); raf = 0; token++;

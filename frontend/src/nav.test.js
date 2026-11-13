@@ -8,7 +8,7 @@ const paths = (nav) => nav.flatMap((g) => g.items.map((i) => i.to));
 describe("the app's sections", () => {
   it("crew: Overview, then Daily check-ins, Health, Mission", () => {
     expect(CREW_NAV.map((g) => g.group)).toEqual([null, "Daily check-ins", "Health", "Mission"]);
-    expect(CREW_NAV[1].items.map((i) => i.to)).toEqual(["/today", "/mind", "/sleep"]);
+    expect(CREW_NAV[1].items.map((i) => i.to)).toEqual(["/today", "/mind", "/sleep", "/exercise"]);
   });
   it("every crew page appears exactly once, and the doctor sees the same pages", () => {
     const crew = paths(CREW_NAV);

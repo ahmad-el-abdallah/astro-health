@@ -418,7 +418,11 @@ def _cyd_is(astronaut_id):
 
 def start_toggle(conn, astronaut_id, kind, key, label, send_fn, emit_fn):
     """Start a sleep or workout timer (a tag tap, or Astra: "I'm going to bed")."""
-    open_toggles[key] = {"astronaut_id": astronaut_id, "kind": kind, "started_at": time.time(), "started_iso": _now_iso()}
+    # Workouts from the Exercises page ("ex:" keys) are timed in real time: the page shows a
+    # live stopwatch and a 30-minute session should log 30 minutes. Everything else uses
+    # the accelerated mission clock (TIME_SCALE), like the schedule.
+    scale = 1 if str(key).startswith("ex:") else TIME_SCALE
+    open_toggles[key] = {"astronaut_id": astronaut_id, "kind": kind, "started_at": time.time(), "started_iso": _now_iso(), "time_scale": scale}
     _touch_session(astronaut_id)
     if _cyd_is(astronaut_id):
         if kind == "exercise":
@@ -437,7 +441,7 @@ def stop_toggle(conn, key, send_fn, emit_fn):
     nap logs 5 hours, not 0.1. Returns {"kind", "minutes"|"hours", "level"}."""
     info = open_toggles.pop(key)
     astronaut_id, kind = info["astronaut_id"], info["kind"]
-    mission_s = (time.time() - info["started_at"]) * TIME_SCALE
+    mission_s = (time.time() - info["started_at"]) * info.get("time_scale", TIME_SCALE)
     _touch_session(astronaut_id)
     out = {"kind": kind, "astronaut_id": astronaut_id}
     if kind == "exercise":

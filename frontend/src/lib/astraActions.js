@@ -11,7 +11,8 @@ export const PAGES = {
   trends: { path: "/trends", label: "Trends" },
   mind: { path: "/mind", label: "Mind & mood" },
   sleep: { path: "/sleep", label: "Sleep lab" },
-  mission: { path: "/mission", label: "Mission health" },
+  mission: { path: "/mission", label: "Missions" },
+  exercise: { path: "/exercise", label: "Exercises" },
   schedule: { path: "/today", label: "Today" },
 };
 

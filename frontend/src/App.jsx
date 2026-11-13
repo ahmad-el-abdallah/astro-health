@@ -23,6 +23,7 @@ const Mind = lazy(() => import("./pages/crew/daily/Mind.jsx"));
 const Sleep = lazy(() => import("./pages/crew/daily/Sleep.jsx"));
 const Mission = lazy(() => import("./pages/crew/mission/Mission.jsx"));
 const Today = lazy(() => import("./pages/crew/daily/Today.jsx"));
+const Exercise = lazy(() => import("./pages/crew/daily/Exercise.jsx"));
 const CrewOverview = lazy(() => import("./pages/doctor/CrewOverview.jsx"));
 const Alerts = lazy(() => import("./pages/doctor/Alerts.jsx"));
 const CrewProfile = lazy(() => import("./pages/doctor/CrewProfile.jsx"));
@@ -72,6 +73,7 @@ function Gate() {
         <Route path="mind" element={<Mind />} />
         <Route path="sleep" element={<Sleep />} />
         <Route path="mission" element={<Mission />} />
+        <Route path="exercise" element={<Exercise />} />
         <Route path="today" element={<Today />} />
         <Route path="schedule" element={<Navigate to="/today" replace />} />
         <Route path="learn" element={<Navigate to="/" replace />} />
