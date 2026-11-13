@@ -3483,6 +3483,18 @@ The voice-tone side worked (it runs on the laptop). The AI side kept failing, an
   gpt-oss-120b and 20b allow 200K tokens each and qwen its own amount; heavy testing on the
   same key uses them all up.
 
+## Login screen: video background (2026-11-12, branch `login-video-bg`; merged 2026-11-13)
+
+- 3wrf supplied a 4K space clip (Earth turning on the right). Re-encoded to 1080p, no
+  audio, ~1.8 MB (`frontend/public/media/login-bg.mp4`, ffmpeg libx264 CRF 26, faststart)
+  plus its first frame `login-bg.jpg` (poster while loading, and the only thing shown when
+  the OS has "reduce motion" on). `LoginScene.jsx` now renders that `<video>` (muted,
+  looping, playsInline) under the same left-to-right dark gradient as before, plus a soft
+  bottom fade. The old hand-animated stars/SVG Earth are in git history.
+- The branch hand-patched `frontend/dist` (its sandbox had no npm). On merging, dist was
+  rebuilt from source, so that patch is gone. The login page's product preview
+  (`public/preview/overview.jpg`, wide screens) sits on top of the video's right side.
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 327 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
