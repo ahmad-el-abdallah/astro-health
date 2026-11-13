@@ -89,3 +89,16 @@ def test_slightly_early_still_counts(clock):
         _log(conn, "readings", astro_id, at("18:30"), "mood")
         plan = scheduler.day_plan(conn, astro_id, now=at("18:40"))
     assert statuses(plan)["19:00"] == "done"
+
+
+def test_an_early_morning_vitals_check_counts_but_an_early_mood_does_not(clock):
+    """The first vitals check of the day counts from 00:00 (an early Assess or wearable test
+    is still today's check); other kinds keep the 1-hour-early limit."""
+    astro_id, at = clock
+    with db.write_conn() as conn:
+        _log(conn, "assessments", astro_id, at("02:00"))
+        _log(conn, "readings", astro_id, at("02:00"), "mood")
+        plan = scheduler.day_plan(conn, astro_id, now=at("02:30"))
+    st = statuses(plan)
+    assert st["07:00"] == "done"     # vitals
+    assert st["19:00"] == "upcoming"  # mood at 02:00 isn't this evening's check

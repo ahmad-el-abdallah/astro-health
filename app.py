@@ -131,8 +131,8 @@ def create_app(args):
     bridge = choose_bridge(args, on_message, on_status, on_send)
     handle_cyd_message = routes.create_routes(app, socketio, bridge)
     analysis.start_worker()  # runs queued AI health analyses one at a time
-    # The live wearable: replays a real recorded crew session for whoever switched it on.
-    sensor_feed.start_worker(socketio.emit, lambda astro_id: analysis.request(astro_id, "wearable"))
+    # The live wearable test: replays a real recorded crew session, then saves its results.
+    sensor_feed.start_worker(socketio.emit, lambda astro_id: analysis.request(astro_id, "wearable", delay=0))
     # Optional voice tone model for "Wanna talk?": loads in the background, and is simply
     # unavailable (the API answers 503) without requirements-emotion.txt or the model files.
     emotion.start_loading()

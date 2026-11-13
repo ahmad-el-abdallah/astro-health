@@ -78,8 +78,13 @@ socket.on("sensor", (d) => {
     return { ...all, [d.astronaut_id]: { ...d, ecg, at: Date.now() } };
   });
 });
+// The last finished test's result per astronaut (it finishes by itself at the end of the
+// recording, so the result has to come over the socket, not only from the Finish button).
+export const sensorResultStore = createStore({});
 socket.on("sensor_changed", (d) => {
-  if (d && !d.on) sensorStore.set((all) => { const next = { ...all }; delete next[d.astronaut_id]; return next; });
+  if (!d) return;
+  if (!d.on) sensorStore.set((all) => { const next = { ...all }; delete next[d.astronaut_id]; return next; });
+  sensorResultStore.set((all) => ({ ...all, [d.astronaut_id]: d.finished ? d.result : null }));
 });
 
 // The login page's own choice (docs/CLAUDE.md "web-only login"): does tapping a card
@@ -133,7 +138,7 @@ export const EVENT_INVALIDATIONS = {
   unknown_tag: [["admin-unknown"]],
   astra_memory: [["memory"]],
   location_changed: [["location"], ["summary"], ["crew"]],
-  sensor_changed: [["summary"], ["crew"]],
+  sensor_changed: [["summary"], ["crew"], ["history"], ["schedule"]],
   astra_followup: [["memory"]],
   voice_tone: [["voice-tone"], ["voice-talk-latest"]],
   voice_talk: [["voice-talk-latest"], ["voice-tone"]],

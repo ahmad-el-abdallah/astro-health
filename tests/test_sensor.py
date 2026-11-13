@@ -81,7 +81,7 @@ def test_the_recording_is_there_and_plausible():
     assert sum(data["by_id"]["startle"]["event"]) > 0 and sum(data["by_id"]["focus"]["event"]) == 0
 
 
-def test_feed_emits_each_second_once_and_loops(feed_db):
+def test_feed_emits_each_second_once_and_never_loops(feed_db):
     sent = []
     st = sensor_feed.start(1, "startle", now=1000.0)
     assert st["on"] and st["second"] == 0
@@ -92,37 +92,40 @@ def test_feed_emits_each_second_once_and_loops(feed_db):
     assert secs == [0, 1]
     first = sent[0][1]
     assert first["astronaut_id"] == 1 and len(first["ecg"]) == 100 and {"hr", "br", "stress", "event"} <= set(first)
-    length = st["seconds"]
-    assert sensor_feed.status(1, now=1000.0 + length + 5)["second"] == 5  # loops back to the start
+    with db.write_conn() as conn:  # nothing is saved while it runs
+        assert conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0] == 0
 
 
-def test_feed_saves_a_minute_of_averages_and_asks_for_analysis_only_on_change(feed_db):
-    asked = []
-    sensor_feed.start(1, "focus", now=0.0)
-    emit = lambda ev, data: None  # noqa: E731
-    sensor_feed.tick(emit, now=30.0, request_analysis=asked.append)
-    with db.write_conn() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0] == 0  # not a minute yet
-    sensor_feed.tick(emit, now=60.0, request_analysis=asked.append)
+def test_a_test_that_reaches_its_end_finishes_and_is_saved_as_a_check(feed_db):
+    sent, asked = [], []
+    length = sensor_feed.start(1, "startle", now=0.0)["seconds"]
+    sensor_feed.tick(lambda ev, data: sent.append((ev, data)), now=length + 0.5, request_analysis=asked.append)
+    assert sensor_feed.status(1) is None  # it stopped by itself
+    events = [ev for ev, _ in sent]
+    assert "sensor_changed" in events and "assessment" in events
+    done = next(d for ev, d in sent if ev == "sensor_changed")
+    assert done["finished"] and done["result"]["results"]["startles"] >= 1
+    assert asked == [1]  # the AI is asked once, for the whole test
     with db.write_conn() as conn:
         rows = conn.execute("SELECT indicator, source FROM readings ORDER BY indicator").fetchall()
+        assessments = conn.execute("SELECT note FROM assessments").fetchall()
     assert [r[0] for r in rows] == ["heart_rate", "respiration_rate", "stress"]
     assert {r[1] for r in rows} == {"wearable"}
-    assert asked == [1]  # first save: levels are new
-    sensor_feed.tick(emit, now=120.0, request_analysis=asked.append)  # the next minute
-    with db.write_conn() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM readings").fetchone()[0] == 6
-    # (whether that asked again depends on the data; test_level_change_logic_is_strict pins it)
+    assert len(assessments) == 1 and "startle test" in assessments[0][0]
 
 
-def test_level_change_logic_is_strict(feed_db, monkeypatch):
-    asked = []
-    levels = iter([{"heart_rate": "GREEN"}, {"heart_rate": "GREEN"}, {"heart_rate": "YELLOW"}])
-    monkeypatch.setattr(sensor_feed, "save_readings", lambda a, v, now=None: next(levels))
+def test_finish_early_saves_what_was_played_and_cancel_saves_nothing(feed_db):
     sensor_feed.start(1, "focus", now=0.0)
-    for t in (60.0, 120.0, 180.0):
-        sensor_feed.tick(lambda *a: None, now=t, request_analysis=asked.append)
-    assert asked == [1, 1]  # first save, then the change to YELLOW -- not the unchanged middle one
+    result = sensor_feed.stop(1, now=40.0)
+    assert result["results"]["seconds"] == 40
+    data = sensor_feed._load()["by_id"]["focus"]
+    assert result["results"]["heart_rate"] == round(sum(data["hr"][:40]) / 40)
+    sensor_feed.start(1, "focus", now=100.0)
+    assert sensor_feed.stop(1, save=False, now=150.0) is None
+    sensor_feed.start(1, "focus", now=200.0)
+    assert sensor_feed.stop(1, now=202.0) is None  # under MIN_SAVE_S: nothing worth saving
+    with db.write_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM assessments").fetchone()[0] == 1
 
 
 def test_context_line_mentions_a_recent_startle():
@@ -172,5 +175,20 @@ def test_routes_start_stop_and_only_the_astronaut_controls_it(client):
     assert client.get("/api/astronauts/1/sensor").get_json()["on"] is True
     assert client.put("/api/astronauts/1/sensor", json={"on": False}).status_code == 403
     login(client, "9B:25:0F:54")
-    assert client.put("/api/astronauts/1/sensor", json={"on": False}).get_json() == {"on": False}
+    res = client.put("/api/astronauts/1/sensor", json={"on": False}).get_json()  # finish now
+    assert res["on"] is False  # (just started, so under MIN_SAVE_S: finished without a result)
     assert client.get("/api/astronauts/1/summary").get_json()["sensor"] is None
+
+
+def test_finishing_through_the_route_counts_as_todays_vitals_check(client, monkeypatch):
+    login(client, "9B:25:0F:54")
+    client.put("/api/astronauts/1/sensor", json={"segment": "multitask"})
+    feed = sensor_feed._feeds[1]
+    feed["started"] -= 90  # pretend it has been running for 90 s
+    res = client.put("/api/astronauts/1/sensor", json={"on": False}).get_json()
+    assert res["finished"] and res["result"]["results"]["seconds"] >= 90
+    summary = client.get("/api/astronauts/1/summary").get_json()
+    assert summary["today"]["respiration_rate"]["value"] == res["result"]["results"]["respiration_rate"]
+    assert summary["today"]["heart_rate"]["value"] == res["result"]["results"]["heart_rate"]  # the latest vitals now
+    # an assessment, like the Assess button's: that's what ticks off Today's vitals check
+    assert summary["last_check"] is not None and summary["overall_level"] == res["result"]["overall_level"]

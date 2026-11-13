@@ -3531,9 +3531,8 @@ Asked where to use it, the user chose **"Live sensor monitor"**.
 - **`backend/logic/sensor_feed.py`** (in memory, like `active_sessions`; loops the recording):
   - its own worker thread emits a Socket.IO `sensor` event every second (hr, br, stress,
     event, 100 ECG samples)
-  - every 60 s it saves the minute's averages as `heart_rate` / `respiration_rate` / `stress`
-    readings (`source='wearable'`)
-  - **`analysis.request` only when a saved level changes** (free Groq limits)
+  - **(superseded the same day: it's now a run-once test that saves on finish; see the
+    follow-up below)**
   - `context_line()` feeds `analysis.build_context` (Astra and the health AI see it, including
     "a startle just happened")
 - **Routes:** `GET /sensor/segments` (open); `GET /astronauts/<id>/sensor` (self or
@@ -3561,9 +3560,41 @@ Asked where to use it, the user chose **"Live sensor monitor"**.
     errors.
   - Not checked with the real AI (the 120b daily allowance was used up that day).
 
+### Follow-up: the monitor is a test that saves a vitals check (2026-11-13)
+
+User: "when I finish the test, save it instead of my latest vitals, and count it as finished /
+checked".
+
+- **`sensor_feed`:**
+  - It plays the recording **once** (no loop) and no longer saves every minute.
+  - `finish()` (at the end of the recording via `tick`, or `stop(save=True)` from "Finish &
+    save") writes the test's **averages** as the latest `heart_rate` / `respiration_rate` /
+    `stress` readings (`wearable`), plus an **assessment row**: the same thing the Assess
+    button writes, with `details.wearable_test` holding peaks and startle count. Today's
+    vitals task, the hero status and `last_check` all follow it.
+  - `announce_finished()` emits `sensor_changed` (finished + result) and `assessment`, and
+    asks the AI **once** (`delay=0`).
+  - `stop(save=False)` cancels; under `MIN_SAVE_S` (5 s) nothing is saved.
+  - Route: `PUT /sensor {"on": false}` finishes, `{"on": false, "save": false}` cancels.
+- **Scheduler:** the **first vitals slot** now counts from the start of the mission day
+  (`OPEN_FROM_DAY_START = {"vitals"}`). Before this, an Assess or test before 06:00 never
+  ticked the 07:00 check (Today's "Do it early" had the same problem). Other kinds keep the
+  1-hour-early limit: a 01:00 sleep is last night's. Today's "Up next" now skips done tasks.
+- **Card:**
+  - while running: a progress bar ("0:09 / 6:00"), **Cancel** and **Finish & save**
+  - when done: a "**<test> test complete**" summary (averages, peak HR and stress, startle
+    count, level), "Saved as your latest vitals and counted as today's vitals check", and
+    **Run another test**
+  - the result arrives over the socket too (`sensorResultStore`), so an auto-finish shows
+    it, and the doctor sees it
+- **Verified:** 341 backend tests (tests rewritten for run-once; a new scheduler test).
+  Headless: start Multitasking → 0:09/6:00 → Finish & save → summary card, latest HR 104 →
+  77, Breathing/Stress tiles, Today "Morning vitals check · Done 00:03", Up next = the
+  exercise block, no errors. Also fixed a stray "0" the startle check rendered.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 339 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 341 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
 - `cd frontend && npm test` — 163 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.

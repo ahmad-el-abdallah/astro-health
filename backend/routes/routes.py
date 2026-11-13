@@ -673,8 +673,9 @@ def create_routes(app, socketio, bridge):
 
     @bp.put("/astronauts/<int:astro_id>/sensor")
     def put_sensor(astro_id):
-        """{"segment": "focus"|"multitask"|"startle"} starts it, {"on": false} stops it.
-        Only the astronaut wears it (the doctor watches)."""
+        """{"segment": "focus"|"multitask"|"startle"} starts a test, {"on": false} finishes it
+        and saves the results as the latest vitals + an assessment ({"on": false, "save":
+        false} cancels it instead). Only the astronaut wears it (the doctor watches)."""
         body = request.get_json(force=True) or {}
         with db.write_conn() as conn:
             viewer, err = auth.authorize_view(conn, astro_id)
@@ -683,15 +684,17 @@ def create_routes(app, socketio, bridge):
             if viewer["id"] != astro_id:
                 return jsonify({"error": "only the astronaut can start or stop their monitor"}), 403
         if body.get("on") is False:
-            sensor_feed.stop(astro_id)
-            data = {"on": False}
-        else:
-            try:
-                data = sensor_feed.start(astro_id, body.get("segment"))
-            except ValueError:
-                return jsonify({"error": "segment must be one of: " + ", ".join(s["id"] for s in sensor_feed.segments())}), 400
-        emit_fn("sensor_changed", {"astronaut_id": astro_id, "on": data["on"]})
-        analysis.request(astro_id, "wearable")
+            result = sensor_feed.stop(astro_id, save=body.get("save", True) is not False)
+            if result:  # finished and saved: same broadcasts as a test that ran to its end
+                sensor_feed.announce_finished(result, emit_fn, lambda a: analysis.request(a, "wearable", delay=0))
+                return jsonify({"on": False, "finished": True, "result": result})
+            emit_fn("sensor_changed", {"astronaut_id": astro_id, "on": False})
+            return jsonify({"on": False, "finished": False})
+        try:
+            data = sensor_feed.start(astro_id, body.get("segment"))
+        except ValueError:
+            return jsonify({"error": "segment must be one of: " + ", ".join(s["id"] for s in sensor_feed.segments())}), 400
+        emit_fn("sensor_changed", {"astronaut_id": astro_id, "on": True})
         return jsonify(data)
 
     @bp.post("/astronauts/<int:astro_id>/assess")

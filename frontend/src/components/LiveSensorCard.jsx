@@ -1,17 +1,23 @@
-// The live wearable (backend/logic/sensor_feed.py): a real recorded crew session -- NASA's
-// crew-state physiology study, crew 13 -- replayed as if the astronaut wore a chest strap
-// and finger sensor right now. Shows a moving ECG trace, heart rate, breathing rate and a
-// relative stress level, and flags the recorded startle moments. The astronaut starts and
-// stops it (and picks which recorded test to replay); the flight surgeon only watches.
-// Numbers arrive once a second over Socket.IO ("sensor" -> lib/socket.js sensorStore).
+// The live wearable test (backend/logic/sensor_feed.py): a real recorded crew session --
+// NASA's crew-state physiology study, crew 13 -- replayed as if the astronaut wore a chest
+// strap and finger sensor right now. Shows a moving ECG trace, heart rate, breathing rate
+// and a relative stress level, and flags the recorded startle moments.
+// It's a test: it plays once. At the end (or "Finish & save") its results become the
+// astronaut's latest vitals plus an assessment -- Today's vitals check is done -- and the
+// card shows a "Test complete" summary. "Cancel" throws it away. The astronaut runs it; the
+// flight surgeon only watches. Numbers arrive once a second over Socket.IO ("sensor" ->
+// lib/socket.js sensorStore); the result arrives as "sensor_changed" (sensorResultStore).
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { get, put } from "../lib/api.js";
-import { sensorStore, useStore } from "../lib/socket.js";
+import { sensorResultStore, sensorStore, useStore } from "../lib/socket.js";
 import { Button, Card, Progress, Segmented, cx } from "./ui/index.jsx";
 import { Icon } from "./ui/Icon.jsx";
 
 const TRACE_HZ = 100;
+const LEVEL_TEXT = { GREEN: "text-good-fg", YELLOW: "text-check-fg", RED: "text-alert-fg" };
+const LEVEL_WORD = { GREEN: "Good", YELLOW: "Check", RED: "Alert" };
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const WINDOW_S = 5; // seconds of ECG on screen
 
 function useSegments() {
@@ -79,6 +85,7 @@ export function LiveSensorCard({ astroId, summary, canControl = false, className
   const qc = useQueryClient();
   const segs = useSegments();
   const live = useStore(sensorStore)[astroId];
+  const result = useStore(sensorResultStore)[astroId];
   const status = summary?.sensor || null;
   const on = !!status?.on;
   const [choice, setChoice] = useState("startle");
@@ -88,19 +95,22 @@ export function LiveSensorCard({ astroId, summary, canControl = false, className
   const now = fresh ? live : status;
   const segLabel = segs.data?.segments.find((s) => s.id === (on ? status.segment : choice));
 
-  async function setOn(next) {
-    setBusy(true);
+  // body: {segment} starts a test, {on:false} finishes + saves, {on:false, save:false} cancels
+  async function send(body, which) {
+    setBusy(which);
     try {
-      await put(`/astronauts/${astroId}/sensor`, next ? { segment: choice } : { on: false });
+      const r = await put(`/astronauts/${astroId}/sensor`, body);
+      if (body.segment) sensorResultStore.set((all) => ({ ...all, [astroId]: null }));
+      else sensorResultStore.set((all) => ({ ...all, [astroId]: r?.finished ? r.result : null }));
       await qc.invalidateQueries({ queryKey: ["summary"] });
     } finally {
       setBusy(false);
     }
   }
 
-  if (!on && !canControl) return null; // the surgeon sees it only while it's running
+  if (!on && !canControl && !result) return null; // the surgeon sees it while it runs, and its result
 
-  const startle = on && now?.event && status?.segment === "startle";
+  const startle = !!(on && now?.event && status?.segment === "startle"); // a bare 0 would render as "0"
   const stressLevel = (now?.stress ?? 0) > 85 ? "alert" : (now?.stress ?? 0) > 60 ? "check" : "good";
 
   return (
@@ -125,12 +135,21 @@ export function LiveSensorCard({ astroId, summary, canControl = false, className
           </span>
         )}
         {canControl && on && (
-          <Button className="min-h-10 px-3.5 text-label" onClick={() => setOn(false)} busy={busy}>Stop</Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" className="min-h-10 px-3 text-label" onClick={() => send({ on: false, save: false }, "cancel")} busy={busy === "cancel"} disabled={!!busy}>Cancel</Button>
+            <Button variant="primary" className="min-h-10 px-3.5 text-label" onClick={() => send({ on: false }, "finish")} busy={busy === "finish"} disabled={!!busy}>
+              {busy !== "finish" && <Icon name="tick" size={16} />} Finish &amp; save
+            </Button>
+          </div>
         )}
       </div>
 
       {on ? (
         <>
+          <div className="flex items-center gap-3 text-label text-muted">
+            <Progress value={(now?.second ?? 0) / (status.seconds || 1)} className="flex-1" />
+            <span className="ah-num shrink-0">{mmss(now?.second ?? 0)} / {mmss(status.seconds)}</span>
+          </div>
           <div className="overflow-hidden rounded-[var(--radius-inner)] bg-raised px-2">
             <EcgTrace astroId={astroId} live={!!fresh} />
           </div>
@@ -149,9 +168,12 @@ export function LiveSensorCard({ astroId, summary, canControl = false, className
             </div>
           </div>
           <p className="m-0 text-caption text-subtle">
-            Saved as a reading every minute. Source: {segs.data?.source || "recorded crew data"} (real signals, replayed). Not medical advice.
+            When it ends (or you finish it), the results are saved as your latest vitals and count as today’s vitals check.
+            Source: {segs.data?.source || "recorded crew data"} (real signals, replayed). Not medical advice.
           </p>
         </>
+      ) : result ? (
+        <TestResult result={result} canControl={canControl} onAgain={() => sensorResultStore.set((all) => ({ ...all, [astroId]: null }))} />
       ) : (
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex min-w-0 flex-col gap-1.5">
@@ -164,12 +186,41 @@ export function LiveSensorCard({ astroId, summary, canControl = false, className
               options={(segs.data?.segments || []).map((s) => ({ value: s.id, label: s.label }))}
             />
           </div>
-          <Button variant="primary" onClick={() => setOn(true)} busy={busy} disabled={!segs.data}>
-            {!busy && <Icon name="waveform" size={16} />} Start live monitor
+          <Button variant="primary" onClick={() => send({ segment: choice }, "start")} busy={busy === "start"} disabled={!segs.data || !!busy}>
+            {!busy && <Icon name="waveform" size={16} />} Start test
           </Button>
           {segLabel && <p className="m-0 basis-full text-label text-muted">{segLabel.label}: {segLabel.about}.</p>}
         </div>
       )}
     </Card>
+  );
+}
+
+// "Test complete": what was saved, and that it counts as today's vitals check.
+function TestResult({ result, canControl, onAgain }) {
+  const r = result.results || {};
+  const lvl = result.overall_level;
+  return (
+    <div className="flex animate-[ah-pop_.4s_ease-out] flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Icon name="tick" size={20} className="text-good-fg" />
+        <span className="text-title font-semibold">{result.label} test complete</span>
+        <span className={cx("text-label font-semibold", LEVEL_TEXT[lvl])}>· {LEVEL_WORD[lvl] || lvl}</span>
+        <span className="text-label text-muted">· {mmss(r.seconds || 0)} recorded</span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Stat icon="heart" label="Average heart rate" value={r.heart_rate} unit={`bpm · peak ${r.peak_heart_rate}`} />
+        <Stat icon="lungs" label="Average breathing" value={r.respiration_rate} unit="/min" />
+        <Stat icon="mind" label="Average stress" value={r.stress} unit={`/100 · peak ${r.peak_stress}`} />
+      </div>
+      <p className="m-0 text-label text-ink-2">
+        Saved as your latest vitals and counted as today’s vitals check{r.startles ? ` · ${r.startles} startle event${r.startles === 1 ? "" : "s"} recorded` : ""}. Astra is looking at the result.
+      </p>
+      {canControl && (
+        <Button className="w-fit" onClick={onAgain}>
+          <Icon name="reset" size={16} /> Run another test
+        </Button>
+      )}
+    </div>
   );
 }
