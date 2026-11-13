@@ -1479,6 +1479,11 @@ vanilla app was deleted once the last page was ported.
   into `public/models/anatomy.glb` (~2.4 MB: skeleton, wire, muscles, skin, brain, eyes, heart,
   lungs→immune, stomach). Loaded with `useGLTF(url, false, true)` (draco off, meshopt on).
   No WebGL → `three/webgl.jsx`'s fallback instead of a crash.
+  **The groin is a plain mannequin surface (2026-11-13, user's request):** the source body
+  is unclothed. `removeGroin()` in the build script cuts the external genitals out of the
+  skin and fills the hole with a smooth faired patch. Its box comes from the genital organ
+  meshes (`GROIN_FILES`), which are never drawn themselves. The muscle and skeleton layers
+  never had genitals. Any rebuild of the model keeps this; don't drop it.
 - **Face to Face**: removed 2026-11-12 (see "NVIDIA Consultation AI and Face to Face
   removed" below). It used TalkingHead bundled from `src/vendor/talkinghead/` with
   `lipsyncModules: []` + a statically imported `LipsyncEn` -- reuse that trick if a voice
