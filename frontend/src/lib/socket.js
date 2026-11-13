@@ -103,7 +103,7 @@ export const EVENT_INVALIDATIONS = {
   assessment: [["summary"], ["history"], ["crew"], ["alerts"], ["schedule"]],
   analysis: [["summary"], ["history"], ["crew"], ["alerts"]],
   analysis_pending: [["summary"], ["crew"]],
-  cyd_event: [["summary"], ["history"], ["crew"], ["journal"], ["schedule"]],
+  cyd_event: [["summary"], ["history"], ["crew"], ["journal"], ["schedule"], ["exercise"]],
   reminder: [["schedule"]],
   session_started: [["summary"], ["crew"]],
   session_ended: [["summary"], ["crew"]],

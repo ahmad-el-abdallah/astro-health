@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, sessions, health_rules, symptoms
+from backend.logic import analysis, astra_memory, exercise, sessions, health_rules, symptoms
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
@@ -20,7 +20,7 @@ from backend import voice_settings
 from backend.config import (
     content as load_content, missions as load_missions,
     mission_health as load_mission_health,
-    routine as load_routine,
+    routine as load_routine, exercises as load_exercises,
 )
 
 
@@ -574,6 +574,9 @@ def create_routes(app, socketio, bridge):
             return jsonify({"error": "AI chat failed"}), 502
         if not is_self:
             out["actions"] = []  # belt and braces: never actions on someone else's behalf
+        for a in out["actions"]:
+            if a["type"] == "start_workout" and a.get("exercise"):
+                exercise.remember_choice(astro_id, a["exercise"])
         return jsonify({**out, "model": analyst.model_name()})
 
     @bp.post("/astronauts/<int:astro_id>/speak")
@@ -877,12 +880,52 @@ def create_routes(app, socketio, bridge):
             if action == "start":
                 if running:
                     return jsonify({"ok": True, "already": True, "kind": kind})
-                label = "Sleep" if kind == "sleep" else "Workout"
-                sessions.start_toggle(conn, astro_id, kind, f"web:{astro_id}:{kind}", label, send_fn, emit_fn)
+                label, key = ("Sleep" if kind == "sleep" else "Workout"), f"web:{astro_id}:{kind}"
+                ex = exercise.find(body.get("exercise") or exercise.take_choice(astro_id)) if kind == "exercise" else None
+                if ex:  # Astra named one ("start my treadmill run") -> logged as that exercise
+                    label, key = ex["name"], f"ex:{astro_id}:{ex['id']}"
+                sessions.start_toggle(conn, astro_id, kind, key, label, send_fn, emit_fn)
                 return jsonify({"ok": True, "kind": kind, "started": True})
             if not running:
                 return jsonify({"error": f"no {kind} tracking is running"}), 409
             return jsonify({"ok": True, **sessions.stop_toggle(conn, running, send_fn, emit_fn)})
+
+    # ---- Exercises page: the ISS daily plan against this astronaut's logs (logic/exercise.py,
+    # shared with Astra's context). Same timer as the NFC tags and Astra. ----
+    @bp.get("/astronauts/<int:astro_id>/exercise")
+    def exercise_overview(astro_id):
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            return jsonify(exercise.overview(conn, astro_id))
+
+    @bp.post("/astronauts/<int:astro_id>/exercise/start")
+    def exercise_start(astro_id):
+        body = request.get_json(force=True) or {}
+        cfg = load_exercises()
+        ex = exercise.find(body.get("exercise"), cfg)
+        if not ex:
+            return jsonify({"error": "unknown exercise"}), 400
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            if sessions.running_toggle(astro_id, "exercise"):
+                return jsonify({"error": "a workout is already running", "running": exercise.running(conn, astro_id, cfg)}), 409
+            sessions.start_toggle(conn, astro_id, "exercise", f"ex:{astro_id}:{ex['id']}", ex["name"], send_fn, emit_fn)
+            return jsonify({"ok": True, "running": exercise.running(conn, astro_id, cfg)})
+
+    @bp.post("/astronauts/<int:astro_id>/exercise/stop")
+    def exercise_stop(astro_id):
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            key = sessions.running_toggle(astro_id, "exercise")
+            if not key:
+                return jsonify({"error": "no workout is running"}), 409
+            return jsonify({"ok": True, **sessions.stop_toggle(conn, key, send_fn, emit_fn)})
 
     @bp.post("/astronauts/<int:astro_id>/reaction")
     def web_reaction(astro_id):

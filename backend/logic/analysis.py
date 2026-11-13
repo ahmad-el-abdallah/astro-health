@@ -20,7 +20,7 @@ from backend.config import ai_analyst as load_analyst_cfg, content as load_conte
 from backend.config import TIME_SCALE
 from backend.hardware import protocol
 from backend.jobs import comms, scheduler
-from backend.logic import health_rules, sessions
+from backend.logic import exercise, health_rules, sessions
 from backend.services import analyst
 
 DEBOUNCE_S = 5          # wait for a burst of changes to settle
@@ -220,6 +220,11 @@ def build_context(conn, astro_id, profile=None, for_chat=False):
         lines.append(f"Right now: {what} (started {scheduler.to_mission_hhmm(toggle['started_iso'])}, {mission_min} mission minutes ago).")
     else:
         lines.append("Right now: no sleep or workout tracking is running.")
+    if for_chat:
+        try:
+            lines += exercise.chat_lines(conn, astro_id)
+        except Exception as exc:  # never let the exercise summary break Astra
+            print(f"[astra] exercise context skipped: {exc}", flush=True)
     lines.append(f"CYD session open: {'yes' if astro_id in sessions.active_sessions else 'no'}. "
                  f"Emergency: {'ACTIVE - ' + sessions.emergency.get('text', '') if sessions.emergency.get('active') else 'none'}.")
 

@@ -18,7 +18,8 @@ export const CREW_NAV = [
   {
     group: "Mission",
     items: [
-      { to: "/mission", label: "Mission health", eyebrow: "Mission environment", icon: "mission" },
+      { to: "/mission", label: "Missions", eyebrow: "Mission environment", icon: "mission" },
+      { to: "/exercise", label: "Exercises", eyebrow: "Daily movement protocol", icon: "exercise" },
       { to: "/schedule", label: "Schedule", eyebrow: "Daily routine", icon: "schedule" },
       { to: "/learn", label: "Learn", eyebrow: "Crew handbook", icon: "learn" },
     ],
@@ -41,7 +42,8 @@ export const DOCTOR_NAV = [
       { to: "/trends", label: "Trends", icon: "trends" },
       { to: "/mind", label: "Mind & mood", icon: "mind" },
       { to: "/sleep", label: "Sleep lab", icon: "sleep" },
-      { to: "/mission", label: "Mission health", icon: "mission" },
+      { to: "/mission", label: "Missions", icon: "mission" },
+      { to: "/exercise", label: "Exercises", icon: "exercise" },
       { to: "/schedule", label: "Schedule", icon: "schedule" },
       { to: "/learn", label: "Learn", icon: "learn" },
     ],

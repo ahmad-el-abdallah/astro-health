@@ -60,6 +60,7 @@ def load_all():
         "routine": _load("routine"),
         "symptoms": _load("symptoms"),
         "ai_analyst": _load("ai_analyst"),
+        "exercises": _load("exercises"),
     }
 
 
@@ -77,6 +78,10 @@ def missions():
 
 def mission_health():
     return _load("mission_health")
+
+
+def exercises():
+    return _load("exercises")
 
 
 def routine():

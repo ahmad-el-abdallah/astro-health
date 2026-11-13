@@ -963,3 +963,72 @@ def test_cyd_hello_without_paired_uid_does_not_start_anything(client):
     res = client.post("/api/simulate/event", json={"type": "hello", "fw": "1"})
     assert res.status_code == 200
     assert sessions.active_sessions == {}
+
+
+def test_exercise_plan_start_stop_and_history(client):
+    """Exercises page: the plan comes from config, Start/Stop logs a real workout that
+    shows up in today's minutes, the weekly chart and the history."""
+    from backend.config import exercises
+    login_as(client, AHMAD_UID)
+    data = client.get("/api/astronauts/1/exercise").get_json()
+    assert data["goal_min"] == exercises()["daily_goal_min"]
+    assert [e["id"] for e in data["exercises"]] == ["t2", "cevis", "ared", "stretch"]
+    assert len(data["week"]) == 7 and data["week"][-1]["today"] is True
+    before = data["today_min"]
+
+    assert client.post("/api/astronauts/1/exercise/start", json={"exercise": "nope"}).status_code == 400
+    res = client.post("/api/astronauts/1/exercise/start", json={"exercise": "ared"})
+    assert res.status_code == 200 and res.get_json()["running"]["id"] == "ared"
+    assert client.post("/api/astronauts/1/exercise/start", json={"exercise": "t2"}).status_code == 409
+    assert client.get("/api/astronauts/1/exercise").get_json()["running"]["name"] == "Resistance Training"
+
+    res = client.post("/api/astronauts/1/exercise/stop")
+    assert res.status_code == 200 and res.get_json()["minutes"] >= 1
+    data = client.get("/api/astronauts/1/exercise").get_json()
+    assert data["running"] is None
+    ared = next(e for e in data["exercises"] if e["id"] == "ared")
+    assert ared["done_min"] >= 1 and data["today_min"] >= before + 1
+    assert data["history"][0]["exercise"] == "ared"
+    assert client.post("/api/astronauts/1/exercise/stop").status_code == 409
+
+
+def test_exercise_start_is_only_for_the_astronaut_themselves(client):
+    login_as(client, SAMEER_UID)
+    assert client.post("/api/astronauts/1/exercise/start", json={"exercise": "t2"}).status_code == 403
+    assert client.get("/api/astronauts/1/exercise").status_code == 403
+
+
+def test_astra_can_start_a_named_exercise(client):
+    """Astra: "start my treadmill run" proposes start_workout with exercise t2; when the
+    astronaut confirms, the page's generic /activity start is logged as the T2 treadmill."""
+    from backend.logic import exercise
+    login_as(client, AHMAD_UID)
+    exercise.remember_choice(1, "t2")
+    res = client.post("/api/astronauts/1/activity", json={"kind": "exercise", "action": "start"})
+    assert res.status_code == 200
+    assert client.get("/api/astronauts/1/exercise").get_json()["running"]["id"] == "t2"
+    client.post("/api/astronauts/1/activity", json={"kind": "exercise", "action": "stop"})
+    # an explicit exercise in the request works too, and a plain start stays a "Workout"
+    client.post("/api/astronauts/1/activity", json={"kind": "exercise", "action": "start", "exercise": "cevis"})
+    assert client.get("/api/astronauts/1/exercise").get_json()["running"]["id"] == "cevis"
+    client.post("/api/astronauts/1/activity", json={"kind": "exercise", "action": "stop"})
+    client.post("/api/astronauts/1/activity", json={"kind": "exercise", "action": "start"})
+    assert client.get("/api/astronauts/1/exercise").get_json()["running"]["name"] == "Workout"
+    client.post("/api/astronauts/1/activity", json={"kind": "exercise", "action": "stop"})
+
+
+def test_astra_context_knows_todays_exercise():
+    from backend import db
+    from backend.logic import analysis
+    with db.write_conn() as conn:
+        context, _, _ = analysis.build_context(conn, 1, for_chat=True)
+    assert "Exercise today:" in context and "[t2]" in context
+
+
+def test_exercise_page_workouts_run_in_real_time(client):
+    """The Exercises page shows a real stopwatch, so its workouts are timed in real time
+    (not the 60x mission clock): starting and stopping right away logs the 1-minute minimum."""
+    login_as(client, AHMAD_UID)
+    client.post("/api/astronauts/1/exercise/start", json={"exercise": "stretch"})
+    assert client.get("/api/astronauts/1/exercise").get_json()["running"]["time_scale"] == 1
+    assert client.post("/api/astronauts/1/exercise/stop").get_json()["minutes"] == 1

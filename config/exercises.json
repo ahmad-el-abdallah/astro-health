@@ -1,0 +1,75 @@
+{
+  "_comment": "The ISS daily exercise plan shown on the Exercises page. Machines, loads and the ~2 hours/day total come from NASA / CSA (links in 'sources'); per-exercise minutes are our split of that total for the demo. 'match' lists words in an NFC tag's label that count a tag workout toward that exercise.",
+  "daily_goal_min": 120,
+  "exercises": [
+    {
+      "id": "t2",
+      "name": "Treadmill",
+      "machine": "T2 / COLBERT treadmill",
+      "target_min": 30,
+      "summary": "Running in microgravity, held onto the belt by a harness and bungee cords.",
+      "why": "Every footstrike loads the hips, legs and spine, which slows the bone loss that weightlessness causes.",
+      "muscles": ["Legs", "Hips", "Heart & lungs"],
+      "steps": [
+        {"title": "Put on the harness", "text": "Waist belt and shoulder straps, snug but comfortable."},
+        {"title": "Clip in the bungees", "text": "Attach the bungee cords to the harness. They pull you down onto the belt so you don't float away."},
+        {"title": "Set your speed", "text": "Start easy and build up. T2 goes up to 12 mph."},
+        {"title": "Run tall", "text": "Land under your hips, keep your core tight and arms relaxed."}
+      ],
+      "match": ["treadmill", "t2", "colbert", "run"]
+    },
+    {
+      "id": "cevis",
+      "name": "Cycling",
+      "machine": "CEVIS / cycle ergometer",
+      "target_min": 30,
+      "summary": "The station's exercise bike, minus the seat: you clip in and strap down instead.",
+      "why": "In 0 g the heart works less and can weaken. Steady cycling keeps the heart and lungs fit.",
+      "muscles": ["Thighs", "Calves", "Heart & lungs"],
+      "steps": [
+        {"title": "Clip in your shoes", "text": "Put on cycling shoes and click them into the pedals."},
+        {"title": "Strap in", "text": "There's no seat in microgravity: use the waist strap and hold the handles."},
+        {"title": "Set the workload", "text": "Pick the resistance on the display for today's session."},
+        {"title": "Pedal smoothly", "text": "Keep a steady rhythm and breathe evenly the whole time."}
+      ],
+      "match": ["bike", "cycle", "cycling", "cevis", "ergometer"]
+    },
+    {
+      "id": "ared",
+      "name": "Resistance Training",
+      "machine": "ARED / resistive device",
+      "target_min": 45,
+      "summary": "Squats, deadlifts and presses against vacuum cylinders that act like free weights.",
+      "why": "Heavy loads tell bones and muscles they're still needed. ARED gives up to 600 lb (272 kg) of resistance.",
+      "muscles": ["Quads", "Glutes", "Back", "Core"],
+      "steps": [
+        {"title": "Set the load", "text": "Turn the loading lever to today's weight (0 to 600 lb)."},
+        {"title": "Get under the bar", "text": "Bar across your upper back, hands just outside the shoulders, feet hip-width."},
+        {"title": "Squat down", "text": "Push the hips back, chest up, knees tracking over the toes."},
+        {"title": "Drive up", "text": "Push through your heels back to standing. Breathe out on the way up."}
+      ],
+      "match": ["resistance", "ared", "squat", "weights", "machine"]
+    },
+    {
+      "id": "stretch",
+      "name": "Stretching & Mobility",
+      "machine": "Bodyweight / mobility",
+      "target_min": 15,
+      "summary": "Gentle reaches, side bends and a forward fold, anchored by foot loops.",
+      "why": "The spine lengthens in space and back pain is common. Stretching keeps joints and the spine moving well.",
+      "muscles": ["Spine", "Shoulders", "Hamstrings"],
+      "steps": [
+        {"title": "Anchor your feet", "text": "Slide your feet into the foot loops so you stay in place."},
+        {"title": "Reach up", "text": "Arms overhead, lengthen through the whole spine."},
+        {"title": "Side bends", "text": "Lean slowly to the left, then to the right. Hold each for a breath."},
+        {"title": "Forward fold", "text": "Hinge at the hips and reach down, knees soft. Roll up slowly."}
+      ],
+      "match": ["stretch", "yoga", "mobility", "flex"]
+    }
+  ],
+  "sources": [
+    {"title": "CSA: Physical activity in space (~2 hours a day, ARED 272 kg, CEVIS steps)", "url": "https://asc-csa.gc.ca/eng/astronauts/living-in-space/physical-activity-in-space.asp"},
+    {"title": "NASA: Astronaut exercise (ARED, T2, CEVIS)", "url": "https://www.nasa.gov/missions/station/iss-research/astronaut-exercise"},
+    {"title": "NASA ISS exercise hardware overview (T2 max 12 mph)", "url": "https://ntrs.nasa.gov/api/citations/20130009882/downloads/20130009882.pdf"}
+  ]
+}

@@ -220,7 +220,8 @@ def analyze(context_text, indicator_ids, cfg=None):
 
 # ---------------------------------------------------------------- Astra, the crew's chat
 
-PAGES = ("overview", "body", "trends", "mind", "sleep", "mission", "schedule", "learn")
+PAGES = ("overview", "body", "trends", "mind", "sleep", "mission", "exercise", "schedule", "learn")
+EXERCISE_IDS = ("t2", "cevis", "ared", "stretch")
 MOODS = ("rough", "low", "okay", "good", "great")
 MAX_ACTIONS = 4
 # Loose sanity limits for vitals said out loud -- a mishearing like "heart rate 720" is
@@ -259,7 +260,9 @@ def _chat_prompt(cfg, symptom_ids=(), guide_ids=()):
         '- {"type": "message_surgeon", "text": "<their message, in their words>"} (a normal, non-urgent message)\n'
         '- {"type": "send_summary", "period": "today" or "week"} (a health summary report to the flight surgeon)\n'
         '- {"type": "start_sleep"} / {"type": "stop_sleep"} (going to bed / woke up: sleep tracking)\n'
-        '- {"type": "start_workout"} / {"type": "stop_workout"} (workout tracking)\n'
+        '- {"type": "start_workout", "exercise": optional one of "t2" (treadmill), "cevis" (cycling), "ared" (resistance/weights), '
+        '"stretch"} / {"type": "stop_workout"} (workout tracking; name the exercise when they say which one. '
+        'Use the "Exercise today" lines to say what is done, what is left and what to do next)\n'
         '- {"type": "take_vitals"} (take a new vitals reading with the station sensors)\n'
         '- {"type": "breathing"} (a guided 1-minute breathing exercise) / {"type": "reaction_test"} (a 5-tap reaction test)\n'
         '- {"type": "measure_guide", "indicator": one of ' + ", ".join(f'"{g}"' for g in guide_ids) + "} (step-by-step how to measure it)\n"
@@ -288,6 +291,7 @@ def _chat_prompt(cfg, symptom_ids=(), guide_ids=()):
         '"take me to trends" -> {"reply": "Opening Trends.", "actions": [{"type": "navigate", "page": "trends"}]}\n'
         '"tell the doctor I slept well and feel fine" -> {"reply": "Should I send the flight surgeon a message that you slept well and feel fine?", '
         '"actions": [{"type": "message_surgeon", "text": "I slept well and feel fine."}]}\n'
+        '"start my treadmill run" -> {"reply": "Should I start your T2 treadmill session?", "actions": [{"type": "start_workout", "exercise": "t2"}]}\n'
         '"I\'m going to bed" -> {"reply": "Should I start your sleep tracking? Good night.", "actions": [{"type": "start_sleep"}]}\n'
         '"how do I measure my blood pressure?" -> {"reply": "Let\'s do it step by step.", "actions": [{"type": "measure_guide", "indicator": "blood_pressure"}]}\n'
         '"my left knee has hurt since Tuesday" -> {"reply": "I\'ll remember that and check on it later. How bad is it, from 0 to 10?", '
@@ -364,6 +368,8 @@ def _clean_action(a, symptom_ids, guide_ids=()):
         return {"type": kind, "text": text.strip()[:MAX_MESSAGE]} if text.strip() else None
     if kind == "send_summary":
         return {"type": kind, "period": a["period"]} if a.get("period") in SUMMARY_PERIODS else None
+    if kind == "start_workout" and a.get("exercise") in EXERCISE_IDS:
+        return {"type": kind, "exercise": a["exercise"]}
     if kind in NO_FIELD_ACTIONS:
         return {"type": kind}
     if kind == "measure_guide":

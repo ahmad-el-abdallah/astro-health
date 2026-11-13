@@ -401,7 +401,7 @@ function MissionChecks({ summary, mission, rules }) {
           );
         })}
       </ul>
-      <Link to="/mission" className="w-fit text-sm text-accent-text underline underline-offset-2">See all checks in Mission health</Link>
+      <Link to="/mission" className="w-fit text-sm text-accent-text underline underline-offset-2">See all checks in Missions</Link>
     </Card>
   );
 }
