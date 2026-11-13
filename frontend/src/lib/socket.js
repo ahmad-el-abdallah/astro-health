@@ -118,4 +118,6 @@ export const EVENT_INVALIDATIONS = {
   astra_memory: [["memory"]],
   location_changed: [["location"], ["summary"], ["crew"]],
   astra_followup: [["memory"]],
+  voice_tone: [["voice-tone"], ["voice-talk-latest"]],
+  voice_talk: [["voice-talk-latest"], ["voice-tone"]],
 };

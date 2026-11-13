@@ -282,6 +282,53 @@ offered. She speaks out loud only when all of these are true:
 She speaks out loud at most once a minute. A superuser sets **Astra speaks first** on
 `/admin` → Station voice: **Out loud**, **Card only** or **Off**.
 
+### "Wanna talk?" and voice tone estimates (optional)
+
+On **Mind & mood**, **Wanna talk?** → **Talk to Astra** opens her usual voice screen for a
+short, hands-free chat. During that chat only, each phrase you say also gets a **voice tone
+estimate** (angry, calm, disgust, fearful, happy, sad or surprised), from a Wav2Vec2 model
+running on this laptop. The estimates appear afterwards in the **Voice tone · estimate** card on
+the same page. Nothing is shown during the call, and Astra's AI is never told.
+
+- **An estimate, not a diagnosis.** It guesses from how the voice *sounds*, and the model was
+  trained on acted speech. It doesn't detect stress, fatigue or any condition, and it never
+  feeds the health analysis, alerts, levels or your mood.
+- **Kept apart from your mood.** Self-reported mood stays exactly as it was (`readings`).
+  Estimates have their own table (`voice_tone`) and their own card.
+- **Two different audio paths:**
+  - *Voice tone (local):* each phrase is recorded from Astra's shared microphone, sent as a
+    16 kHz WAV to this laptop's own backend, analysed in memory and thrown away. Only the
+    scores are saved, and nothing goes to an outside service.
+  - *Speech-to-text (not local):* the words themselves still go through the browser's speech
+    recognition, as for every Astra call. Chrome sends that audio to Google, Edge to Microsoft.
+- **Who sees it:** the astronaut and the flight surgeon (like the journal). Only the astronaut
+  can record.
+- **Optional install** (about 1.5 GB on disk; the app works without it):
+
+  ```bash
+  .venv/bin/python -m pip install -r requirements-emotion.txt   # torch (CPU-only) + transformers
+  .venv/bin/python -m backend.services.emotion download          # the model, ~378 MB, SHA-256 checked
+  ```
+
+  The model is `Dpngtm/wav2vec2-emotion-recognition` (MIT), pinned to one revision and stored
+  in `models/wav2vec2-emotion/` (gitignored). It loads in the background when `app.py` starts
+  (about 3 s and about 500 MB of RAM) and never goes online at runtime. Without it, the talk
+  works the same and the card says estimates aren't set up. `ASTRO_NO_EMOTION=1` turns it off.
+- **Speed:** on an Intel Core 7 240H with 4 threads, about 0.25 s for a 5 s phrase and 0.8 s
+  for 15 s. `python -m backend.services.emotion bench` measures your machine, and
+  `... predict file.wav` checks one recording.
+- **Browser test** (dev only, never against your live app): `cd frontend && node scripts/e2e-wanna-talk.mjs --base http://localhost:5057`
+  against an isolated copy. The steps are at the top of that file.
+- **Latest Conversation Analysis** (Mind page, below the voice tone card): the result of your
+  last finished talk only. It shows the dominant tone and its share, all seven probabilities
+  (the average over that talk's analysed phrases) and how many phrases were analysed. It says
+  "Analysing…" while the last phrases are still being processed, and survives a reload.
+- **How your speech is found:** from the audio itself, measured against your mic's own
+  background level, with Astra's actual playback (and anything said over it) left out. The
+  speech recognizer's timing is only used to know which seconds belong to a phrase. Very
+  short replies ("yes") are skipped rather than guessed at. Open DevTools → Console and filter
+  `voice tone` to see, per phrase and in numbers only, what was kept and why.
+
 ### Superuser admin page
 
 Assigning NFC cards and managing crew accounts happens at **http://localhost:5000/admin**,

@@ -2,6 +2,8 @@
 data/*.db
 data/secret_key
 data/ai_api_key
+# optional voice-tone model (python -m backend.services.emotion download), ~378 MB
+models/
 __pycache__/
 *.pyc
 .pytest_cache/

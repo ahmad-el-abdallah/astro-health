@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import math
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -12,11 +13,11 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, location, sessions, health_rules, symptoms
+from backend.logic import analysis, astra_memory, location, sessions, health_rules, symptoms, voice_talks
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
-from backend.services import analyst, voice
+from backend.services import analyst, emotion, voice
 from backend import voice_settings
 from backend.config import (
     content as load_content, missions as load_missions,
@@ -32,6 +33,9 @@ def row(r):
 
 def rows(rs):
     return [dict(r) for r in rs]
+
+
+_TALK_ID = re.compile(r"[A-Za-z0-9_-]{1,40}")  # groups one "Wanna talk?" conversation's phrases
 
 
 # ---- login: shared by the NFC/password/Face ID auth routes below ----
@@ -1086,6 +1090,144 @@ def create_routes(app, socketio, bridge):
             )
             entry_id = cur.lastrowid
         return jsonify({"ok": True, "id": entry_id, "title": title, "body": entry_body, "created_at": now})
+
+    # ---- "Wanna talk?" voice tone estimates (backend/services/emotion.py) ----
+    # The browser records one phrase at a time from Astra's shared microphone and POSTs it
+    # here as a 16 kHz WAV. It's analysed on this laptop, in memory, and dropped; only the
+    # scores are saved, in their own `voice_tone` table (never `readings` / mood).
+    @bp.get("/voice-tone/status")
+    def voice_tone_status():
+        return jsonify(emotion.status())
+
+    @bp.post("/astronauts/<int:astro_id>/voice-tone")
+    def add_voice_tone(astro_id):
+        # Only the astronaut themself (not the surgeon on their behalf): it's their voice.
+        if auth.current_astronaut_id() is None:
+            return jsonify({"error": "not logged in"}), 401
+        if auth.current_astronaut_id() != astro_id:
+            return jsonify({"error": "forbidden"}), 403
+        talk_id = request.args.get("talk") or ""
+        if not _TALK_ID.fullmatch(talk_id):
+            return jsonify({"error": "talk id required"}), 400
+        with db.write_conn() as conn:
+            ok, status, msg = voice_talks.accepts_phrases(voice_talks.get(conn, talk_id), astro_id)
+        if not ok:
+            return jsonify({"error": msg}), status
+        if (request.content_length or 0) > emotion.MAX_WAV_BYTES:
+            return jsonify({"error": "audio too large"}), 413
+        try:
+            # Outside the DB write lock: inference takes up to ~1 s.
+            result = emotion.analyze_wav(request.get_data(cache=False))
+        except emotion.Unavailable as e:
+            return jsonify({"error": "voice tone analysis unavailable", "reason": str(e)}), 503
+        except emotion.ToneError as e:
+            return jsonify({"error": str(e)}), 400
+        now = datetime.now(timezone.utc).isoformat()
+        with db.write_conn() as conn:
+            if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
+                return jsonify({"error": "not found"}), 404
+            # re-checked inside the write: a finish may have landed during the inference
+            ok, status, msg = voice_talks.accepts_phrases(voice_talks.get(conn, talk_id), astro_id)
+            if not ok:
+                return jsonify({"error": msg}), status
+            voice_talks.touch(conn, talk_id)
+            cur = conn.execute(
+                "INSERT INTO voice_tone (astronaut_id, ts, talk_id, label, confidence, scores_json, duration_s, model) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (astro_id, now, talk_id, result["label"], result["confidence"], json.dumps(result["scores"]),
+                 result["duration_s"], f"{emotion.MODEL_ID}@{emotion.MODEL_REVISION[:12]}"),
+            )
+            row_id = cur.lastrowid
+        out = {"id": row_id, "ts": now, "talk_id": talk_id, **result}
+        emit_fn("voice_tone", {"astronaut_id": astro_id, "id": row_id, "talk_id": talk_id})
+        return jsonify(out)
+
+    # ---- "Wanna talk?" conversations (backend/logic/voice_talks.py) ----
+    def _own_talk(astro_id, talk_id=None):
+        if auth.current_astronaut_id() is None:
+            return None, (jsonify({"error": "not logged in"}), 401)
+        if auth.current_astronaut_id() != astro_id:
+            return None, (jsonify({"error": "forbidden"}), 403)
+        if talk_id is not None and not _TALK_ID.fullmatch(talk_id):
+            return None, (jsonify({"error": "bad conversation id"}), 400)
+        return True, None
+
+    @bp.post("/astronauts/<int:astro_id>/voice-talks")
+    def open_voice_talk(astro_id):
+        _, err = _own_talk(astro_id)
+        if err:
+            return err
+        if not emotion.is_ready():
+            return jsonify({"error": "voice tone analysis unavailable", "reason": emotion.status()["reason"]}), 503
+        with db.write_conn() as conn:
+            if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
+                return jsonify({"error": "not found"}), 404
+            talk = voice_talks.create(conn, astro_id)
+        return jsonify(voice_talks.public(talk)), 201
+
+    def _talk_body_int(body, key):
+        try:
+            return max(0, min(10000, int(body.get(key) or 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    @bp.post("/astronauts/<int:astro_id>/voice-talks/<talk_id>/close")
+    def close_voice_talk(astro_id, talk_id):
+        _, err = _own_talk(astro_id, talk_id)
+        if err:
+            return err
+        body = request.get_json(silent=True) or {}
+        with db.write_conn() as conn:
+            talk = voice_talks.get(conn, talk_id)
+            if not talk or talk["astronaut_id"] != astro_id:
+                return jsonify({"error": "unknown conversation"}), 404
+            talk = voice_talks.close(conn, talk_id, _talk_body_int(body, "phrases_sent"))
+        emit_fn("voice_talk", {"astronaut_id": astro_id, "talk_id": talk_id, "status": talk["status"]})
+        return jsonify(voice_talks.public(talk))
+
+    @bp.post("/astronauts/<int:astro_id>/voice-talks/<talk_id>/finish")
+    def finish_voice_talk(astro_id, talk_id):
+        _, err = _own_talk(astro_id, talk_id)
+        if err:
+            return err
+        body = request.get_json(silent=True) or {}
+        with db.write_conn() as conn:
+            talk = voice_talks.get(conn, talk_id)
+            if not talk or talk["astronaut_id"] != astro_id:
+                return jsonify({"error": "unknown conversation"}), 404
+            talk = voice_talks.finish(conn, talk_id, _talk_body_int(body, "phrases_sent"),
+                                      _talk_body_int(body, "phrases_skipped"), _talk_body_int(body, "phrases_failed"))
+        emit_fn("voice_talk", {"astronaut_id": astro_id, "talk_id": talk_id, "status": talk["status"]})
+        return jsonify(voice_talks.public(talk))
+
+    @bp.get("/astronauts/<int:astro_id>/voice-talks/latest")
+    def latest_voice_talk(astro_id):
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)  # the astronaut + the flight surgeon
+            if err:
+                return jsonify(err[0]), err[1]
+            talk = voice_talks.latest(conn, astro_id)
+        return jsonify({"talk": talk})
+
+    @bp.get("/astronauts/<int:astro_id>/voice-tone")
+    def get_voice_tone(astro_id):
+        try:
+            days = max(1, min(30, int(request.args.get("days", 7))))
+        except ValueError:
+            days = 7
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)  # the astronaut + the flight surgeon, like the journal
+            if err:
+                return jsonify(err[0]), err[1]
+            data = rows(conn.execute(
+                "SELECT id, ts, talk_id, label, confidence, scores_json, duration_s FROM voice_tone "
+                "WHERE astronaut_id = ? AND ts >= ? ORDER BY ts",
+                (astro_id, since),
+            ).fetchall())
+        for r in data:
+            r["scores"] = json.loads(r.pop("scores_json"))
+        return jsonify(data)
 
     # ---- Sleep Lab tab: manual sleep entry (the CYD-reported path already
     # writes indicator='sleep' readings too; this just gives the web app its
