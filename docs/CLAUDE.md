@@ -3684,11 +3684,85 @@ The setup is in `docs/face-analysis-setup.md`: MediaPipe 1.2.3, OpenCV 5.0, and 
   - The browser e2e passed 18/18, and Wanna Talk still passed 36/36.
   - **Not yet tried with the user's real webcam** (only their photo played as a fake camera).
 
+## Face ID made reliable, and Sameer's face packages (2026-11-14)
+
+User: "install the packages; Face ID isn't taking my face properly, and after saving it the
+login doesn't detect my face. Make it work perfectly."
+
+**Sameer's Face Analysis packages: installed, then removed again.**
+`pip install -r requirements-face.txt` and `download_model.py` worked (the model is in
+`models/face_analysis/`, gitignored). But on this Linux laptop, MediaPipe 1.2.3 gets
+**SIGKILLed the moment `FaceLandmarker.create_from_options()` runs**:
+- reproduced with a 15-line script, inside and outside the sandbox
+- no OOM and no systemd-oomd event
+- gdb shows the process didn't send it itself; a child process starts just before
+- `MEDIAPIPE_DISABLE_GPU=1` doesn't help
+
+The app only *imports* MediaPipe at start, but the first Face Analysis use would kill the
+**whole server**. So `mediapipe` + `opencv-contrib-python` were uninstalled again (numpy stays:
+torch needs it), and the card shows "install requirements-face.txt". **Before reinstalling,
+Sameer should run his landmarker in a subprocess or find the Linux cause.** Face ID doesn't
+use MediaPipe.
+
+**Face ID v2** (face-api.js, in the browser; the decision is still server-side):
+- **Causes:**
+  - one snapshot from a 320×240 feed with `TinyFaceDetector` defaults (misses faces in dim
+    light)
+  - one stored sample, so a single bad frame ruined every later login
+  - no feedback about why
+- **`lib/faceId.js`:**
+  - **SSD MobileNet v1** detector vendored (`public/vendor/faceapi-models/ssd_mobilenetv1_model-*`,
+    5.6 MB, same `justadudewhohacks/face-api.js` weights repo), with Tiny as a fallback;
+    min scores 0.5 / 0.45; a small detection under 0.7 counts as "no face" (a picture of
+    Earth gave a false small face)
+  - a 640×480 camera
+  - `analyzeFrame()` gives `{ok, reason}`, reason one of dark / none / many / far (face <16%
+    of the width) / turned (landmark yaw > 0.3) / moving, with `GUIDANCE` text for each
+  - `createScanner()` analyses frames back to back, each stamped `at`
+  - pure helpers: `distance`, `meanDescriptor`, `dropOutliers` (0.45 from the mean),
+    `tooSimilar` (0.06), `yawOf`
+- **`components/FaceCam.jsx`:** mirrored video plus a canvas face box (green = usable).
+- **Enrollment** (Account, `AccountDrawer.jsx`):
+  - collects **8 samples**; a near-copy is skipped at most twice in a row, so a still face
+    can't stall it
+  - drops outliers, then sends `{descriptors}`; a progress bar meanwhile
+  - gives up after **60 analysed frames**: frame counts, not seconds. A time limit failed on
+    a slow machine (software-rendered test browser, about 1.3–5 s a frame) and would on an
+    old laptop too.
+- **Sign-in** (`Login.jsx`):
+  - opening Face ID scans by itself; every 3 good frames go to `POST /auth/face_login
+    {descriptors}`
+  - "Not recognised yet" keeps going; it gives up after **40 analysed frames** with **Try
+    again**
+  - a 404 means "No Face ID set up yet"
+- **Server** (`routes.py`):
+  - `set_face_id` takes 3–20 samples, rejects a set whose samples are >0.6 from their mean
+    ("not one face"), and stores `{"v": 2, "samples", "mean"}`. The legacy `{descriptor}`
+    still works (one sample).
+  - `face_login {descriptors}`: `_match_face_frames()`. A frame's distance to a person is
+    the min over their samples and mean. A frame votes when it's ≤ **0.5** and **0.06**
+    closer than the next person; **2 votes** (or every frame if fewer were sent) sign in.
+  - The legacy `{descriptor}` keeps the old 0.6 rule. `_face_samples()` reads both formats.
+  - **Old single-sample enrollments still load, but re-enrolling is recommended.**
+- **Verified:**
+  - 354 backend tests (5 new in `tests/test_face_id.py`, synthetic descriptors) and 188
+    frontend tests (5 helper tests).
+  - Headless end-to-end with **real faces through the real models**: NASA public-domain
+    portraits as fake-camera `.y4m` videos (4:3 crop, slow zoompan drift, sensor noise).
+    8/8:
+    - Sunita Williams enrolled from her 2018 photo, Christina Koch from her EMU portrait
+    - each signed in from a **different, older photo** of themselves, to the right account
+    - a dimmed Sunita still signed in
+    - Scott Kelly refused ("Not recognised yet", gave up)
+    - a very dark feed signed nobody in
+    - Earth said "No face found"
+  - **Not yet tried with the user's own webcam:** they should re-enroll first.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 348 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 354 tests + Sameer's face module skipped without MediaPipe (7 voice tests skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 167 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
+- `cd frontend && npm test` — 188 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

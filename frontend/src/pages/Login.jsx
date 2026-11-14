@@ -4,10 +4,11 @@
 // in), with username/password and Face ID as secondary expandable options below it --
 // the mockup only ever showed a password form. The actual NFC login happens in
 // AuthProvider (any "scan" broadcast while signed out is tried as a login).
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { post } from "../lib/api.js";
-import { captureDescriptor, startCamera, stopCamera } from "../lib/faceId.js";
+import { GUIDANCE } from "../lib/faceId.js";
+import { FaceCam } from "../components/FaceCam.jsx";
 import { useMission } from "../lib/queries.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { connectionStore, loginScanModeStore, setLoginScanMode, useStore } from "../lib/socket.js";
@@ -91,27 +92,60 @@ export function Login() {
   const [pwNotice, setPwNotice] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
 
-  // face id
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
+  // face id: scans by itself -- every good frame is kept, and each 3 new ones go to the server,
+  // which votes (2 of 3 must match the same person). Gives up after FACE_MAX_FRAMES frames.
+  const FACE_MAX_FRAMES = 40; // give up after this many analysed frames (frames, not seconds: same on a slow laptop)
   const [faceNotice, setFaceNotice] = useState("");
-  const [faceBusy, setFaceBusy] = useState(false);
+  const [faceScanning, setFaceScanning] = useState(false);
+  const [faceGaveUp, setFaceGaveUp] = useState(false);
+  const face = useRef({ frames: [], sent: 0, inflight: false, seen: 0, done: false });
 
-  useEffect(() => {
-    if (method !== "face") return undefined;
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const s = await startCamera(videoRef.current);
-        if (cancelled) { stopCamera(s); return; }
-        streamRef.current = s;
-        setFaceNotice("Center your face, then capture.");
-      } catch (err) {
-        if (!cancelled) setFaceNotice(`Camera unavailable: ${err.message}`);
+  function startFaceScan() {
+    face.current = { frames: [], sent: 0, inflight: false, seen: 0, done: false };
+    setFaceGaveUp(false);
+    setFaceNotice("Loading the face model…");
+    setFaceScanning(true);
+  }
+  function onFaceCamera(r) {
+    if (r.ok) startFaceScan();
+    else setFaceNotice(`Camera unavailable: ${r.error}`);
+  }
+  async function onFaceFrame(r) {
+    const f = face.current;
+    if (f.done) return;
+    f.seen += 1;
+    if (f.seen > FACE_MAX_FRAMES && !f.inflight) {
+      f.done = true;
+      setFaceScanning(false);
+      setFaceGaveUp(true);
+      setFaceNotice("Couldn’t recognise you. Try again facing a light, or use your NFC card.");
+      return;
+    }
+    if (r.reason === "error") { setFaceNotice(`Face model error: ${r.error}`); return; }
+    if (!r.ok) { setFaceNotice(GUIDANCE[r.reason] || GUIDANCE.none); return; }
+    f.frames.push(r.descriptor);
+    if (f.inflight || f.frames.length - f.sent < 3) { setFaceNotice(GUIDANCE.ok); return; }
+    f.sent = f.frames.length;
+    f.inflight = true;
+    setFaceNotice("Checking…");
+    try {
+      const me = await post("/auth/face_login", { descriptors: f.frames.slice(-3) });
+      f.done = true;
+      setFaceScanning(false);
+      signIn(me);
+    } catch (err) {
+      if (err?.status === 404) {
+        f.done = true;
+        setFaceScanning(false);
+        setFaceGaveUp(true);
+        setFaceNotice("No Face ID is set up yet. Sign in with your card, then enroll it in Account.");
+      } else {
+        setFaceNotice("Not recognised yet: keep looking at the camera…");
       }
-    }, 320); // after the panel has expanded
-    return () => { cancelled = true; clearTimeout(t); stopCamera(streamRef.current); streamRef.current = null; };
-  }, [method]);
+    } finally {
+      f.inflight = false;
+    }
+  }
 
   async function submitPassword(e) {
     e.preventDefault();
@@ -126,26 +160,9 @@ export function Login() {
     }
   }
 
-  async function captureFace() {
-    setFaceBusy(true);
-    setFaceNotice("Loading face model…");
-    try {
-      const descriptor = await captureDescriptor(videoRef.current);
-      if (!descriptor) { setFaceNotice("No clear face found. Try again."); return; }
-      setFaceNotice("Checking…");
-      const me = await post("/auth/face_login", { descriptor });
-      stopCamera(streamRef.current);
-      streamRef.current = null;
-      signIn(me);
-    } catch {
-      setFaceNotice("Face not recognized. Try again or use another method.");
-    } finally {
-      setFaceBusy(false);
-    }
-  }
-
   const toggle = (m) => {
-    if (m === "face" && method !== "face") setFaceNotice("Starting camera…");
+    if (m === "face" && method !== "face") { setFaceNotice("Starting camera…"); setFaceGaveUp(false); }
+    if (m !== "face" || method === "face") setFaceScanning(false);
     setMethod((cur) => (cur === m ? null : m));
   };
 
@@ -289,11 +306,9 @@ export function Login() {
             open={method === "face"}
             onToggle={() => toggle("face")}
           >
-            <div className="mb-2.5 overflow-hidden rounded-xl bg-space">
-              <video ref={videoRef} muted playsInline className="block max-h-[200px] w-full -scale-x-100 object-cover" />
-            </div>
-            <button onClick={captureFace} disabled={faceBusy} className={submitCls}>Capture & sign in</button>
-            {faceNotice && <p className="mt-2.5 mb-0 text-xs text-check-fg" role="status">{faceNotice}</p>}
+            <FaceCam active={method === "face"} scanning={faceScanning} onFrame={onFaceFrame} onCamera={onFaceCamera} className="mb-2.5" />
+            {faceNotice && <p className="m-0 text-xs text-check-fg" role="status">{faceNotice}</p>}
+            {faceGaveUp && <button onClick={startFaceScan} className={cx(submitCls, "mt-2.5")}>Try again</button>}
           </AltMethod>
 
           <div className="flex items-center gap-3 border-t border-[rgba(143,166,255,.14)] pt-4">

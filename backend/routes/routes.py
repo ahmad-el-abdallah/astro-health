@@ -43,7 +43,17 @@ _TALK_ID = re.compile(r"[A-Za-z0-9_-]{1,40}")  # groups one "Wanna talk?" conver
 # ---- login: shared by the NFC/password/Face ID auth routes below ----
 
 FACE_MATCH_THRESHOLD = 0.6  # field-standard Euclidean threshold -- face-api.js's own default,
-                            # also what the Python face_recognition/dlib library uses.
+                            # also what the Python face_recognition/dlib library uses. Used for
+                            # the legacy one-snapshot login only.
+# Face ID v2 (2026-11-14): enrollment stores several samples; sign-in sends a few frames and
+# needs at least FACE_FRAMES_NEEDED of them within FACE_FRAME_THRESHOLD of the same person,
+# clearly closer than anyone else (FACE_MARGIN). Same person with face-api descriptors is
+# typically 0.3-0.5, different people above 0.6.
+FACE_FRAME_THRESHOLD = 0.5
+FACE_FRAMES_NEEDED = 2
+FACE_MARGIN = 0.06
+FACE_ENROLL_MIN, FACE_ENROLL_MAX = 3, 20
+FACE_ENROLL_SPREAD = 0.6  # every enrollment sample must be this close to their mean (one face)
 
 
 def _valid_descriptor(d):
@@ -56,6 +66,51 @@ def _valid_descriptor(d):
 
 def _face_distance(a, b):
     return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
+def _mean_descriptor(samples):
+    return [sum(s[i] for s in samples) / len(samples) for i in range(128)]
+
+
+def _face_samples(stored_json):
+    """The enrolled samples (+ their mean) from face_descriptor_json: the v2 dict, or the old
+    single 128-number list (one sample)."""
+    try:
+        data = json.loads(stored_json)
+    except (TypeError, ValueError):
+        return []
+    if isinstance(data, dict) and isinstance(data.get("samples"), list):
+        out = [s for s in data["samples"] if _valid_descriptor(s)]
+        if _valid_descriptor(data.get("mean")):
+            out.append(data["mean"])
+        return out
+    return [data] if _valid_descriptor(data) else []
+
+
+def _face_frame_distance(frame, samples):
+    return min(_face_distance(frame, s) for s in samples)
+
+
+def _match_face_frames(frames, candidates):
+    """candidates: [(astronaut_row, samples)]. Returns the matching astronaut, or None. Each
+    frame's best and second-best person are found; a frame votes for its best person when
+    that's within FACE_FRAME_THRESHOLD and FACE_MARGIN closer than anyone else; the person
+    with at least FACE_FRAMES_NEEDED votes (or every frame, if fewer were sent) wins."""
+    votes, dists = {}, {}
+    for frame in frames:
+        ranked = sorted((_face_frame_distance(frame, samples), astro["id"], astro) for astro, samples in candidates if samples)
+        if not ranked:
+            return None
+        best_d, best_id, best = ranked[0]
+        second_d = ranked[1][0] if len(ranked) > 1 else 9.0
+        if best_d <= FACE_FRAME_THRESHOLD and second_d - best_d >= FACE_MARGIN:
+            votes[best_id] = votes.get(best_id, 0) + 1
+            dists.setdefault(best_id, (best, []))[1].append(best_d)
+    need = min(FACE_FRAMES_NEEDED, len(frames))
+    winners = [(n, -min(dists[i][1]), i) for i, n in votes.items() if n >= need]
+    if not winners:
+        return None
+    return dists[max(winners)[2]][0]
 
 
 def _login_response(astro):
@@ -288,7 +343,23 @@ def create_routes(app, socketio, bridge):
 
     @bp.post("/auth/face_login")
     def face_login():
-        descriptor = (request.get_json(force=True) or {}).get("descriptor")
+        """{descriptors: [1..10 frames]} (Face ID v2: several frames, voting) or the legacy
+        {descriptor: one frame} (the old 0.6 rule)."""
+        body = request.get_json(force=True) or {}
+        frames = body.get("descriptors")
+        if frames is not None:
+            if not isinstance(frames, list) or not 1 <= len(frames) <= 10 or not all(_valid_descriptor(f) for f in frames):
+                return jsonify({"error": "invalid face descriptors"}), 400
+            with db.write_conn() as conn:
+                rows = conn.execute("SELECT * FROM astronauts WHERE face_descriptor_json IS NOT NULL").fetchall()
+            if not rows:
+                return jsonify({"error": "no Face ID enrolled yet"}), 404
+            match = _match_face_frames(frames, [(r, _face_samples(r["face_descriptor_json"])) for r in rows])
+            if match is None:
+                return jsonify({"error": "face not recognized"}), 401
+            auth.login(match["id"])
+            return jsonify(_login_response(match))
+        descriptor = body.get("descriptor")
         if not _valid_descriptor(descriptor):
             return jsonify({"error": "invalid face descriptor"}), 400
         with db.write_conn() as conn:
@@ -301,7 +372,10 @@ def create_routes(app, socketio, bridge):
         # can't just assert "I'm astronaut 3" to log in as someone else.
         best, best_dist = None, None
         for astro in candidates:
-            dist = _face_distance(descriptor, json.loads(astro["face_descriptor_json"]))
+            samples = _face_samples(astro["face_descriptor_json"])
+            if not samples:
+                continue
+            dist = _face_frame_distance(descriptor, samples)
             if best_dist is None or dist < best_dist:
                 best, best_dist = astro, dist
         if best is None or best_dist > FACE_MATCH_THRESHOLD:
@@ -380,9 +454,21 @@ def create_routes(app, socketio, bridge):
 
     @bp.post("/astronauts/<int:astro_id>/face_id")
     def set_face_id(astro_id):
-        descriptor = (request.get_json(force=True) or {}).get("descriptor")
-        if not _valid_descriptor(descriptor):
-            return jsonify({"error": "invalid face descriptor"}), 400
+        """{descriptors: [3..20 samples]} (Face ID v2) or the legacy {descriptor}. Stored as
+        {"v": 2, "samples": [...], "mean": [...]}."""
+        body = request.get_json(force=True) or {}
+        samples = body.get("descriptors")
+        if samples is None:
+            samples = [body.get("descriptor")]
+            if not _valid_descriptor(samples[0]):
+                return jsonify({"error": "invalid face descriptor"}), 400
+        elif (not isinstance(samples, list) or not FACE_ENROLL_MIN <= len(samples) <= FACE_ENROLL_MAX
+              or not all(_valid_descriptor(s) for s in samples)):
+            return jsonify({"error": f"send {FACE_ENROLL_MIN}-{FACE_ENROLL_MAX} valid face samples"}), 400
+        mean = _mean_descriptor(samples)
+        if any(_face_distance(s, mean) > FACE_ENROLL_SPREAD for s in samples):
+            return jsonify({"error": "the samples don't look like one face -- only you in front of the camera, and try again"}), 400
+        descriptor = {"v": 2, "samples": samples, "mean": mean}
         with db.write_conn() as conn:
             ok, err = _authorize_self_or_superuser(conn, astro_id)
             if not ok:
