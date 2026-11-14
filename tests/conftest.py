@@ -14,6 +14,8 @@ os.environ["ASTRO_NO_PICO"] = "1"
 # ...nor load the optional voice tone model (~1 GB RAM, seconds per test app): tests use a
 # fake predictor (test_emotion.py), and the real-model test loads it itself.
 os.environ["ASTRO_NO_EMOTION"] = "1"
+# ...nor check for the optional face analysis stack; test_face_api.py turns it on itself.
+os.environ["ASTRO_NO_FACE"] = "1"
 
 
 @pytest.fixture(autouse=True)

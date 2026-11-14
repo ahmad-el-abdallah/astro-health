@@ -22,7 +22,7 @@ from backend import db, seed
 from backend.logic import analysis, astra_memory, sensor_feed, sessions
 from backend.jobs import comms, scheduler
 from backend.routes import routes, admin_routes
-from backend.services import emotion
+from backend.services import emotion, face
 from backend import config
 from backend.config import DATA_DIR
 from backend.hardware.pico_bridge import PicoBridge
@@ -136,6 +136,7 @@ def create_app(args):
     # Optional voice tone model for "Wanna talk?": loads in the background, and is simply
     # unavailable (the API answers 503) without requirements-emotion.txt or the model files.
     emotion.start_loading()
+    face.start_checking()  # optional Face Analysis (requirements-face.txt + its model)
     admin_routes.create_admin_routes(app)
     bridge.start()
 

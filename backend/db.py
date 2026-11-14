@@ -193,6 +193,21 @@ CREATE TABLE IF NOT EXISTS voice_talks (
     kind TEXT NOT NULL DEFAULT 'talk'
 );
 CREATE INDEX IF NOT EXISTS idx_voice_talks_astro ON voice_talks(astronaut_id, ended_at);
+
+-- Face Analysis reports (backend/services/face.py): one row per finished 10-15 s webcam
+-- observation. Only the report (numbers + text) -- never images, video or landmarks.
+CREATE TABLE IF NOT EXISTS face_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    astronaut_id INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    duration_s REAL NOT NULL,
+    frames INTEGER NOT NULL,
+    usable_frames INTEGER NOT NULL,
+    quality TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    model TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_face_analyses_astro ON face_analyses(astronaut_id, ts);
 """
 
 

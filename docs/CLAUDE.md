@@ -3652,6 +3652,38 @@ page**; the CYD mood buttons and Astra's "log my mood" stay.
     doctor sees the result with no buttons. No phone overflow, no console errors.
   - **Not yet tried with a real microphone.**
 
+## Face Analysis on the Mind page (2026-11-13, branch `feature/face-analysis-setup`)
+
+The setup is in `docs/face-analysis-setup.md`: MediaPipe 1.2.3, OpenCV 5.0, and the model in
+`models/face_analysis/`. The feature is described in that file's "Phase 2" section.
+
+- **Where MediaPipe runs:** in Python on the backend, in VIDEO mode (`backend/services/face.py`,
+  one landmarker per session). The browser sends 640 px JPEG frames to localhost; each is
+  measured (`backend/logic/face_metrics.py`) and dropped. This was chosen over
+  `@mediapipe/tasks-vision` in the browser so the already verified Python stack is reused, with no
+  new download.
+- **Frontend:** `lib/faceCamera.js` opens the camera video-only and paces frames at 10 fps,
+  waiting for each answer. The card is `pages/crew/daily/mind/FaceAnalysis.jsx`.
+- **Reports are stored as numbers only** in `face_analyses`. A `face_analysis` socket event
+  refreshes the card.
+- **Thresholds come from real output** on the user's webcam (documented in `face_metrics.py`).
+  Sharpness was recalibrated for 640 px frames: a 1280 px still gives about 79, the same at 640 px
+  about 32.
+- **Skin colour is inconclusive under a colour cast,** and the user's room is very blue (b\* about
+  −30).
+- **A very dark feed gives no face at all,** so the whole-frame light (`frame_L`) is used to say
+  "too dark" instead of "no face".
+- **Test gotcha:** Chromium's built-in fake camera picture is nearly black, so for a no-face case
+  use a lit picture (the e2e script uses `earth.jpg`). Astra's wake-word mic is a separate
+  audio-only stream on the page, so a camera-release check must look only at streams that have
+  video tracks.
+- **Verified:**
+  - 28 backend face tests, with the real model and the user's photo through
+    `ASTRO_FACE_TEST_IMAGE`; 354 backend tests in total.
+  - 175 frontend tests, lint clean, build done.
+  - The browser e2e passed 18/18, and Wanna Talk still passed 36/36.
+  - **Not yet tried with the user's real webcam** (only their photo played as a fake camera).
+
 ## Testing
 
 - `.venv/bin/python -m pytest` — 348 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,

@@ -14,6 +14,7 @@ import { countTones, latestTalk, pct, talkMix, TONE_DISCLAIMER, TONE_LABELS, TON
 import { useAstra } from "../../../components/AstraProvider.jsx";
 import { LatestConversationAnalysis } from "./mind/ConversationAnalysis.jsx";
 import { DailyMoodCheck } from "./mind/DailyMoodCheck.jsx";
+import { FaceAnalysis } from "./mind/FaceAnalysis.jsx";
 import { Button, Card, CardTitle, StatusChip, TrendLabel, cx } from "../../../components/ui/index.jsx";
 import { Icon } from "../../../components/ui/Icon.jsx";
 import { EASE_ENTER } from "../../../components/ui/motion.js";
@@ -263,7 +264,7 @@ function VoiceTone({ astroId }) {
 }
 
 export default function Mind() {
-  const { id } = useAstronautPicker();
+  const { id, locked } = useAstronautPicker(); // locked = a crew member viewing themself
   const history = useHistory(id, "mood", 7);
   const mission = useMission();
   const rows = history.data || [];
@@ -281,6 +282,7 @@ export default function Mind() {
         <VoiceTone astroId={id} />
       </div>
       <LatestConversationAnalysis astroId={id} />
+      <FaceAnalysis astroId={id} own={!!locked} />
       <div className="flex flex-wrap gap-5">
         <Breathing />
         <Journal astroId={id} />
