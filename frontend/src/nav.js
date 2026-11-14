@@ -42,6 +42,7 @@ export const DOCTOR_NAV = [
     items: [
       { to: "/doctor", label: "Crew overview", icon: "crew", end: true },
       { to: "/doctor/alerts", label: "Alerts", title: "Alerts & notifications", icon: "alert", showsAlerts: true },
+      { to: "/doctor/records", label: "Records", title: "Crew records", icon: "download" },
     ],
   },
   {

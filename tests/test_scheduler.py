@@ -89,3 +89,18 @@ def test_slightly_early_still_counts(clock):
         _log(conn, "readings", astro_id, at("18:30"), "mood")
         plan = scheduler.day_plan(conn, astro_id, now=at("18:40"))
     assert statuses(plan)["19:00"] == "done"
+
+
+def test_early_vitals_and_mood_checks_count_but_an_early_workout_does_not(clock):
+    """The first vitals check and the (only) mood check of the day count from 00:00 (an early
+    Assess, wearable test or daily mood check); other kinds keep the 1-hour-early limit."""
+    astro_id, at = clock
+    with db.write_conn() as conn:
+        _log(conn, "assessments", astro_id, at("02:00"))
+        _log(conn, "readings", astro_id, at("02:00"), "mood")
+        _log(conn, "readings", astro_id, at("02:00"), "exercise")
+        plan = scheduler.day_plan(conn, astro_id, now=at("02:30"))
+    st = statuses(plan)
+    assert st["07:00"] == "done"      # vitals
+    assert st["19:00"] == "done"      # the daily mood check
+    assert st["08:00"] == "upcoming"  # a 02:00 workout isn't the 08:00 block

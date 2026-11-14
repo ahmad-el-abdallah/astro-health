@@ -13,9 +13,9 @@ import { post } from "./api.js";
 const talks = new Map(); // talkId -> { astroId, pending: Set<Promise>, sent, analysed, skipped, failed, closing }
 
 /** Open a conversation on the server. Resolves to its id, or null (analysis unavailable). */
-export async function openTalk(astroId) {
+export async function openTalk(astroId, kind = "talk") {
   try {
-    const t = await post(`/astronauts/${astroId}/voice-talks`, {});
+    const t = await post(`/astronauts/${astroId}/voice-talks`, { kind });
     talks.set(t.talk_id, { astroId, pending: new Set(), sent: 0, analysed: 0, skipped: 0, failed: 0, closing: null });
     return t.talk_id;
   } catch (err) {

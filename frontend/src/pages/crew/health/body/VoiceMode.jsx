@@ -47,10 +47,13 @@ const WORD = { listening: "Listening…", thinking: "Thinking…", speaking: "Sp
 //                            tone estimate (lib/toneCapture.js). Off for every other call.
 //                            Nothing is shown during the call, and Astra's AI is never told.
 //   emergency / onCancelEmergency -- the "calling for help in 5…" countdown
+//   checkMode             -- the daily mood check (lib/moodCheck.js): only the header differs;
+//                            AstraProvider passes a submit() that collects the answers and asks
+//                            the next question instead of calling the chat AI.
 export function VoiceMode({
   onClose, astroId, submit, thinking, initialQuestion = "", pending, onConfirm, onCancelPending, onNavigate, onInterrupted,
   opening = null, announcement = null, activity = null, onActivityDone, emergency = null, onCancelEmergency, content,
-  talkMode = false, toneAvailable = false, toneCapture: toneMode = false, talkId = "",
+  talkMode = false, toneAvailable = false, toneCapture: toneMode = false, talkId = "", checkMode = false,
 }) {
   const [micOn, setMicOn] = useState(true);
   const [captions, setCaptions] = useState(false);
@@ -351,7 +354,7 @@ export function VoiceMode({
           <SpaceBackdrop />
           <div className="flex w-full max-w-3xl items-center justify-between">
             <div>
-              <div className="ah-eyebrow">{talkMode ? "Wanna talk? · Astra" : "Astra · voice"}</div>
+              <div className="ah-eyebrow">{checkMode ? "Daily mood check · Astra" : talkMode ? "Wanna talk? · Astra" : "Astra · voice"}</div>
               <div className="text-label text-muted">
                 {talkMode ? (toneAvailable ? "Voice tone is estimated on this laptop, recordings aren’t kept" : "Voice tone estimates aren’t set up on this laptop") : <>{settings.engine === "neural" ? "Neural voice" : "Browser voice"}{settings.engine === "neural" && settings.echo !== "off" ? ` · ${settings.echo} echo` : ""}{settings.beeps ? " · comms beeps" : ""}</>}
               </div>

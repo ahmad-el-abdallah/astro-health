@@ -100,3 +100,7 @@ def symptoms():
 
 def ai_analyst():
     return _load("ai_analyst")
+
+
+def mood_questions():
+    return _load("mood_questions")

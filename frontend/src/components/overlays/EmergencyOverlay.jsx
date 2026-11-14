@@ -1,12 +1,26 @@
 // Full-screen emergency mode. Driven only by the "emergency" broadcast, so it appears on
 // every open browser -- signed in or not (SOS never requires a login).
+// The alarm sound (public/sounds/emergency-alarm.wav) loops while the screen is up -- only for
+// the signed-in flight surgeon (and so are its mute/unmute buttons). Crew and the login
+// screen see the same emergency screen in silence.
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { post } from "../../lib/api.js";
 import { emergencyStore, useStore } from "../../lib/socket.js";
+import { alarmStore, setAlarmMuted, startAlarm, stopAlarm, unlockAlarm } from "../../lib/alarm.js";
 import { Icon } from "../ui/Icon.jsx";
+import { useAuth } from "../../auth/AuthProvider.jsx";
 
 export function EmergencyOverlay() {
   const { active, text } = useStore(emergencyStore);
+  const { muted, blocked } = useStore(alarmStore);
+  const { isSurgeon } = useAuth();
+  const sound = active && isSurgeon;
+  useEffect(() => {
+    if (!sound) return undefined;
+    startAlarm();
+    return () => stopAlarm();
+  }, [sound]);
   return (
     <AnimatePresence>
       {active && (
@@ -41,8 +55,22 @@ export function EmergencyOverlay() {
               <li>Follow the crew emergency checklist.</li>
               <li>Wait for instructions from the flight surgeon.</li>
             </ul>
+            {isSurgeon && blocked && !muted && (
+              <button onClick={unlockAlarm} className="mb-3 cursor-pointer rounded-lg border border-alert-border px-3 py-1.5 text-sm text-alert-fg hover:brightness-110">
+                🔊 Tap to turn on the alarm sound
+              </button>
+            )}
+            {isSurgeon && <div className="mb-5 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => setAlarmMuted(!muted)}
+                aria-pressed={muted}
+                className="min-h-9 cursor-pointer rounded-lg border border-alert-border px-3 text-sm font-semibold text-alert-fg hover:brightness-110"
+              >
+                {muted ? "🔇 Unmute" : "🔊 Mute"}
+              </button>
+            </div>}
             <button
-              onClick={() => post("/emergency", { action: "cancel" })}
+              onClick={() => { stopAlarm(); post("/emergency", { action: "cancel" }); }}
               className="min-h-12 cursor-pointer rounded-xl bg-alert-action px-6 font-bold text-bg hover:brightness-110"
             >
               Cancel emergency

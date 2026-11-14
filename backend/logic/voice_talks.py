@@ -40,12 +40,15 @@ def new_talk_id():
     return "talk-" + uuid.uuid4().hex  # 37 chars, fits the voice-tone route's talk id pattern
 
 
-def create(conn, astronaut_id):
+KINDS = ("talk", "mood_check")  # "Wanna talk?" / the daily mood check (backend/logic/mood_check.py)
+
+
+def create(conn, astronaut_id, kind="talk"):
     talk_id = new_talk_id()
     now = _now().isoformat()
     conn.execute(
-        "INSERT INTO voice_talks (id, astronaut_id, started_at, updated_at, status) VALUES (?, ?, ?, ?, 'active')",
-        (talk_id, astronaut_id, now, now),
+        "INSERT INTO voice_talks (id, astronaut_id, started_at, updated_at, status, kind) VALUES (?, ?, ?, ?, 'active', ?)",
+        (talk_id, astronaut_id, now, now, kind if kind in KINDS else "talk"),
     )
     return get(conn, talk_id)
 
@@ -164,7 +167,7 @@ def latest(conn, astronaut_id):
     Mind page shows. A call still in progress isn't "the latest conversation analysis" yet."""
     finalize_stale(conn, astronaut_id)
     row = conn.execute(
-        "SELECT * FROM voice_talks WHERE astronaut_id = ? AND status != 'active' "
+        "SELECT * FROM voice_talks WHERE astronaut_id = ? AND status != 'active' AND kind = 'talk' "
         "ORDER BY COALESCE(ended_at, started_at) DESC, started_at DESC LIMIT 1",
         (astronaut_id,),
     ).fetchone()

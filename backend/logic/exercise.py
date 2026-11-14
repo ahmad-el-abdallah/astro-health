@@ -105,3 +105,21 @@ def chat_lines(conn, astro_id):
     if o["running"]:
         lines.append(f"Exercise running now: {o['running']['name']}.")
     return lines
+
+
+def reset_today(conn, astro_id, ex_id):
+    """Clear today's logged sessions of one exercise (the card's Reset button). Returns how
+    many sessions were removed. Other days and other exercises are untouched."""
+    cfg = load_exercises()
+    today = datetime.now().astimezone().date()
+    since = datetime.combine(today, datetime.min.time()).astimezone().astimezone(timezone.utc).isoformat()
+    rows = conn.execute(
+        "SELECT id, started_at, ended_at, data_json FROM activities WHERE astronaut_id = ? AND kind = 'exercise' AND started_at >= ?",
+        (astro_id, since),
+    ).fetchall()
+    gone = [r["id"] for r in rows
+            if exercise_of(conn, json.loads(r["data_json"] or "{}").get("tag"), cfg) == ex_id
+            and datetime.fromisoformat(r["ended_at"] or r["started_at"]).astimezone().date() == today]
+    for i in gone:
+        conn.execute("DELETE FROM activities WHERE id = ?", (i,))
+    return len(gone)

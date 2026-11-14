@@ -165,7 +165,8 @@ function ClockCard({ clock, entries }) {
 
 function UpNext({ clock, entries, canAct }) {
   const navigate = useNavigate();
-  const next = entries.find((e) => e.seconds > clock.daySec) || entries[0];
+  // the next task still to do (one done early -- e.g. a finished wearable test -- is skipped)
+  const next = entries.find((e) => e.seconds > clock.daySec && e.status !== "done") || entries[0];
   const delta = next.seconds > clock.daySec ? next.seconds - clock.daySec : DAY - clock.daySec + next.seconds;
   const tomorrow = next.seconds <= clock.daySec;
   const howto = HOWTO[next.kind] || {};

@@ -1,11 +1,12 @@
-// The login page's backdrop: a looping space video (Earth turning on the right), with a
-// dark gradient from the left so the sign-in card stays readable over it.
+// The login page's backdrop: the user's "Cinematic Space Background" clip, looping -- a
+// slow drift through a nebula to Earth's sunrise edge -- with a soft dark fade from the
+// left so the sign-in card stays readable over it. (Before 2026-11-13 it was 3wrf's 4K
+// clip of Earth turning; before that a hand-built animated scene -- both in git history.)
 //
-// Replaced the hand-built animated scene (nebulas, star layers, SVG Earth) that used to
-// live here -- that version is in git history if it's ever wanted back.
-//
-// The video file (public/media/login-bg.mp4) is the user's 4K clip re-encoded to 1080p,
-// no audio track, ~1.8 MB, "faststart" so it plays before it has fully downloaded.
+// public/media/login-bg.mp4 is the 4K, 20 s original re-encoded to 1080p, no audio, CRF 26,
+// "faststart" so it plays before it has fully downloaded (~2.6 MB, from 16.8 MB):
+//   ffmpeg -i "Cinematic Space Background.mp4" -an -vf "scale=1920:1080:flags=lanczos,format=yuv420p" \
+//          -c:v libx264 -preset slow -crf 26 -movflags +faststart login-bg.mp4
 // login-bg.jpg is its first frame: shown while the video loads, and used on its own for
 // anyone with "reduce motion" switched on in their system settings.
 //
@@ -37,7 +38,7 @@ function LoginSceneImpl() {
           disablePictureInPicture
         />
       )}
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,8,15,.82)_0%,rgba(5,8,15,.45)_45%,rgba(5,8,15,0)_70%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,8,15,.7)_0%,rgba(5,8,15,.3)_40%,rgba(5,8,15,0)_62%)]" />
       <div className="absolute inset-x-0 bottom-0 h-1/3 bg-[linear-gradient(0deg,rgba(5,8,15,.6),transparent)]" />
     </div>
   );

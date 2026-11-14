@@ -13,6 +13,7 @@ import { Avatar, Button, cx } from "../ui/index.jsx";
 import { Icon } from "../ui/Icon.jsx";
 import { Modal } from "../overlays/Drawer.jsx";
 import { useToast } from "../overlays/Toasts.jsx";
+import { Link } from "react-router";
 
 function CrewRow({ person }) {
   const qc = useQueryClient();
@@ -37,13 +38,13 @@ function CrewRow({ person }) {
       <Avatar name={name} color={person.color} size={38} />
       <input className="ah-input min-h-10 min-w-0 flex-1" value={name} onChange={(e) => setDraft(e.target.value)} aria-label={`Name for ${person.name}`} maxLength={60} />
       <Button type="submit" variant={changed ? "primary" : "secondary"} disabled={!changed} className="min-h-10 px-3.5 text-label">Save</Button>
-      <a
-        href={`/api/export/${person.id}.csv`}
+      <Link
+        to={`/doctor/records?astronauts=${person.id}&range=30`}
         className="flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-label font-semibold text-accent-text hover:bg-control"
-        title={`Download ${person.name}'s readings as CSV`}
+        title={`${person.name}'s records (last 30 days), exportable to Excel`}
       >
-        <Icon name="download" size={15} /> CSV
-      </a>
+        <Icon name="download" size={15} /> Records
+      </Link>
     </form>
   );
 }

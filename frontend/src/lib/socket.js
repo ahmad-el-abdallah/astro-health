@@ -65,6 +65,27 @@ export const connectionStore = createStore(socket.connected ? "online" : "connec
 export const serialStatusStore = createStore("connecting");
 export const serialLogStore = createStore([]);
 export const emergencyStore = createStore({ active: false, text: "" });
+// The live wearable (backend/logic/sensor_feed.py): one "sensor" event a second per
+// astronaut whose monitor is on. Kept per astronaut: the latest numbers plus the last
+// ~6 s of ECG for the moving trace. Not TanStack Query -- it's a 1 Hz stream.
+export const sensorStore = createStore({});
+const ECG_KEEP = 600; // samples (6 s at 100 Hz)
+socket.on("sensor", (d) => {
+  if (!d?.astronaut_id) return;
+  sensorStore.set((all) => {
+    const prev = all[d.astronaut_id];
+    const ecg = [...(prev?.ecg || []), ...(d.ecg || [])].slice(-ECG_KEEP);
+    return { ...all, [d.astronaut_id]: { ...d, ecg, at: Date.now() } };
+  });
+});
+// The last finished test's result per astronaut (it finishes by itself at the end of the
+// recording, so the result has to come over the socket, not only from the Finish button).
+export const sensorResultStore = createStore({});
+socket.on("sensor_changed", (d) => {
+  if (!d) return;
+  if (!d.on) sensorStore.set((all) => { const next = { ...all }; delete next[d.astronaut_id]; return next; });
+  sensorResultStore.set((all) => ({ ...all, [d.astronaut_id]: d.finished ? d.result : null }));
+});
 
 // The login page's own choice (docs/CLAUDE.md "web-only login"): does tapping a card
 // also sign in the physical CYD, or just this browser? Persisted per-browser so it
@@ -117,6 +138,8 @@ export const EVENT_INVALIDATIONS = {
   unknown_tag: [["admin-unknown"]],
   astra_memory: [["memory"]],
   location_changed: [["location"], ["summary"], ["crew"]],
+  sensor_changed: [["summary"], ["crew"], ["history"], ["schedule"]],
+  mood_check: [["mood-check"], ["history"], ["summary"], ["schedule"]],
   astra_followup: [["memory"]],
   voice_tone: [["voice-tone"], ["voice-talk-latest"]],
   voice_talk: [["voice-talk-latest"], ["voice-tone"]],

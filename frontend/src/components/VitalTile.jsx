@@ -8,7 +8,7 @@ import { rise } from "./ui/motion.js";
 
 export const TILE_ICON = {
   heart_rate: "heart", blood_pressure: "blood-pressure", blood_sugar: "blood-sugar", temperature: "temperature",
-  oxygen_saturation: "lungs", sleep: "sleep", mood: "mood", reaction_time: "mind", exercise: "sun", water: "blood-sugar",
+  oxygen_saturation: "lungs", respiration_rate: "lungs", stress: "mind", sleep: "sleep", mood: "mood", reaction_time: "mind", exercise: "sun", water: "blood-sugar",
   suit_co2: "lungs", suit_pressure: "temperature", suit_o2: "lungs",
 };
 

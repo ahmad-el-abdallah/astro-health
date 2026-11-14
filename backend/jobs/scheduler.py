@@ -20,6 +20,11 @@ from backend.config import routine as load_routine, TIME_SCALE
 SECONDS_PER_DAY = 86400
 # Doing a task up to one mission hour before its slot still counts for it.
 EARLY_S = 3600
+# Kinds whose FIRST slot of the day counts from the start of the mission day, not just
+# EARLY_S before it: a vitals check (Assess, or a finished wearable test) or the daily mood
+# check (backend/logic/mood_check.py) done early in the day still counts. Not sleep or
+# exercise -- a sleep at 01:00 is last night's, not tonight's bedtime.
+OPEN_FROM_DAY_START = {"vitals", "mood"}
 # A task still not done this long (mission time) after its slot is "missed".
 MISSED_AFTER_S = 3 * 3600
 
@@ -102,6 +107,8 @@ def day_plan(conn, astronaut_id, now=None):
         prev = max((t for t in same_kind if t < target), default=None)
         nxt = min((t for t in same_kind if t > target), default=None)
         start = max(0, target - EARLY_S, prev if prev is not None else 0)
+        if prev is None and entry["kind"] in OPEN_FROM_DAY_START:
+            start = 0
         end = nxt if nxt is not None else SECONDS_PER_DAY
 
         done_ts = None

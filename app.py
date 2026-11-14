@@ -19,7 +19,7 @@ from flask import Flask, jsonify, send_from_directory
 from flask_socketio import SocketIO
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, sessions
+from backend.logic import analysis, astra_memory, sensor_feed, sessions
 from backend.jobs import comms, scheduler
 from backend.routes import routes, admin_routes
 from backend.services import emotion, face, pose
@@ -131,6 +131,8 @@ def create_app(args):
     bridge = choose_bridge(args, on_message, on_status, on_send)
     handle_cyd_message = routes.create_routes(app, socketio, bridge)
     analysis.start_worker()  # runs queued AI health analyses one at a time
+    # The live wearable test: replays a real recorded crew session, then saves its results.
+    sensor_feed.start_worker(socketio.emit, lambda astro_id: analysis.request(astro_id, "wearable", delay=0))
     # Optional voice tone model for "Wanna talk?": loads in the background, and is simply
     # unavailable (the API answers 503) without requirements-emotion.txt or the model files.
     emotion.start_loading()

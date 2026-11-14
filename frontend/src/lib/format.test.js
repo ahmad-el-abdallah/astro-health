@@ -61,3 +61,11 @@ describe("levels", () => {
     ]);
   });
 });
+
+describe("wearable indicators", () => {
+  it("knows the live monitor's breathing and stress readings", async () => {
+    const { INDICATORS } = await import("./format.js");
+    expect(INDICATORS.respiration_rate).toEqual({ label: "Breathing rate", unit: "/min" });
+    expect(INDICATORS.stress.unit).toBe("/100");
+  });
+});

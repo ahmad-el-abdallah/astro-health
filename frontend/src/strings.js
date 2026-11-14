@@ -1,7 +1,7 @@
 // All shared UI copy in one place (ported from static/js/core/strings.js; build-prompt
 // section 13 -- "text in one place" so another language can be added later).
 export const STRINGS = {
-  appName: "Astro Health Station",
+  appName: "Astra",
   footerDisclaimer: "Demo with placeholder data. Not medical advice.",
   tapYourCard: "Tap your card on the CYD",
   levelWord: { GREEN: "Good", YELLOW: "Check", RED: "Alert", GRAY: "No data" },

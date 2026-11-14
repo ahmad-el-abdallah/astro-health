@@ -1032,3 +1032,19 @@ def test_exercise_page_workouts_run_in_real_time(client):
     client.post("/api/astronauts/1/exercise/start", json={"exercise": "stretch"})
     assert client.get("/api/astronauts/1/exercise").get_json()["running"]["time_scale"] == 1
     assert client.post("/api/astronauts/1/exercise/stop").get_json()["minutes"] == 1
+
+
+def test_exercise_reset_clears_only_that_exercise_today(client):
+    login_as(client, AHMAD_UID)
+    for ex in ("cevis", "stretch"):
+        client.post("/api/astronauts/1/exercise/start", json={"exercise": ex})
+        client.post("/api/astronauts/1/exercise/stop")
+    done = {e["id"]: e["done_min"] for e in client.get("/api/astronauts/1/exercise").get_json()["exercises"]}
+    assert done["cevis"] >= 1 and done["stretch"] >= 1
+    res = client.post("/api/astronauts/1/exercise/reset", json={"exercise": "cevis"})
+    assert res.status_code == 200 and res.get_json()["removed"] >= 1
+    done = {e["id"]: e["done_min"] for e in client.get("/api/astronauts/1/exercise").get_json()["exercises"]}
+    assert done["cevis"] == 0 and done["stretch"] >= 1
+    assert client.post("/api/astronauts/1/exercise/reset", json={"exercise": "nope"}).status_code == 400
+    login_as(client, SAMEER_UID)
+    assert client.post("/api/astronauts/1/exercise/reset", json={"exercise": "stretch"}).status_code == 403

@@ -189,7 +189,8 @@ CREATE TABLE IF NOT EXISTS voice_talks (
     phrases_skipped INTEGER NOT NULL DEFAULT 0,
     phrases_failed INTEGER NOT NULL DEFAULT 0,
     result_json TEXT,
-    finish_reason TEXT
+    finish_reason TEXT,
+    kind TEXT NOT NULL DEFAULT 'talk'
 );
 CREATE INDEX IF NOT EXISTS idx_voice_talks_astro ON voice_talks(astronaut_id, ended_at);
 
@@ -245,6 +246,10 @@ def _migrate_schema(conn):
     for col, decl in (("username", "TEXT"), ("password_hash", "TEXT"), ("face_descriptor_json", "TEXT")):
         if col not in cols:
             conn.execute(f"ALTER TABLE astronauts ADD COLUMN {col} {decl}")
+    # voice_talks.kind (2026-11-14): "talk" = Wanna talk?, "mood_check" = the daily mood check
+    talk_cols = {r["name"] for r in conn.execute("PRAGMA table_info(voice_talks)")}
+    if talk_cols and "kind" not in talk_cols:
+        conn.execute("ALTER TABLE voice_talks ADD COLUMN kind TEXT NOT NULL DEFAULT 'talk'")
 
 
 def init_db():

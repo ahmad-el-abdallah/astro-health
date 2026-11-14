@@ -23,6 +23,7 @@ import { useToast } from "../../components/overlays/Toasts.jsx";
 import LogoCrew from "../../assets/brand/logo-mark-crew.svg?react";
 import { audioCtx, playNeural, quindar } from "../../lib/stationAudio.js";
 import { pickVoice } from "../../lib/useVoice.js";
+import { RecordsBrowser } from "../../components/records/RecordsBrowser.jsx";
 
 const KINDS = [
   ["astronaut", "Crew member card"], ["surgeon", "Flight Surgeon card"], ["exercise", "Exercise equipment"],
@@ -608,6 +609,7 @@ function Console({ username }) {
             <VoiceSettings />
           </div>
         </div>
+        <RecordsBrowser title="Crew records" />
       </div>
     </div>
   );

@@ -1,12 +1,13 @@
 // Account & Security: the signed-in astronaut's own sign-in methods (NFC card on file,
 // username/password, Face ID enroll/clear). Port of static/js/core/account.js; a
 // superuser can do the same resets from /admin via the same backend routes.
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { del, get, post } from "../../lib/api.js";
-import { captureDescriptor, startCamera, stopCamera } from "../../lib/faceId.js";
+import { dropOutliers, GUIDANCE, tooSimilar } from "../../lib/faceId.js";
+import { FaceCam } from "../FaceCam.jsx";
 import { useAuth } from "../../auth/AuthProvider.jsx";
-import { Button, Field } from "../ui/index.jsx";
+import { Button, Field, Progress } from "../ui/index.jsx";
 import { Drawer } from "./Drawer.jsx";
 import { ROOM_ORDER, ROOMS, roomStore } from "../../lib/hearing.js";
 
@@ -92,7 +93,6 @@ export function AccountDrawer({ open, onClose }) {
   const [password, setPassword] = useState("");
   const [pwNotice, setPwNotice] = useState("");
   const [faceNotice, setFaceNotice] = useState("");
-  const [busy, setBusy] = useState(false);
   const [liteGlass, setLiteGlass] = useState(() => document.documentElement.dataset.glass === "lite");
   function toggleGlass() {
     const next = !liteGlass;
@@ -101,23 +101,61 @@ export function AccountDrawer({ open, onClose }) {
     else delete document.documentElement.dataset.glass;
     try { localStorage.setItem("ah-glass", next ? "lite" : "full"); } catch { /* not remembered */ }
   }
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
+  // Face ID enrollment (lib/faceId.js v2): the camera runs while the drawer is open; "Enroll"
+  // keeps ENROLL_SAMPLES good, slightly different frames (live guidance meanwhile), drops any
+  // odd one out, then saves them all (the server stores samples + their mean).
+  const ENROLL_SAMPLES = 8;
+  const ENROLL_MAX_FRAMES = 60; // give up after this many analysed frames (frames, not seconds: same on a slow laptop)
+  const [camOn, setCamOn] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
+  const [samples, setSamples] = useState(0);
+  const enroll = useRef({ kept: [], frames: 0, saving: false });
 
-  // Camera runs only while the drawer is open.
-  useEffect(() => {
-    if (!open) return undefined;
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const s = await startCamera(videoRef.current);
-        if (cancelled) stopCamera(s); else streamRef.current = s;
-      } catch (err) {
-        if (!cancelled) setFaceNotice(`Camera unavailable: ${err.message}`);
-      }
-    }, 350);
-    return () => { cancelled = true; clearTimeout(t); stopCamera(streamRef.current); streamRef.current = null; };
-  }, [open]);
+  function startEnroll() {
+    enroll.current = { kept: [], frames: 0, saving: false };
+    setSamples(0);
+    setFaceNotice("Loading the face model…");
+    setEnrolling(true);
+  }
+  async function onEnrollFrame(r) {
+    const e = enroll.current;
+    if (e.saving) return;
+    e.frames += 1;
+    if (e.frames > ENROLL_MAX_FRAMES) {
+      setEnrolling(false);
+      setFaceNotice("Couldn’t get enough clear pictures. Face a light, come a little closer, and try again.");
+      return;
+    }
+    if (r.reason === "error") { setFaceNotice(`Face model error: ${r.error}`); return; }
+    if (!r.ok) { setFaceNotice(GUIDANCE[r.reason] || GUIDANCE.none); return; }
+    // Variety helps, but a very still face must never stall enrollment: skip a near-copy at most twice in a row.
+    if (tooSimilar(r.descriptor, e.kept) && (e.skipped || 0) < 2) {
+      e.skipped = (e.skipped || 0) + 1;
+      setFaceNotice("Good, now move your head very slightly…");
+      return;
+    }
+    e.skipped = 0;
+    e.kept.push(r.descriptor);
+    if (e.kept.length < ENROLL_SAMPLES) {
+      setSamples(e.kept.length);
+      setFaceNotice(`${GUIDANCE.ok} ${e.kept.length}/${ENROLL_SAMPLES}`);
+      return;
+    }
+    const clean = dropOutliers(e.kept);
+    if (clean.length < ENROLL_SAMPLES - 2) { e.kept = clean; setSamples(clean.length); return; } // keep collecting
+    e.saving = true;
+    setSamples(ENROLL_SAMPLES);
+    setFaceNotice("Saving…");
+    try {
+      await post(`/astronauts/${id}/face_id`, { descriptors: clean });
+      setFaceNotice("Face ID is set up. You can now sign in by looking at the camera.");
+      refresh();
+    } catch (err) {
+      setFaceNotice(err?.body?.error ? `Couldn't save: ${err.body.error}` : "Couldn't save Face ID. Try again.");
+    } finally {
+      setEnrolling(false);
+    }
+  }
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["account", id] });
 
@@ -131,22 +169,6 @@ export function AccountDrawer({ open, onClose }) {
       refresh();
     } catch {
       setPwNotice("Couldn't save -- check the username isn't taken and the password is long enough.");
-    }
-  }
-
-  async function enrollFace() {
-    setBusy(true);
-    setFaceNotice("Loading face model…");
-    try {
-      const descriptor = await captureDescriptor(videoRef.current);
-      if (!descriptor) { setFaceNotice("No clear face found -- center your face and try again."); return; }
-      await post(`/astronauts/${id}/face_id`, { descriptor });
-      setFaceNotice("Face ID enrolled.");
-      refresh();
-    } catch {
-      setFaceNotice("Couldn't enroll -- try again.");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -207,14 +229,21 @@ export function AccountDrawer({ open, onClose }) {
 
         <div className="space-y-3">
           <h3 className="m-0 text-body font-semibold">Face ID</h3>
-          <div className="overflow-hidden rounded-xl bg-space">
-            <video ref={videoRef} muted playsInline className="block max-h-56 w-full -scale-x-100 object-cover" />
-          </div>
+          <FaceCam
+            active={open}
+            scanning={enrolling}
+            onFrame={onEnrollFrame}
+            onCamera={(r) => { setCamOn(r.ok); if (!r.ok) setFaceNotice(`Camera unavailable: ${r.error}`); }}
+          />
+          {enrolling && <Progress value={samples / ENROLL_SAMPLES} />}
           <div className="flex gap-2">
-            <Button variant="primary" className="flex-1" onClick={enrollFace} busy={busy}>Enroll Face ID</Button>
-            <Button className="flex-1" onClick={clearFace}>Clear Face ID</Button>
+            <Button variant="primary" className="flex-1" onClick={startEnroll} busy={enrolling} disabled={!camOn}>
+              {info.has_face_id ? "Enroll again" : "Enroll Face ID"}
+            </Button>
+            <Button className="flex-1" onClick={clearFace} disabled={enrolling}>Clear Face ID</Button>
           </div>
           {faceNotice && <p className="m-0 text-xs text-check-fg" role="status">{faceNotice}</p>}
+          <p className="m-0 text-caption text-muted">Look straight at the camera with your face well lit; it takes a few seconds.</p>
         </div>
       </div>
     </Drawer>
