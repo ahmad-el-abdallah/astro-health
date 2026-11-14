@@ -20,7 +20,7 @@ from backend.config import ai_analyst as load_analyst_cfg, content as load_conte
 from backend.config import TIME_SCALE
 from backend.hardware import protocol
 from backend.jobs import comms, scheduler
-from backend.logic import exercise, health_rules, location, sensor_feed, sessions
+from backend.logic import eva_history, exercise, health_rules, location, sensor_feed, sessions
 from backend.services import analyst
 
 DEBOUNCE_S = 5          # wait for a burst of changes to settle
@@ -230,6 +230,17 @@ def build_context(conn, astro_id, profile=None, for_chat=False):
                      f"({location.mission_minutes(eva_since)} mission minutes). The suit readings (suit_co2, suit_pressure, "
                      "suit_o2) are life-critical: any RED suit reading means immediate danger -- set alert_surgeon to true "
                      "and tell them to head back to the airlock. A YELLOW suit reading needs close watching.")
+        try:  # real spacewalk history (NASA EVA log): how long this one is, real past suit problems like today's
+            bad = []
+            for r in conn.execute(
+                "SELECT indicator, level FROM readings WHERE astronaut_id = ? AND ts >= ? AND indicator LIKE 'suit_%' ORDER BY ts DESC",
+                (astro_id, eva_since),
+            ):
+                if r["indicator"] not in [b for b, _ in bad]:
+                    bad.append((r["indicator"], r["level"]))
+            lines.append(eva_history.context_line(location.mission_minutes(eva_since), [i for i, lv in bad if lv in ("YELLOW", "RED")]))
+        except Exception:  # the history is context only: never break an analysis over it
+            pass
     else:
         lines.append("Location: inside the station.")
     wearable = sensor_feed.context_line(astro_id)

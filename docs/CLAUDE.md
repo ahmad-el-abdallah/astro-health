@@ -3833,9 +3833,46 @@ wearable, daily check-ins, health events, and private notes.
     - crew get 403
     - no sideways scroll at phone width
 
+## Real spacewalk history from NASA's EVA log (2026-11-14)
+
+The user supplied `eva_cleaned.csv`, a team-cleaned copy of NASA's "Extra-vehicular Activity
+(EVA) - US and Russia" log from data.nasa.gov. It's kept as `backend/eva/nasa_eva.csv`
+(committed) and covers 375 spacewalks from 1965 to 2013: 368 completed, 6 cancelled, USA 236,
+Russia 139.
+
+It has **no suit sensor values**, so the EVA suit readings stay simulated, with PLACEHOLDER
+limits.
+
+- **`backend/logic/eva_history.py`** works from these real figures:
+  - Lengths: typical 6.01 h, 90% ended by 7.35 h, record 8.93 h (Voss & Helms, 2001).
+  - Averages per decade.
+  - `compare(hours)` gives the share of completed spacewalks that were shorter.
+  - `INCIDENT_PICKS` holds 14 real suit problems from the notes: CO2, pressure or leaks,
+    oxygen, and cooling or water in the helmet (Parmitano, 2013). They were picked by hand
+    because keyword matching also caught station hardware such as the "O2 generator".
+  - `CREW_FIXES` fixes one typo in the source file for display only; the CSV stays as NASA
+    published it.
+- **Route:** `GET /api/eva-history` is open (static data, like `/content`).
+- **AI:** during an EVA, `analysis.build_context` adds a line comparing this EVA with the real
+  ones, plus a real past incident matching any amber or red suit reading.
+- **Frontend:** `components/EvaHistoryCard.jsx` appears only while on EVA, on the crew Overview
+  and the doctor's CrewProfile.
+  - It shows the live length ("This spacewalk: 7 h 37 min") as a bar marked with the typical
+    length, the 90% mark and the record.
+  - When a suit reading isn't green, it lists "Real spacewalks that had this problem".
+  - It credits the source and says the suit readings are simulated.
+- **Fixed along the way:** `CardTitle` now wraps its right-side buttons below the title on
+  narrow screens. Before this, the EVA "Simulate suit problem" buttons made the phone page
+  426 px wide.
+- **Verified:**
+  - 5 new backend tests (`tests/test_eva_history.py`); 366 backend tests in total.
+  - Headless check on an isolated copy: the card shows, a 7.6 h EVA with red CO2 and amber
+    pressure lists the matching real incidents, there's no phone overflow, and there are no
+    errors.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 361 tests + Sameer's face module skipped without MediaPipe (7 voice tests skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 366 tests + Sameer's face module skipped without MediaPipe (7 voice tests skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, crew records + Excel export, scheduler, SPA serving, CYD logout, bridge auto-detect).
 - `cd frontend && npm test` — 193 Vitest tests (crew records filters, voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.

@@ -28,13 +28,13 @@ export function Card({ as = "section", className = "", hover = false, children, 
 
 export function CardTitle({ eyebrow, title, subtitle, right, className = "" }) {
   return (
-    <div className={cx("mb-4 flex items-start justify-between gap-3", className)}>
-      <div className="min-w-0">
+    <div className={cx("mb-4 flex flex-wrap items-start justify-between gap-3", className)}>
+      <div className="min-w-0 flex-[1_1_14rem]">
         {eyebrow && <div className="ah-eyebrow mb-1">{eyebrow}</div>}
         {title && <h2 className="m-0 text-title font-semibold text-ink">{title}</h2>}
         {subtitle && <p className="m-0 mt-1 text-label text-muted">{subtitle}</p>}
       </div>
-      {right && <div className="shrink-0 self-center">{right}</div>}
+      {right && <div className="max-w-full shrink-0 self-center">{right}</div>}
     </div>
   );
 }

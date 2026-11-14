@@ -13,7 +13,7 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, exercise, location, mood_check, records, sensor_feed, sessions, health_rules, symptoms, voice_talks
+from backend.logic import analysis, astra_memory, eva_history, exercise, location, mood_check, records, sensor_feed, sessions, health_rules, symptoms, voice_talks
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
@@ -728,6 +728,11 @@ def create_routes(app, socketio, bridge):
             loc = location.get(conn, astro_id)
         return jsonify({**loc, "mission_min": location.mission_minutes(loc["since"]) if loc["location"] == "eva" else 0,
                         "time_scale": TIME_SCALE})
+
+    # Real spacewalk history (NASA EVA log, backend/logic/eva_history.py): static, open like /content.
+    @bp.get("/eva-history")
+    def get_eva_history():
+        return jsonify(eva_history.payload())
 
     @bp.put("/astronauts/<int:astro_id>/location")
     def put_location(astro_id):

@@ -25,6 +25,7 @@ import { useAuth } from "../../auth/AuthProvider.jsx";
 import { STRINGS } from "../../strings.js";
 import { AiAnalysisCard } from "../../components/AiAnalysisCard.jsx";
 import { LiveSensorCard } from "../../components/LiveSensorCard.jsx";
+import { EvaHistoryCard } from "../../components/EvaHistoryCard.jsx";
 import { useToday } from "../../lib/useToday.js";
 
 const MAIN_TILES = ["heart_rate", "blood_pressure", "blood_sugar", "temperature", "oxygen_saturation", "sleep", "mood"];
@@ -489,6 +490,8 @@ export default function Overview() {
           {[...(eva ? SUIT_INDICATORS : []), ...MAIN_TILES, ...extras].map((k) => <VitalTile key={k} indicator={k} reading={today[k]} />)}
         </div>
       </motion.section>
+
+      {eva && <EvaHistoryCard astroId={id} summary={s} />}
 
       <Row>
         <TrendSection astroId={id} />
