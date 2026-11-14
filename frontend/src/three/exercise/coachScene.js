@@ -89,6 +89,24 @@ function makeRig(root) {
   };
 }
 
+// Point an arm along `dir`; the shoulder (collarbone) takes a share of the lift so the
+// suit's shoulder doesn't crush. elbowDir (optional) bends the forearm.
+function aimArm(rig, side, dir, foreDir, share = 0.3) {
+  const sh = rig.pos(side + "Arm").sub(rig.pos(side + "Shoulder")).normalize();
+  const up = Math.max(0, dir.clone().normalize().y + 0.2);                  // more shrug the higher the arm
+  rig.aim(side + "Shoulder", sh.lerp(dir.clone().normalize(), share * up).normalize());
+  rig.aim(side + "Arm", dir);
+  if (foreDir) rig.aim(side + "ForeArm", foreDir);
+}
+
+// IK an arm to a hand target, letting the shoulder share the lift first.
+function reachArm(rig, side, hand, pole, share = 0.3) {
+  const dir = hand.clone().sub(rig.pos(side + "Arm"));
+  const sh = rig.pos(side + "Arm").sub(rig.pos(side + "Shoulder")).normalize();
+  rig.aim(side + "Shoulder", sh.lerp(dir.normalize(), share * Math.max(0, dir.y + 0.2)).normalize());
+  reach(rig, side + "Arm", side + "ForeArm", hand, rig.len.upper, rig.len.fore, pole);
+}
+
 // Two-bone IK: from joint A (hip/shoulder) reach target T with lengths l1, l2; the middle
 // joint bends toward `pole`. Returns the middle joint's world position.
 function ik(A, T, l1, l2, pole) {
@@ -132,15 +150,6 @@ function segDist(p, a, b) {
   const ab = b.clone().sub(a), t = clamp(p.clone().sub(a).dot(ab) / Math.max(1e-6, ab.lengthSq()), 0, 1);
   return p.distanceTo(a.clone().addScaledVector(ab, t));
 }
-function candidates(v, part) {
-  const side = v.x >= 0 ? "Left" : "Right", ax = Math.abs(v.x);
-  if (part === "hand") return [[side + "ForeArm"], [side + "Hand"]];                                 // gloves: always the hand
-  if (v.y > 1.45 && ax < 0.2) return [["Head", 1]];                                                  // helmet: rigid
-  if (ax > 0.25 && v.y > 0.84 && v.y < 1.46) return [[side + "Shoulder"], [side + "Arm"], [side + "ForeArm"], [side + "Hand"]];
-  if (ax > 0.19 && v.y > 1.24) return [["Spine2"], ["Neck"], [side + "Shoulder"], [side + "Arm"]];
-  if (v.y < 0.76) return [[side + "UpLeg"], [side + "Leg"], [side + "Foot"], [side + "ToeBase"]].concat(v.y > 0.62 ? [["Hips"]] : []);
-  return [["Hips"], ["Spine"], ["Spine1"], ["Spine2"], ["Neck"]].concat(v.y < 0.95 ? [[side + "UpLeg"]] : []);
-}
 // The model's materials are glass-like (transmission), which draws black here: rebuild them.
 function suitMaterial(m) {
   const c = m.color.clone(), hex = c.getHexString();
@@ -168,6 +177,22 @@ function buildAstronaut(gltf) {
   const list = Object.keys(JOINTS), index = Object.fromEntries(list.map((n, i) => [n, i]));
   const skeleton = new THREE.Skeleton(list.map((n) => bones[n]));
   const seg = (n) => [world[n], world[CHAIN[n]] || world[n]];
+  // Which bones may move each vertex. Arm bones only take vertices that are really on the
+  // sleeve (close to the arm's axis), so the back, chest and shoulder blades never tear.
+  const armDist = (v, side) => Math.min(...["Arm", "ForeArm", "Hand"].map((b) => segDist(v, ...seg(side + b))));
+  function candidates(v, part) {
+    const side = v.x >= 0 ? "Left" : "Right", ax = Math.abs(v.x);
+    if (part === "hand") return [[side + "ForeArm"], [side + "Hand"]];                           // gloves
+    if (v.y > 1.5 && ax < 0.2) return [["Head", 1]];                                                // helmet: rigid
+    if (v.y > 1.43 && ax < 0.2) return [["Neck"], ["Head"], ["Spine2"]];                            // collar
+    const dArm = armDist(v, side);
+    if (ax > 0.2 && v.y > 0.84 && dArm < 0.12) {
+      const nearShoulder = v.distanceTo(world[side + "Arm"]) < 0.14;
+      return nearShoulder ? (ax > 0.25 ? [[side + "Shoulder"], [side + "Arm"]] : [[side + "Shoulder"], [side + "Arm"], ["Spine2"]]) : [[side + "Arm"], [side + "ForeArm"], [side + "Hand"]];
+    }
+    if (v.y < 0.76) return [[side + "UpLeg"], [side + "Leg"], [side + "Foot"], [side + "ToeBase"]].concat(v.y > 0.62 ? [["Hips"]] : []);
+    return [["Hips"], ["Spine"], ["Spine1"], ["Spine2"], ["Neck"]].concat(v.y < 0.95 ? [[side + "UpLeg"]] : []).concat(v.y > 1.28 && ax > 0.12 ? [[side + "Shoulder"]] : []);
+  }
   const meshes = [];
   src.traverse((o) => {
     if (!o.isMesh) return;
@@ -185,7 +210,7 @@ function buildAstronaut(gltf) {
       v.fromBufferAttribute(pos, i);
       const cands = candidates(v, part).map(([b, fixed]) => {
         if (fixed) return [b, 1];
-        const [a, c] = seg(b); const d = Math.max(0.01, segDist(v, a, c)); return [b, 1 / Math.pow(d, 5)];
+        const [a, c] = seg(b); const d = Math.max(0.012, segDist(v, a, c)); return [b, 1 / Math.pow(d, 4)];
       }).sort((x, y) => y[1] - x[1]).slice(0, 4);
       const tot = cands.reduce((s2, c) => s2 + c[1], 0);
       cands.forEach(([b, w], j) => { si[i * 4 + j] = index[b]; sw[i * 4 + j] = w / tot; });
@@ -193,7 +218,6 @@ function buildAstronaut(gltf) {
     geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4));
     geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(sw, 4));
     geo.setAttribute("aFocus", new THREE.BufferAttribute(new Float32Array(n), 1));
-    geo.computeVertexNormals();
     const mat = suitMaterial(o.material);
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, focusUniforms);
@@ -237,13 +261,24 @@ function follow(rig, src, ch, spread = 0.32) {
     sb.getWorldPosition(a); sc.getWorldPosition(b);
     const dir = b.sub(a);
     if (/Arm$/.test(n)) {
+      // keep the arms in a natural swing beside the body: no forearm across the chest
       const s = n.startsWith("Left") ? 1 : -1, cq = ch.getWorldQuaternion(new THREE.Quaternion());
-      const side = V(s, 0, 0).applyQuaternion(cq), fwd = V(0, 0, 1).applyQuaternion(cq);
-      dir.normalize();
-      if (n.endsWith("ForeArm")) { dir.addScaledVector(side, spread * 0.9); if (dir.dot(fwd) < 0.2) dir.addScaledVector(fwd, 0.25); }
-      else dir.addScaledVector(side, spread);
+      const local = dir.normalize().applyQuaternion(cq.clone().invert());
+      if (n.endsWith("ForeArm")) {
+        local.x = s * Math.max(s * local.x, spread * 0.6);           // never inward past the body
+        local.z = Math.max(local.z, 0.15);                           // forearms point forward-ish
+        local.y = Math.min(local.y, 0.15);
+      } else {
+        local.lerp(V(0, -1, 0), 0.35);                               // calmer upper-arm swing
+        local.x = s * Math.max(s * local.x, spread);
+      }
+      dir.copy(local.normalize().applyQuaternion(cq));
     }
     rig.aim(n, dir);
+  });
+  ["Left", "Right"].forEach((side) => {                              // relaxed hands in line with the forearm
+    const f = rig.pos(side + "Hand").sub(rig.pos(side + "ForeArm"));
+    rig.aim(side + "Hand", f.add(V(0, -0.3, 0).applyQuaternion(ch.getWorldQuaternion(new THREE.Quaternion()))));
   });
 }
 
@@ -327,19 +362,46 @@ const EXERCISES = {
     const bungees = [liveRod(0.011, MAT.cord()), liveRod(0.011, MAT.cord())]; bungees.forEach((b) => g.add(b));
     const anchors = [V(-0.62, 0.25, -0.12), V(0.62, 0.25, -0.12)];
     ch.position.set(0, 0.155, 0.05);
-    motion.actions.run.reset().setEffectiveTimeScale(0.8).play();
-    const tmp = new THREE.Vector3();
+    const tmp = new THREE.Vector3(), q = new THREE.Quaternion(), deckY = 0.155;
+    const ankleRest = rig.pos("LeftFoot").y - ch.position.y;
     return {
       focus: ["LeftUpLeg", "RightUpLeg", "LeftLeg", "RightLeg"],
+      // A hand-made running cycle (~150 steps/min, slowed a little to follow): legs stride and
+      // fold in the swing, arms swing opposite with bent elbows, body bobs and leans forward.
       update(t, dt) {
-        belt.offset.y -= dt * 1.7;
-        motion.mixer.update(dt);
-        motion.rig.bones.Hips.position.x = 0; motion.rig.bones.Hips.position.z = 0;
-        follow(rig, motion.rig, ch, 0.22);
+        belt.offset.y -= dt * 1.6;
+        const w = t * 2 * Math.PI * 1.15;
+        rig.reset();
+        group.getWorldQuaternion(q); const W = (v) => v.clone().applyQuaternion(q);
+        const lean = 0.14, twist = Math.sin(w) * 0.12;
+        rig.bones.Hips.rotateY(-twist * 0.6);
+        rig.aim("Spine", W(V(0, Math.cos(lean), Math.sin(lean)))); rig.bones.Spine.rotateY(twist * 0.5);
+        rig.aim("Spine1", W(V(0, Math.cos(lean), Math.sin(lean)))); rig.aim("Spine2", W(V(0, Math.cos(lean * 0.8), Math.sin(lean * 0.8))));
+        rig.bones.Spine2.rotateY(twist * 0.6); rig.bones.Spine2.updateMatrixWorld(true);
+        rig.aim("Neck", W(V(0, 1, 0.05))); rig.aim("Head", W(V(0, 1, 0.1)));
+        ["Left", "Right"].forEach((side, i) => {
+          const s = i ? -1 : 1, ph = w + i * Math.PI;
+          const hip = 0.12 + 0.5 * Math.sin(ph);                            // thigh forward (+) / back (-)
+          const swing = Math.max(0, Math.cos(ph - 0.5));                    // leg coming forward: knee folds
+          const knee = 0.12 + 1.35 * Math.pow(swing, 2.2);
+          rig.aim(side + "UpLeg", W(V(s * 0.04, -Math.cos(hip), Math.sin(hip))));
+          rig.aim(side + "Leg", W(V(s * 0.02, -Math.cos(hip - knee), Math.sin(hip - knee))));
+          const toe = 0.15 + 0.5 * swing;                                    // toes point down in the swing
+          rig.aim(side + "Foot", W(V(0, -0.2 - toe, 1)));
+          // arms: opposite to the same-side leg, elbows bent ~80 degrees
+          const arm = -0.55 * Math.sin(ph);
+          const upper = W(V(s * 0.28, -Math.cos(arm), Math.sin(arm)));
+          const fore = W(V(s * 0.12, -Math.cos(arm + 1.4), Math.sin(arm + 1.4)));
+          aimArm(rig, side, upper, fore, 0.12);
+          rig.aim(side + "Hand", fore.clone().add(W(V(-s * 0.1, -0.2, 0))));
+        });
+        // keep the lower foot on the belt (the body rises and falls naturally with the stride)
         group.updateMatrixWorld(true);
+        const lowest = Math.min(group.worldToLocal(rig.pos("LeftFoot")).y, group.worldToLocal(rig.pos("RightFoot")).y);
+        ch.position.y += deckY + ankleRest - lowest; ch.updateMatrixWorld(true);
         bungees.forEach((b, i) => { harness.clips[i].getWorldPosition(tmp); group.worldToLocal(tmp); setRod(b, anchors[i], tmp); });
       },
-      cleanup() { motion.mixer.stopAllAction(); rig.bones.Hips.remove(harness.group); },
+      cleanup() { rig.bones.Hips.remove(harness.group); },
     };
   },
 
@@ -398,7 +460,7 @@ const EXERCISES = {
           reach(rig, side + "UpLeg", side + "Leg", ankle, rig.len.thigh, rig.len.shin, W(V(s * 0.2, 0.35, 1)));
           rig.aim(side + "Foot", W(V(0, -0.4 - 0.2 * Math.max(0, -Math.sin(ang)), 1)));
           const hand = group.localToWorld(V(s * 0.3, barH, barZ - 0.02));
-          reach(rig, side + "Arm", side + "ForeArm", hand, rig.len.upper, rig.len.fore, W(V(s * 1, -0.6, -0.2)));
+          reachArm(rig, side, hand, W(V(s * 1, -0.7, -0.2)), 0.25);
           rig.aim(side + "Hand", W(V(s * 0.2, -0.1, 1)));
         });
         group.updateMatrixWorld(true);
@@ -460,12 +522,12 @@ const EXERCISES = {
         // bar across the upper back, below the helmet; hands wide on the bar
         const sp2 = group.worldToLocal(rig.pos("Spine2")), nk = group.worldToLocal(rig.pos("Neck"));
         const up = nk.clone().sub(sp2).normalize(), backDir = V(0, up.z, -up.y).normalize();
-        const barC = sp2.clone().lerp(nk, 0.75).addScaledVector(backDir, 0.14); barC.x = 0;
+        const barC = sp2.clone().lerp(nk, 0.95).addScaledVector(backDir, 0.1).addScaledVector(up, 0.02); barC.x = 0;
         bar.position.copy(barC); pad.position.copy(barC);
         ["Left", "Right"].forEach((side, i) => {
-          const s = i ? -1 : 1, hand = group.localToWorld(barC.clone().add(V(s * 0.4, 0, 0)));
-          reach(rig, side + "Arm", side + "ForeArm", hand, rig.len.upper, rig.len.fore, W(V(s * 0.5, -1, -0.5)));
-          rig.aim(side + "Hand", W(V(s, 0.1, 0)));
+          const s = i ? -1 : 1, hand = group.localToWorld(barC.clone().add(V(s * 0.48, 0.02, 0.02)));
+          reachArm(rig, side, hand, W(V(s * 0.8, -1, -0.1)), 0.35);
+          rig.aim(side + "Hand", W(V(s * 0.2, 0.3, -1)));
         });
         levers.forEach((l, i) => { const s = i ? 1 : -1; setRod(l, V(s * 0.56, pivot.y, pivot.z), V(s * 0.56, barC.y, barC.z)); });
         const ang = Math.atan2(barC.y - pivot.y, barC.z - pivot.z);
@@ -487,7 +549,7 @@ const EXERCISES = {
       { lean: 0, side: 0, twist: 0, fwd: 0, out: 0, up: 1 },      // reach up
       { lean: 0, side: 0.32, twist: 0, fwd: 0, out: 0, up: 1 },   // side bend left
       { lean: 0, side: -0.32, twist: 0, fwd: 0, out: 0, up: 1 },  // side bend right
-      { lean: 0, side: 0, twist: 0.55, fwd: 0, out: 1, up: 0 },   // trunk twist, arms out
+      { lean: 0, side: 0, twist: 0.55, fwd: 1, out: 0, up: 0 },   // trunk twist, arms forward
       { lean: 1.05, side: 0, twist: 0, fwd: 0.4, out: 0, up: 0 }, // forward fold
       { lean: 0, side: 0, twist: 0, fwd: 0, out: 0, up: 0 },
     ];
@@ -517,8 +579,8 @@ const EXERCISES = {
           rig.aim(side + "Foot", W(V(s * 0.1, -0.35, 1)));
           const rest = 1 - Math.min(1, p.fwd + p.out + p.up);
           const dir = T(V(s * 0.3, -1, 0.15)).multiplyScalar(rest)
-            .addScaledVector(T(V(s * 0.1, 0.05, 1)), p.fwd).addScaledVector(T(V(s, 0.08, 0.05)), p.out).addScaledVector(T(V(s * 0.38, 1, 0.05)), p.up).normalize();
-          rig.aim(side + "Arm", dir); rig.aim(side + "ForeArm", dir);
+            .addScaledVector(T(V(s * 0.1, 0.05, 1)), p.fwd).addScaledVector(T(V(s, 0.08, 0.05)), p.out).addScaledVector(T(V(s * 0.22, 0.5, 0.8)), p.up).normalize();
+          aimArm(rig, side, dir, dir, 0.45);
         });
         group.updateMatrixWorld(true);
         const feet = rig.pos("LeftFoot").add(rig.pos("RightFoot")).multiplyScalar(0.5); group.worldToLocal(feet);
@@ -712,6 +774,7 @@ export function mountCoach(canvas, overlay, { onStep } = {}) {
     setExercise(id) { id = id || null; if (id === exId) return; exId = id; apply(id); },
     setPlaying(p) { playing = p; },
     restart() { t = 0; },
+    setTime(v) { t = v; },          // jump the demo to a moment (used by tests)
     dispose() {
       cancelAnimationFrame(raf); raf = 0; applyToken++; ro.disconnect(); clearExercise(); loader.remove();
       env.dispose(); pmrem.dispose(); renderer.dispose(); draco.dispose();

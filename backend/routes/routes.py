@@ -1026,6 +1026,23 @@ def create_routes(app, socketio, bridge):
                 return jsonify({"error": "no workout is running"}), 409
             return jsonify({"ok": True, **sessions.stop_toggle(conn, key, send_fn, emit_fn)})
 
+    @bp.post("/astronauts/<int:astro_id>/exercise/reset")
+    def exercise_reset(astro_id):
+        """Reset one exercise's progress for today (its card's Reset button)."""
+        body = request.get_json(force=True) or {}
+        ex = exercise.find(body.get("exercise"))
+        if not ex:
+            return jsonify({"error": "unknown exercise"}), 400
+        with db.write_conn() as conn:
+            err = _self_only(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            if exercise.running(conn, astro_id, load_exercises()) and exercise.running(conn, astro_id, load_exercises())["id"] == ex["id"]:
+                return jsonify({"error": "stop the workout before resetting it"}), 409
+            removed = exercise.reset_today(conn, astro_id, ex["id"])
+        emit_fn("cyd_event", {"type": "exercise_reset", "astronaut_id": astro_id})
+        return jsonify({"ok": True, "removed": removed})
+
     @bp.post("/astronauts/<int:astro_id>/reaction")
     def web_reaction(astro_id):
         """The reaction test on Astra's voice screen: same reading the CYD's test saves."""
