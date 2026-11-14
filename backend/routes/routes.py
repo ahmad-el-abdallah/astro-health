@@ -13,11 +13,11 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, exercise, location, mood_check, sensor_feed, sessions, health_rules, symptoms, voice_talks
+from backend.logic import analysis, astra_memory, exercise, location, mood_check, records, sensor_feed, sessions, health_rules, symptoms, voice_talks
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
-from backend.services import analyst, emotion, face, voice
+from backend.services import analyst, emotion, excel_export, face, voice
 from backend import voice_settings
 from backend.config import (
     content as load_content, missions as load_missions,
@@ -1852,6 +1852,60 @@ def create_routes(app, socketio, bridge):
     def health_rules_config():
         from backend.config import health_rules as load_health_rules
         return jsonify(load_health_rules())
+
+    # ---- crew records (backend/logic/records.py): the flight surgeon or a superuser ----
+    def _records_access(conn):
+        """A superuser, or a signed-in flight surgeon. (None, None) when allowed, else an error."""
+        su, _ = admin_auth.authorize_superuser(conn)
+        if su is not None:
+            return None
+        _, err = auth.authorize_surgeon(conn)
+        return err
+
+    RECORDS_PAGE_ROWS = 500
+
+    @bp.get("/records")
+    def get_records():
+        """The Records page: the daily summary + each section's rows (the newest
+        RECORDS_PAGE_ROWS) with totals. Same filters as the Excel export."""
+        f = records.parse_filters(request.args)
+        with db.write_conn() as conn:
+            err = _records_access(conn)
+            if err:
+                return jsonify(err[0]), err[1]
+            crew = [{"id": r["id"], "name": r["name"], "role": r["role"]}
+                    for r in conn.execute("SELECT id, name, role FROM astronauts ORDER BY id")]
+            sections = records.collect(conn, f)
+            daily = records.daily_summary(conn, f)
+
+        def jsonable(row):
+            return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in row.items() if k != "astronaut_id"}
+        out = []
+        for sid, title, cat, columns in records.SECTIONS:
+            if sid not in sections:
+                continue
+            rows = sections[sid]
+            out.append({"id": sid, "title": title, "category": cat, "total": len(rows),
+                        "columns": [{"key": k, "label": label, "kind": kind} for k, label, kind in columns],
+                        "rows": [jsonable(r) for r in reversed(rows[-RECORDS_PAGE_ROWS:])]})
+        return jsonify({"filters": f.public(), "crew": crew,
+                        "daily": {"columns": [{"key": k, "label": label, "kind": kind} for k, label, kind in records.DAILY_COLUMNS],
+                                  "rows": [jsonable(r) for r in daily]},
+                        "sections": out})
+
+    @bp.get("/records/export.xlsx")
+    def export_records():
+        f = records.parse_filters(request.args)
+        with db.write_conn() as conn:
+            err = _records_access(conn)
+            if err:
+                return jsonify(err[0]), err[1]
+            names = list(records._astronauts(conn, f).values())
+            sections = records.collect(conn, f)
+            daily = records.daily_summary(conn, f)
+        data = excel_export.build(f, names, sections, daily)
+        return Response(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f"attachment; filename={excel_export.filename(f)}"})
 
     # ---- export ----
     @bp.get("/export/<int:astro_id>.csv")

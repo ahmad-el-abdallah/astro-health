@@ -148,7 +148,8 @@ def finish(astro_id, feed, now):
             )
         overall = health_rules.overall_level([d["level"] for d in details.values()])
         flagged = [k.replace("_", " ") for k, d in details.items() if d["level"] == overall]
-        note = f"{overall}: wearable {seg['label'].lower()} test" + (f" ({', '.join(flagged)})" if overall != "GREEN" else "")
+        test = seg["label"].lower() if seg["label"].lower().endswith("test") else f"{seg['label'].lower()} test"
+        note = f"{overall}: wearable {test}" + (f" ({', '.join(flagged)})" if overall != "GREEN" else "")
         details["wearable_test"] = {"value": {"test": seg["id"], "label": seg["label"], **res}, "level": overall}
         conn.execute(
             "INSERT INTO assessments (astronaut_id, ts, overall_level, note, details_json) VALUES (?, ?, ?, ?, ?)",

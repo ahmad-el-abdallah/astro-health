@@ -124,9 +124,9 @@ function Header({ person, summary, mission, onJump }) {
             <Icon name={icon} size={15} /> {label}
           </button>
         ))}
-        <a href={`/api/export/${person.id}.csv`} className="ml-auto flex min-h-10 items-center gap-2 rounded-[var(--radius-inner)] bg-raised px-3.5 text-label font-semibold text-ink-2 hover:bg-control hover:text-ink">
-          <Icon name="send" size={15} /> Send to Earth (CSV)
-        </a>
+        <button onClick={() => open(`/doctor/records?astronauts=${person.id}&range=30`)} className="ml-auto flex min-h-10 cursor-pointer items-center gap-2 rounded-[var(--radius-inner)] bg-raised px-3.5 text-label font-semibold text-ink-2 hover:bg-control hover:text-ink">
+          <Icon name="download" size={15} /> Records &amp; Excel export
+        </button>
       </div>
     </Card>
   );

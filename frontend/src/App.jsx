@@ -27,6 +27,7 @@ const Exercise = lazy(() => import("./pages/crew/daily/Exercise.jsx"));
 const CrewOverview = lazy(() => import("./pages/doctor/CrewOverview.jsx"));
 const Alerts = lazy(() => import("./pages/doctor/Alerts.jsx"));
 const CrewProfile = lazy(() => import("./pages/doctor/CrewProfile.jsx"));
+const Records = lazy(() => import("./pages/doctor/Records.jsx"));
 const Admin = lazy(() => import("./pages/admin/Admin.jsx"));
 const StatusBoard = lazy(() => import("./pages/StatusBoard.jsx"));
 
@@ -80,6 +81,7 @@ function Gate() {
         <Route path="doctor" element={<DoctorOnly><CrewOverview /></DoctorOnly>} />
         <Route path="doctor/alerts" element={<DoctorOnly><Alerts /></DoctorOnly>} />
         <Route path="doctor/crew/:id" element={<DoctorOnly><CrewProfile /></DoctorOnly>} />
+        <Route path="doctor/records" element={<DoctorOnly><Records /></DoctorOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

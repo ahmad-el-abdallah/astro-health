@@ -3758,11 +3758,86 @@ use MediaPipe.
     - Earth said "No face found"
   - **Not yet tried with the user's own webcam:** they should re-enroll first.
 
+## Crew records: filter every astronaut's daily data and export a real Excel file (2026-11-14)
+
+User: "the astronauts' daily data saved, filter it as a surgeon or admin, export an Excel
+(.xlsx) file, make it specific". Decided with the user: the data stays in SQLite (it already
+was), and the Excel file is **built on demand**. It includes **all four categories**: vitals and
+wearable, daily check-ins, health events, and private notes.
+
+- **`backend/logic/records.py`** is the one query layer behind both the page and the file.
+  - `parse_filters()` reads the request.
+    - `astronauts` defaults to every crew member except the flight surgeon.
+    - `from`/`to` default to the last 7 days. Reversed dates are swapped; the maximum is 366
+      days.
+    - `tz` is the browser's minutes east of UTC, so "a day" means the viewer's local day.
+    - `categories` and `level` (any, YELLOW or RED).
+    - `q` is a text search.
+  - `readable()` turns stored values into readable cells, with no JSON in any cell: BP
+    "120/80", sleep "7 h 30 m", mood "Low", reaction "300 ms, 1 lapses".
+  - `SECTIONS` has 15 sections:
+    - vitals
+    - mood checks (the AI daily check: mood, judged by, summary, emotions, voice, answers 1–3),
+      other mood logs
+    - sleep, exercise (readings plus activities), other activities
+    - symptoms
+    - pain (level taken from intensity: 7+ red, 4+ amber)
+    - assessments, alerts (seen yes/no), AI analyses
+    - journal, voice tone (labelled "Mood check" or "Wanna talk?"), face analysis
+  - `daily_summary()` makes one row per astronaut per local day:
+    - HR avg/min/max, last BP, max temperature, min SpO2, average sugar
+    - breathing, stress, sleep hours, mood ("(AI check)" when it came from the daily check),
+      exercise minutes
+    - symptoms, worst pain, alert count, the AI's last state
+    - the worst level of the day
+- **`backend/services/excel_export.py`** uses **XlsxWriter** (new in `requirements.txt`;
+  write-only and pure Python).
+  - Sheets, in order:
+    - **Summary**: the filters used, the crew, row counts per sheet, and the disclaimer
+    - **Daily**
+    - one sheet per section
+  - Every data sheet has a coloured, frozen header row and an autofilter.
+  - Times are real Excel date-times and numbers are real numbers.
+  - Level cells are coloured Good/Check/Alert, and long text wraps.
+  - The file is named `crew-records_<from>_<to>.xlsx`.
+- **Routes:**
+  - `GET /api/records` returns JSON: the daily summary, plus the newest 500 rows of each
+    section with its total.
+  - `GET /api/records/export.xlsx` returns the file, with the same filters.
+  - Both are open to the **flight surgeon or a superuser** (`_records_access`). A crew member
+    gets 403; with nobody logged in, 401.
+  - The old per-astronaut CSV route still exists, but nothing links to it any more.
+- **Frontend** (`components/records/RecordsBrowser.jsx`, with the URL logic in
+  `lib/records.js`):
+  - The filter bar has crew chips, date presets or custom dates, category chips, the level
+    filter and search. Every filter lives in the URL, so a view can be reloaded or shared.
+  - Below it are the Daily summary table and a tab per section with its count.
+  - **Export to Excel** downloads exactly the filtered view.
+  - It appears in three places:
+    - the doctor sidebar's **Records** item (`/doctor/records`, Monitor group)
+    - a "Crew records" card on `/admin`
+    - the doctor's per-astronaut "Records" links (CrewProfile and DoctorTools), which open it
+      filtered to that person for the last 30 days
+- Small fix made along the way: the wearable test's saved note no longer reads "…test test".
+- **Verified:**
+  - 7 new backend tests (`tests/test_records.py`) cover filters, tz day ranges, readable
+    values, access, sections and filters, the daily maths, and the xlsx zip itself (sheet
+    names, autofilter, frozen header, a real date serial). 361 passed in total.
+  - 5 new frontend tests, 193 in total. Lint is clean and dist is rebuilt.
+  - Checked on an isolated copy with seeded data for 2 astronauts across several days:
+    - filters work, including from the URL
+    - the download works
+    - the xlsx opened with openpyxl shows all 16 sheets, frozen A2, autofilters, datetime
+      cells and coloured level cells
+    - the admin card works
+    - crew get 403
+    - no sideways scroll at phone width
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 354 tests + Sameer's face module skipped without MediaPipe (7 voice tests skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
-  login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 188 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
+- `.venv/bin/python -m pytest` — 361 tests + Sameer's face module skipped without MediaPipe (7 voice tests skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+  login/access control, crew records + Excel export, scheduler, SPA serving, CYD logout, bridge auto-detect).
+- `cd frontend && npm test` — 193 Vitest tests (crew records filters, voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).
