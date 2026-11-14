@@ -144,4 +144,5 @@ export const EVENT_INVALIDATIONS = {
   voice_tone: [["voice-tone"], ["voice-talk-latest"]],
   voice_talk: [["voice-talk-latest"], ["voice-tone"]],
   face_analysis: [["face-latest"]],
+  pose_analysis: [["pose-latest"]],
 };

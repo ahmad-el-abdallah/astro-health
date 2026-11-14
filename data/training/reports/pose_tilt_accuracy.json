@@ -1,0 +1,40 @@
+{
+  "what": "shoulder tilt error (deg), MediaPipe lite vs COCO keypoints, val+test images with shoulders and hips labelled and both shoulders accepted by the app's gate",
+  "by_frontalness": {
+    "frontal (ratio >= 0.6)": {
+      "n": 84,
+      "median_deg": 3.46,
+      "p75_deg": 7.51,
+      "p90_deg": 15.02,
+      "share_within_2deg": 0.298,
+      "share_within_5deg": 0.607
+    },
+    "angled (ratio < 0.6)": {
+      "n": 75,
+      "median_deg": 6.23,
+      "p75_deg": 13.94,
+      "p90_deg": 31.77,
+      "share_within_2deg": 0.187,
+      "share_within_5deg": 0.413
+    }
+  },
+  "by_mediapipe_visibility": {
+    "both shoulders vis >= 0.9": {
+      "n": 155,
+      "median_deg": 4.66,
+      "p75_deg": 8.8,
+      "p90_deg": 22.36,
+      "share_within_2deg": 0.245,
+      "share_within_5deg": 0.516
+    },
+    "vis 0.5-0.9": {
+      "n": 4,
+      "median_deg": 5.39,
+      "p75_deg": 10.05,
+      "p90_deg": 14.98,
+      "share_within_2deg": 0.25,
+      "share_within_5deg": 0.5
+    }
+  },
+  "app_level_threshold_deg": 2.0
+}

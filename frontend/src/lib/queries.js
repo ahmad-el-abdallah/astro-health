@@ -69,6 +69,13 @@ export const useFaceStatus = () =>
 export const useLatestFace = (id) =>
   useQuery({ queryKey: ["face-latest", id], queryFn: () => get(`/astronauts/${id}/face/latest`), enabled: !!id, retry: noRetryOn404,
     refetchInterval: (q) => (q.state.error?.status === 404 ? 5000 : false) });
+// Pose Analysis (Mind page): same pattern as Face Analysis, its own routes and report.
+export const usePoseStatus = () =>
+  useQuery({ queryKey: ["pose-status"], queryFn: () => get("/pose/status"), retry: noRetryOn404,
+    refetchInterval: (q) => (q.state.data?.state === "loading" || q.state.data?.state === "idle" || q.state.error ? (q.state.error ? 5000 : 3000) : false) });
+export const useLatestPose = (id) =>
+  useQuery({ queryKey: ["pose-latest", id], queryFn: () => get(`/astronauts/${id}/pose/latest`), enabled: !!id, retry: noRetryOn404,
+    refetchInterval: (q) => (q.state.error?.status === 404 ? 5000 : false) });
 export const useLatestVoiceTalk = (id) =>
   useQuery({ queryKey: ["voice-talk-latest", id], queryFn: () => get(`/astronauts/${id}/voice-talks/latest`), enabled: !!id,
     refetchInterval: (q) => (q.state.data?.talk?.status === "analysing" ? 2000 : false) });

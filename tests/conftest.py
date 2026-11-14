@@ -16,6 +16,8 @@ os.environ["ASTRO_NO_PICO"] = "1"
 os.environ["ASTRO_NO_EMOTION"] = "1"
 # ...nor check for the optional face analysis stack; test_face_api.py turns it on itself.
 os.environ["ASTRO_NO_FACE"] = "1"
+# ...nor for the optional pose analysis stack; test_pose_analysis.py turns it on itself.
+os.environ["ASTRO_NO_POSE"] = "1"
 
 
 @pytest.fixture(autouse=True)

@@ -3870,11 +3870,45 @@ limits.
     pressure lists the matching real incidents, there's no phone overflow, and there are no
     errors.
 
+## Pose Analysis on the Mind page (2026-11-14, branch `feature/face-analysis-setup`)
+
+Built the same way as Face Analysis and fully separate from it (own service, routes, table, card).
+
+- **Model:** MediaPipe Pose Landmarker **lite**, float16 v1, from Google's own storage
+  (`scripts/pose_analysis/download_model.py`, MD5-checked against Google's header, sha256
+  `59929e1d...574a`), stored at `models/pose_analysis/pose_landmarker_lite.task` (gitignored).
+  No new packages: the MediaPipe 1.2.3 in `requirements-face.txt` already has `PoseLandmarker`.
+- **Backend:** `backend/services/pose.py` (VIDEO mode, one landmarker per session, own lock),
+  `backend/logic/pose_metrics.py` (shoulder/hip tilt, side-to-side torso lean, head offset/tilt/
+  height, left/right asymmetry, sway/speed, per-region visibility). Frames are measured in
+  memory and dropped; only the report goes into `pose_analyses`. Routes: `/api/pose/status`,
+  `/api/astronauts/<id>/pose/sessions[/<sid>/frames|finish|cancel]`, `/pose/latest`.
+  `ASTRO_NO_POSE=1` turns it off (tests set it); `ASTRO_POSE_MODEL` overrides the model path.
+- **Frontend:** `pages/crew/daily/mind/PoseAnalysis.jsx`, `lib/poseCamera.js` (reuses
+  `faceCamera.js`'s camera helpers unchanged). `lib/cameraClaim.js` hands the one webcam between
+  Face and Pose: opening one stops the other (the only change to `FaceAnalysis.jsx`).
+- **Thresholds are NOT calibrated on a real webcam yet** (visibility 0.5 is MediaPipe's own
+  cut-off; minimum shoulder width 0.07 of the frame width). Calibrate them like face_metrics.py
+  once a real session has been recorded.
+- **Gotchas:** the lite model gave a false positive on a login-video frame of the Earth (in
+  IMAGE mode, at 1920 px), and found the trailer's cartoon astronaut only at 1280 px, not at
+  640 px. Both are out-of-distribution pictures; a real person close to a webcam is the
+  intended case.
+- **Verified (2026-11-14):** 32 backend pose tests (the real model loads and runs locally, ~10 ms
+  per 640 px frame; with `ASTRO_POSE_TEST_IMAGE` set to the trailer's astronaut frame it finds a
+  body and measures it); 385 backend tests total; 196 frontend tests; lint has 0 errors; browser
+  e2e `frontend/scripts/e2e-pose-analysis.mjs` 19/19 against an isolated copy. **Not yet tried
+  with a real person or the user's real webcam.**
+- **Linux caveat (from the Face ID entry above):** on the laptop where MediaPipe 1.2.3 is killed the
+  moment a landmarker is created, Pose would take the server down the same way as Face; there
+  mediapipe is uninstalled, so both cards just say "install requirements-face.txt". A
+  subprocess around the landmarker is the fix if that machine needs these features.
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 366 tests + Sameer's face module skipped without MediaPipe (7 voice tests skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 424 tests + Sameer's face module skipped without MediaPipe (7 voice tests skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, crew records + Excel export, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 193 Vitest tests (crew records filters, voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
+- `cd frontend && npm test` — 211 Vitest tests (crew records filters, voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

@@ -1,1 +1,0 @@
-import{t as e}from"./RecordsBrowser-DPzJXOKA.js";import{t}from"./jsx-runtime-C3cWAN_r.js";var n=t();function r(){return(0,n.jsx)(e,{})}export{r as default};

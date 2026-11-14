@@ -1,0 +1,1730 @@
+{
+  "labels": [
+    "angry",
+    "disgust",
+    "fearful",
+    "happy",
+    "sad",
+    "surprised"
+  ],
+  "train_clips": 2100,
+  "dev_clips": 1036,
+  "train_speakers": 242,
+  "baseline_model": "Dpngtm/wav2vec2-emotion-recognition @ 033a5751 (models/wav2vec2-emotion, unchanged)",
+  "training_seconds_total": 6.2,
+  "dev_macro_f1": {
+    "baseline_restricted": 0.4638,
+    "baseline_as_deployed": 0.4534,
+    "logit_recal": 0.5161,
+    "pooled_lr": 0.5234,
+    "mid_lr": 0.6245,
+    "concat_mlp": 0.617
+  },
+  "selected_on_dev": "mid_lr",
+  "training": {
+    "logit_recal": {
+      "epochs_run": 40,
+      "best_val_macro_f1": 0.5161,
+      "seconds": 0.9,
+      "params": {
+        "hidden": 0,
+        "lr": 0.01,
+        "weight_decay": 0.01,
+        "batch": 32,
+        "patience": 15,
+        "max_epochs": 200,
+        "threads": 4,
+        "seed": 1234,
+        "class_weights": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "pooled_lr": {
+      "epochs_run": 61,
+      "best_val_macro_f1": 0.5234,
+      "seconds": 1.4,
+      "params": {
+        "hidden": 0,
+        "lr": 0.001,
+        "weight_decay": 0.01,
+        "batch": 32,
+        "patience": 15,
+        "max_epochs": 200,
+        "threads": 4,
+        "seed": 1234,
+        "class_weights": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "mid_lr": {
+      "epochs_run": 30,
+      "best_val_macro_f1": 0.6245,
+      "seconds": 0.9,
+      "params": {
+        "hidden": 0,
+        "lr": 0.001,
+        "weight_decay": 0.01,
+        "batch": 32,
+        "patience": 15,
+        "max_epochs": 200,
+        "threads": 4,
+        "seed": 1234,
+        "class_weights": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "concat_mlp": {
+      "epochs_run": 30,
+      "best_val_macro_f1": 0.617,
+      "seconds": 1.5,
+      "params": {
+        "hidden": 64,
+        "lr": 0.001,
+        "weight_decay": 0.01,
+        "batch": 32,
+        "patience": 15,
+        "max_epochs": 200,
+        "threads": 4,
+        "seed": 1234,
+        "class_weights": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "neutral_test_clips_labelled_by_model_as": {
+    "sad": 42,
+    "happy": 43,
+    "calm": 95,
+    "fearful": 4,
+    "angry": 10,
+    "disgust": 6,
+    "surprised": 3
+  },
+  "results": {
+    "test_all": {
+      "n": 1131,
+      "speakers": 84,
+      "metrics": {
+        "baseline_as_deployed": {
+          "n": 1131,
+          "accuracy": 0.4854,
+          "balanced_accuracy": 0.4896,
+          "macro_precision": 0.5633,
+          "macro_recall": 0.4896,
+          "macro_f1": 0.4929,
+          "per_class": {
+            "angry": {
+              "precision": 0.7324,
+              "recall": 0.2613,
+              "f1": 0.3852,
+              "support": 199
+            },
+            "disgust": {
+              "precision": 0.5549,
+              "recall": 0.5127,
+              "f1": 0.533,
+              "support": 197
+            },
+            "fearful": {
+              "precision": 0.4844,
+              "recall": 0.5254,
+              "f1": 0.5041,
+              "support": 177
+            },
+            "happy": {
+              "precision": 0.4486,
+              "recall": 0.5677,
+              "f1": 0.5011,
+              "support": 192
+            },
+            "sad": {
+              "precision": 0.4424,
+              "recall": 0.6949,
+              "f1": 0.5407,
+              "support": 177
+            },
+            "surprised": {
+              "precision": 0.7172,
+              "recall": 0.3757,
+              "f1": 0.4931,
+              "support": 189
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              52,
+              35,
+              16,
+              60,
+              12,
+              8,
+              16
+            ],
+            [
+              1,
+              101,
+              5,
+              17,
+              59,
+              1,
+              13
+            ],
+            [
+              3,
+              11,
+              93,
+              11,
+              57,
+              1,
+              1
+            ],
+            [
+              9,
+              9,
+              30,
+              109,
+              10,
+              18,
+              7
+            ],
+            [
+              2,
+              10,
+              12,
+              8,
+              123,
+              0,
+              22
+            ],
+            [
+              4,
+              16,
+              36,
+              38,
+              17,
+              71,
+              7
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted (+ last column: predicted a label outside this set)"
+        },
+        "baseline_restricted": {
+          "n": 1131,
+          "accuracy": 0.5084,
+          "balanced_accuracy": 0.5134,
+          "macro_precision": 0.5609,
+          "macro_recall": 0.5134,
+          "macro_f1": 0.5,
+          "per_class": {
+            "angry": {
+              "precision": 0.7333,
+              "recall": 0.2764,
+              "f1": 0.4015,
+              "support": 199
+            },
+            "disgust": {
+              "precision": 0.5574,
+              "recall": 0.5178,
+              "f1": 0.5368,
+              "support": 197
+            },
+            "fearful": {
+              "precision": 0.4819,
+              "recall": 0.5254,
+              "f1": 0.5027,
+              "support": 177
+            },
+            "happy": {
+              "precision": 0.4431,
+              "recall": 0.5885,
+              "f1": 0.5056,
+              "support": 192
+            },
+            "sad": {
+              "precision": 0.4325,
+              "recall": 0.7966,
+              "f1": 0.5606,
+              "support": 177
+            },
+            "surprised": {
+              "precision": 0.7172,
+              "recall": 0.3757,
+              "f1": 0.4931,
+              "support": 189
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              55,
+              35,
+              16,
+              64,
+              21,
+              8
+            ],
+            [
+              1,
+              102,
+              5,
+              17,
+              71,
+              1
+            ],
+            [
+              3,
+              11,
+              93,
+              12,
+              57,
+              1
+            ],
+            [
+              9,
+              9,
+              30,
+              113,
+              13,
+              18
+            ],
+            [
+              3,
+              10,
+              12,
+              11,
+              141,
+              0
+            ],
+            [
+              4,
+              16,
+              37,
+              38,
+              23,
+              71
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "logit_recal": {
+          "n": 1131,
+          "accuracy": 0.5491,
+          "balanced_accuracy": 0.5513,
+          "macro_precision": 0.5612,
+          "macro_recall": 0.5513,
+          "macro_f1": 0.5478,
+          "per_class": {
+            "angry": {
+              "precision": 0.5506,
+              "recall": 0.4372,
+              "f1": 0.4874,
+              "support": 199
+            },
+            "disgust": {
+              "precision": 0.5667,
+              "recall": 0.6041,
+              "f1": 0.5848,
+              "support": 197
+            },
+            "fearful": {
+              "precision": 0.5568,
+              "recall": 0.5537,
+              "f1": 0.5552,
+              "support": 177
+            },
+            "happy": {
+              "precision": 0.5072,
+              "recall": 0.5521,
+              "f1": 0.5287,
+              "support": 192
+            },
+            "sad": {
+              "precision": 0.4901,
+              "recall": 0.7006,
+              "f1": 0.5767,
+              "support": 177
+            },
+            "surprised": {
+              "precision": 0.696,
+              "recall": 0.4603,
+              "f1": 0.5541,
+              "support": 189
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              87,
+              32,
+              10,
+              48,
+              13,
+              9
+            ],
+            [
+              13,
+              119,
+              5,
+              6,
+              50,
+              4
+            ],
+            [
+              11,
+              15,
+              98,
+              8,
+              40,
+              5
+            ],
+            [
+              24,
+              11,
+              22,
+              106,
+              9,
+              20
+            ],
+            [
+              7,
+              22,
+              16,
+              8,
+              124,
+              0
+            ],
+            [
+              16,
+              11,
+              25,
+              33,
+              17,
+              87
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "pooled_lr": {
+          "n": 1131,
+          "accuracy": 0.5668,
+          "balanced_accuracy": 0.5675,
+          "macro_precision": 0.5691,
+          "macro_recall": 0.5675,
+          "macro_f1": 0.5661,
+          "per_class": {
+            "angry": {
+              "precision": 0.5408,
+              "recall": 0.5327,
+              "f1": 0.5367,
+              "support": 199
+            },
+            "disgust": {
+              "precision": 0.5818,
+              "recall": 0.6497,
+              "f1": 0.6139,
+              "support": 197
+            },
+            "fearful": {
+              "precision": 0.5645,
+              "recall": 0.5932,
+              "f1": 0.5785,
+              "support": 177
+            },
+            "happy": {
+              "precision": 0.5509,
+              "recall": 0.4792,
+              "f1": 0.5125,
+              "support": 192
+            },
+            "sad": {
+              "precision": 0.5291,
+              "recall": 0.6158,
+              "f1": 0.5692,
+              "support": 177
+            },
+            "surprised": {
+              "precision": 0.6474,
+              "recall": 0.5344,
+              "f1": 0.5855,
+              "support": 189
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              106,
+              27,
+              10,
+              31,
+              12,
+              13
+            ],
+            [
+              16,
+              128,
+              5,
+              5,
+              36,
+              7
+            ],
+            [
+              16,
+              15,
+              105,
+              5,
+              30,
+              6
+            ],
+            [
+              33,
+              10,
+              21,
+              92,
+              8,
+              28
+            ],
+            [
+              7,
+              31,
+              22,
+              7,
+              109,
+              1
+            ],
+            [
+              18,
+              9,
+              23,
+              27,
+              11,
+              101
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "mid_lr": {
+          "n": 1131,
+          "accuracy": 0.6401,
+          "balanced_accuracy": 0.6393,
+          "macro_precision": 0.6408,
+          "macro_recall": 0.6393,
+          "macro_f1": 0.6383,
+          "per_class": {
+            "angry": {
+              "precision": 0.6073,
+              "recall": 0.6683,
+              "f1": 0.6364,
+              "support": 199
+            },
+            "disgust": {
+              "precision": 0.6798,
+              "recall": 0.7005,
+              "f1": 0.69,
+              "support": 197
+            },
+            "fearful": {
+              "precision": 0.6463,
+              "recall": 0.5367,
+              "f1": 0.5864,
+              "support": 177
+            },
+            "happy": {
+              "precision": 0.6364,
+              "recall": 0.5833,
+              "f1": 0.6087,
+              "support": 192
+            },
+            "sad": {
+              "precision": 0.6332,
+              "recall": 0.7119,
+              "f1": 0.6702,
+              "support": 177
+            },
+            "surprised": {
+              "precision": 0.6417,
+              "recall": 0.6349,
+              "f1": 0.6383,
+              "support": 189
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              133,
+              14,
+              7,
+              15,
+              8,
+              22
+            ],
+            [
+              19,
+              138,
+              3,
+              6,
+              24,
+              7
+            ],
+            [
+              17,
+              13,
+              95,
+              10,
+              33,
+              9
+            ],
+            [
+              27,
+              5,
+              13,
+              112,
+              6,
+              29
+            ],
+            [
+              7,
+              25,
+              12,
+              7,
+              126,
+              0
+            ],
+            [
+              16,
+              8,
+              17,
+              26,
+              2,
+              120
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "concat_mlp": {
+          "n": 1131,
+          "accuracy": 0.6454,
+          "balanced_accuracy": 0.644,
+          "macro_precision": 0.6495,
+          "macro_recall": 0.644,
+          "macro_f1": 0.6443,
+          "per_class": {
+            "angry": {
+              "precision": 0.5847,
+              "recall": 0.6935,
+              "f1": 0.6345,
+              "support": 199
+            },
+            "disgust": {
+              "precision": 0.6635,
+              "recall": 0.7005,
+              "f1": 0.6815,
+              "support": 197
+            },
+            "fearful": {
+              "precision": 0.6783,
+              "recall": 0.548,
+              "f1": 0.6062,
+              "support": 177
+            },
+            "happy": {
+              "precision": 0.6554,
+              "recall": 0.6042,
+              "f1": 0.6287,
+              "support": 192
+            },
+            "sad": {
+              "precision": 0.6277,
+              "recall": 0.6667,
+              "f1": 0.6466,
+              "support": 177
+            },
+            "surprised": {
+              "precision": 0.6872,
+              "recall": 0.6508,
+              "f1": 0.6685,
+              "support": 189
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              138,
+              19,
+              3,
+              13,
+              9,
+              17
+            ],
+            [
+              20,
+              138,
+              5,
+              3,
+              25,
+              6
+            ],
+            [
+              16,
+              13,
+              97,
+              12,
+              27,
+              12
+            ],
+            [
+              35,
+              6,
+              8,
+              116,
+              6,
+              21
+            ],
+            [
+              8,
+              26,
+              18,
+              7,
+              118,
+              0
+            ],
+            [
+              19,
+              6,
+              12,
+              26,
+              3,
+              123
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        }
+      },
+      "bootstrap_by_speaker_macro_f1_diff": {
+        "logit_recal": {
+          "mean": 0.0487,
+          "ci95": [
+            0.0236,
+            0.0736
+          ],
+          "resamples": 500,
+          "unit": "group"
+        },
+        "pooled_lr": {
+          "mean": 0.0673,
+          "ci95": [
+            0.0288,
+            0.1054
+          ],
+          "resamples": 500,
+          "unit": "group"
+        },
+        "mid_lr": {
+          "mean": 0.1413,
+          "ci95": [
+            0.098,
+            0.1865
+          ],
+          "resamples": 500,
+          "unit": "group"
+        },
+        "concat_mlp": {
+          "mean": 0.1468,
+          "ci95": [
+            0.1026,
+            0.1912
+          ],
+          "resamples": 500,
+          "unit": "group"
+        }
+      },
+      "per_speaker_accuracy": {
+        "baseline_restricted": {
+          "median": 0.444,
+          "p10": 0.0,
+          "p90": 0.75,
+          "speakers_better_than_chance": 68
+        },
+        "mid_lr": {
+          "median": 0.597,
+          "p10": 0.23,
+          "p90": 0.857,
+          "speakers_better_than_chance": 76
+        },
+        "speakers_improved_vs_worse": [
+          51,
+          14
+        ]
+      },
+      "baseline_predicted_calm_count": 66,
+      "both_wrong_examples": [
+        {
+          "file": "1614274086698.wav",
+          "true": "angry",
+          "baseline": "surprised",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.6,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1613325949943.wav",
+          "true": "angry",
+          "baseline": "sad",
+          "mid_lr": "sad",
+          "rater_agreement": 0.2,
+          "rater_majority": "disgust"
+        },
+        {
+          "file": "1613325598299.wav",
+          "true": "angry",
+          "baseline": "fearful",
+          "mid_lr": "fearful",
+          "rater_agreement": 0.4,
+          "rater_majority": "neutrality"
+        },
+        {
+          "file": "1616755151378.wav",
+          "true": "angry",
+          "baseline": "surprised",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.2,
+          "rater_majority": "neutrality"
+        },
+        {
+          "file": "1613512695618.wav",
+          "true": "angry",
+          "baseline": "fearful",
+          "mid_lr": "fearful",
+          "rater_agreement": 1.0,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1613512802164.wav",
+          "true": "angry",
+          "baseline": "disgust",
+          "mid_lr": "fearful",
+          "rater_agreement": 0.8,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614602686433.wav",
+          "true": "angry",
+          "baseline": "disgust",
+          "mid_lr": "disgust",
+          "rater_agreement": 0.8,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614329620753.wav",
+          "true": "angry",
+          "baseline": "happy",
+          "mid_lr": "happy",
+          "rater_agreement": 0.6,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614087657917.wav",
+          "true": "angry",
+          "baseline": "disgust",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.2,
+          "rater_majority": "surprise"
+        },
+        {
+          "file": "1614674030212.wav",
+          "true": "angry",
+          "baseline": "sad",
+          "mid_lr": "sad",
+          "rater_agreement": 1.0,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614191022700.wav",
+          "true": "angry",
+          "baseline": "sad",
+          "mid_lr": "sad",
+          "rater_agreement": 0.4,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1613512785225.wav",
+          "true": "angry",
+          "baseline": "sad",
+          "mid_lr": "disgust",
+          "rater_agreement": 0.4,
+          "rater_majority": "sadness"
+        },
+        {
+          "file": "1613512432751.wav",
+          "true": "angry",
+          "baseline": "sad",
+          "mid_lr": "disgust",
+          "rater_agreement": 0.2,
+          "rater_majority": "neutrality"
+        },
+        {
+          "file": "1614146777115.wav",
+          "true": "angry",
+          "baseline": "disgust",
+          "mid_lr": "disgust",
+          "rater_agreement": 1.0,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1617270841776.wav",
+          "true": "angry",
+          "baseline": "disgust",
+          "mid_lr": "surprised",
+          "rater_agreement": 1.0,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614274015809.wav",
+          "true": "angry",
+          "baseline": "happy",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.8,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1613491057760.wav",
+          "true": "angry",
+          "baseline": "happy",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.4,
+          "rater_majority": "neutrality"
+        },
+        {
+          "file": "1614082398003.wav",
+          "true": "angry",
+          "baseline": "happy",
+          "mid_lr": "happy",
+          "rater_agreement": 1.0,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1616239486870.wav",
+          "true": "angry",
+          "baseline": "fearful",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.4,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614767787938.wav",
+          "true": "angry",
+          "baseline": "sad",
+          "mid_lr": "sad",
+          "rater_agreement": 0.8,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614197928070.wav",
+          "true": "angry",
+          "baseline": "happy",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.8,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1617270902455.wav",
+          "true": "angry",
+          "baseline": "surprised",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.4,
+          "rater_majority": "joy"
+        },
+        {
+          "file": "1616239540023.wav",
+          "true": "angry",
+          "baseline": "happy",
+          "mid_lr": "surprised",
+          "rater_agreement": 0.8,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1613063101337.wav",
+          "true": "angry",
+          "baseline": "sad",
+          "mid_lr": "sad",
+          "rater_agreement": 0.4,
+          "rater_majority": "anger"
+        },
+        {
+          "file": "1614083304136.wav",
+          "true": "angry",
+          "baseline": "happy",
+          "mid_lr": "surprised",
+          "rater_agreement": 1.0,
+          "rater_majority": "anger"
+        }
+      ],
+      "both_wrong_count": 309,
+      "both_wrong_mean_rater_agreement": 0.546
+    },
+    "test_validated_3of5": {
+      "n": 746,
+      "speakers": 76,
+      "metrics": {
+        "baseline_as_deployed": {
+          "n": 746,
+          "accuracy": 0.5308,
+          "balanced_accuracy": 0.551,
+          "macro_precision": 0.5903,
+          "macro_recall": 0.551,
+          "macro_f1": 0.5365,
+          "per_class": {
+            "angry": {
+              "precision": 0.7931,
+              "recall": 0.3151,
+              "f1": 0.451,
+              "support": 146
+            },
+            "disgust": {
+              "precision": 0.5,
+              "recall": 0.5914,
+              "f1": 0.5419,
+              "support": 93
+            },
+            "fearful": {
+              "precision": 0.4516,
+              "recall": 0.6829,
+              "f1": 0.5437,
+              "support": 82
+            },
+            "happy": {
+              "precision": 0.4425,
+              "recall": 0.5833,
+              "f1": 0.5033,
+              "support": 132
+            },
+            "sad": {
+              "precision": 0.5988,
+              "recall": 0.7407,
+              "f1": 0.6623,
+              "support": 135
+            },
+            "surprised": {
+              "precision": 0.7561,
+              "recall": 0.3924,
+              "f1": 0.5167,
+              "support": 158
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              46,
+              22,
+              12,
+              45,
+              8,
+              4,
+              9
+            ],
+            [
+              1,
+              55,
+              2,
+              10,
+              21,
+              1,
+              3
+            ],
+            [
+              1,
+              2,
+              56,
+              3,
+              19,
+              1,
+              0
+            ],
+            [
+              7,
+              8,
+              19,
+              77,
+              6,
+              14,
+              1
+            ],
+            [
+              0,
+              7,
+              9,
+              6,
+              100,
+              0,
+              13
+            ],
+            [
+              3,
+              16,
+              26,
+              33,
+              13,
+              62,
+              5
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted (+ last column: predicted a label outside this set)"
+        },
+        "baseline_restricted": {
+          "n": 746,
+          "accuracy": 0.5483,
+          "balanced_accuracy": 0.5668,
+          "macro_precision": 0.5863,
+          "macro_recall": 0.5668,
+          "macro_f1": 0.5406,
+          "per_class": {
+            "angry": {
+              "precision": 0.8,
+              "recall": 0.3288,
+              "f1": 0.466,
+              "support": 146
+            },
+            "disgust": {
+              "precision": 0.5,
+              "recall": 0.5914,
+              "f1": 0.5419,
+              "support": 93
+            },
+            "fearful": {
+              "precision": 0.4516,
+              "recall": 0.6829,
+              "f1": 0.5437,
+              "support": 82
+            },
+            "happy": {
+              "precision": 0.435,
+              "recall": 0.5833,
+              "f1": 0.4984,
+              "support": 132
+            },
+            "sad": {
+              "precision": 0.5751,
+              "recall": 0.8222,
+              "f1": 0.6768,
+              "support": 135
+            },
+            "surprised": {
+              "precision": 0.7561,
+              "recall": 0.3924,
+              "f1": 0.5167,
+              "support": 158
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              48,
+              22,
+              12,
+              46,
+              14,
+              4
+            ],
+            [
+              1,
+              55,
+              2,
+              10,
+              24,
+              1
+            ],
+            [
+              1,
+              2,
+              56,
+              3,
+              19,
+              1
+            ],
+            [
+              7,
+              8,
+              19,
+              77,
+              7,
+              14
+            ],
+            [
+              0,
+              7,
+              9,
+              8,
+              111,
+              0
+            ],
+            [
+              3,
+              16,
+              26,
+              33,
+              18,
+              62
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "logit_recal": {
+          "n": 746,
+          "accuracy": 0.5965,
+          "balanced_accuracy": 0.6154,
+          "macro_precision": 0.6033,
+          "macro_recall": 0.6154,
+          "macro_f1": 0.5973,
+          "per_class": {
+            "angry": {
+              "precision": 0.6404,
+              "recall": 0.5,
+              "f1": 0.5615,
+              "support": 146
+            },
+            "disgust": {
+              "precision": 0.5081,
+              "recall": 0.6774,
+              "f1": 0.5806,
+              "support": 93
+            },
+            "fearful": {
+              "precision": 0.5439,
+              "recall": 0.7561,
+              "f1": 0.6327,
+              "support": 82
+            },
+            "happy": {
+              "precision": 0.5,
+              "recall": 0.5606,
+              "f1": 0.5286,
+              "support": 132
+            },
+            "sad": {
+              "precision": 0.6575,
+              "recall": 0.7111,
+              "f1": 0.6833,
+              "support": 135
+            },
+            "surprised": {
+              "precision": 0.77,
+              "recall": 0.4873,
+              "f1": 0.5969,
+              "support": 158
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              73,
+              21,
+              8,
+              33,
+              7,
+              4
+            ],
+            [
+              5,
+              63,
+              1,
+              5,
+              17,
+              2
+            ],
+            [
+              3,
+              4,
+              62,
+              3,
+              9,
+              1
+            ],
+            [
+              16,
+              8,
+              13,
+              74,
+              5,
+              16
+            ],
+            [
+              3,
+              17,
+              14,
+              5,
+              96,
+              0
+            ],
+            [
+              14,
+              11,
+              16,
+              28,
+              12,
+              77
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "pooled_lr": {
+          "n": 746,
+          "accuracy": 0.6046,
+          "balanced_accuracy": 0.6211,
+          "macro_precision": 0.6049,
+          "macro_recall": 0.6211,
+          "macro_f1": 0.6041,
+          "per_class": {
+            "angry": {
+              "precision": 0.6286,
+              "recall": 0.6027,
+              "f1": 0.6154,
+              "support": 146
+            },
+            "disgust": {
+              "precision": 0.5156,
+              "recall": 0.7097,
+              "f1": 0.5973,
+              "support": 93
+            },
+            "fearful": {
+              "precision": 0.5167,
+              "recall": 0.7561,
+              "f1": 0.6139,
+              "support": 82
+            },
+            "happy": {
+              "precision": 0.563,
+              "recall": 0.5076,
+              "f1": 0.5339,
+              "support": 132
+            },
+            "sad": {
+              "precision": 0.6923,
+              "recall": 0.6,
+              "f1": 0.6429,
+              "support": 135
+            },
+            "surprised": {
+              "precision": 0.7131,
+              "recall": 0.5506,
+              "f1": 0.6214,
+              "support": 158
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              88,
+              16,
+              8,
+              19,
+              7,
+              8
+            ],
+            [
+              7,
+              66,
+              1,
+              4,
+              10,
+              5
+            ],
+            [
+              4,
+              5,
+              62,
+              3,
+              7,
+              1
+            ],
+            [
+              22,
+              7,
+              12,
+              67,
+              4,
+              20
+            ],
+            [
+              3,
+              26,
+              20,
+              4,
+              81,
+              1
+            ],
+            [
+              16,
+              8,
+              17,
+              22,
+              8,
+              87
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "mid_lr": {
+          "n": 746,
+          "accuracy": 0.7158,
+          "balanced_accuracy": 0.7225,
+          "macro_precision": 0.7108,
+          "macro_recall": 0.7225,
+          "macro_f1": 0.7136,
+          "per_class": {
+            "angry": {
+              "precision": 0.7347,
+              "recall": 0.7397,
+              "f1": 0.7372,
+              "support": 146
+            },
+            "disgust": {
+              "precision": 0.6667,
+              "recall": 0.8387,
+              "f1": 0.7429,
+              "support": 93
+            },
+            "fearful": {
+              "precision": 0.6105,
+              "recall": 0.7073,
+              "f1": 0.6554,
+              "support": 82
+            },
+            "happy": {
+              "precision": 0.672,
+              "recall": 0.6364,
+              "f1": 0.6537,
+              "support": 132
+            },
+            "sad": {
+              "precision": 0.8417,
+              "recall": 0.7481,
+              "f1": 0.7922,
+              "support": 135
+            },
+            "surprised": {
+              "precision": 0.7394,
+              "recall": 0.6646,
+              "f1": 0.7,
+              "support": 158
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              108,
+              6,
+              5,
+              10,
+              4,
+              13
+            ],
+            [
+              6,
+              78,
+              1,
+              3,
+              2,
+              3
+            ],
+            [
+              5,
+              4,
+              58,
+              4,
+              8,
+              3
+            ],
+            [
+              12,
+              5,
+              9,
+              84,
+              4,
+              18
+            ],
+            [
+              3,
+              16,
+              10,
+              5,
+              101,
+              0
+            ],
+            [
+              13,
+              8,
+              12,
+              19,
+              1,
+              105
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        },
+        "concat_mlp": {
+          "n": 746,
+          "accuracy": 0.7118,
+          "balanced_accuracy": 0.7164,
+          "macro_precision": 0.7114,
+          "macro_recall": 0.7164,
+          "macro_f1": 0.7101,
+          "per_class": {
+            "angry": {
+              "precision": 0.6667,
+              "recall": 0.7534,
+              "f1": 0.7074,
+              "support": 146
+            },
+            "disgust": {
+              "precision": 0.6356,
+              "recall": 0.8065,
+              "f1": 0.7109,
+              "support": 93
+            },
+            "fearful": {
+              "precision": 0.6667,
+              "recall": 0.7073,
+              "f1": 0.6864,
+              "support": 82
+            },
+            "happy": {
+              "precision": 0.688,
+              "recall": 0.6515,
+              "f1": 0.6693,
+              "support": 132
+            },
+            "sad": {
+              "precision": 0.8174,
+              "recall": 0.6963,
+              "f1": 0.752,
+              "support": 135
+            },
+            "surprised": {
+              "precision": 0.7941,
+              "recall": 0.6835,
+              "f1": 0.7347,
+              "support": 158
+            }
+          },
+          "labels": [
+            "angry",
+            "disgust",
+            "fearful",
+            "happy",
+            "sad",
+            "surprised"
+          ],
+          "confusion_matrix": [
+            [
+              110,
+              10,
+              2,
+              9,
+              5,
+              10
+            ],
+            [
+              9,
+              75,
+              0,
+              2,
+              4,
+              3
+            ],
+            [
+              6,
+              4,
+              58,
+              4,
+              6,
+              4
+            ],
+            [
+              20,
+              5,
+              6,
+              86,
+              4,
+              11
+            ],
+            [
+              4,
+              18,
+              14,
+              5,
+              94,
+              0
+            ],
+            [
+              16,
+              6,
+              7,
+              19,
+              2,
+              108
+            ]
+          ],
+          "confusion_matrix_note": "rows = true, columns = predicted"
+        }
+      },
+      "bootstrap_by_speaker_macro_f1_diff": {
+        "logit_recal": {
+          "mean": 0.057,
+          "ci95": [
+            0.0283,
+            0.0899
+          ],
+          "resamples": 500,
+          "unit": "group"
+        },
+        "pooled_lr": {
+          "mean": 0.0634,
+          "ci95": [
+            0.0178,
+            0.1137
+          ],
+          "resamples": 500,
+          "unit": "group"
+        },
+        "mid_lr": {
+          "mean": 0.1734,
+          "ci95": [
+            0.1283,
+            0.2251
+          ],
+          "resamples": 500,
+          "unit": "group"
+        },
+        "concat_mlp": {
+          "mean": 0.1694,
+          "ci95": [
+            0.1204,
+            0.2165
+          ],
+          "resamples": 500,
+          "unit": "group"
+        }
+      },
+      "per_speaker_accuracy": {
+        "baseline_restricted": {
+          "median": 0.5,
+          "p10": 0.0,
+          "p90": 1.0,
+          "speakers_better_than_chance": 66
+        },
+        "mid_lr": {
+          "median": 0.694,
+          "p10": 0.333,
+          "p90": 1.0,
+          "speakers_better_than_chance": 71
+        },
+        "speakers_improved_vs_worse": [
+          43,
+          9
+        ]
+      }
+    }
+  }
+}

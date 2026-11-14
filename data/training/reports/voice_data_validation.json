@@ -1,0 +1,85 @@
+{
+  "archive_md5_ok": true,
+  "archive_members_ok": true,
+  "clips_in_archive": 6902,
+  "usable": 6900,
+  "rejected": [
+    {
+      "file": "1615228380893.wav",
+      "reason": "duration 0.93 s outside 1-15 s"
+    },
+    {
+      "file": "1614684678069.wav",
+      "reason": "duration 0.75 s outside 1-15 s"
+    }
+  ],
+  "official_split_speaker_leakage": [],
+  "full_corpus_per_class": {
+    "anger": 985,
+    "disgust": 986,
+    "fear": 986,
+    "joy": 986,
+    "neutrality": 985,
+    "sadness": 986,
+    "surprise": 986
+  },
+  "full_corpus_speakers": 431,
+  "rater_agreement_mean": 0.664,
+  "rater_agreement_per_class": {
+    "anger": 0.68,
+    "disgust": 0.524,
+    "fear": 0.54,
+    "joy": 0.646,
+    "sadness": 0.719,
+    "surprise": 0.699,
+    "neutrality": 0.839
+  },
+  "selected": {
+    "train": {
+      "clips": 2450,
+      "speakers": 249,
+      "per_class": {
+        "anger": 350,
+        "disgust": 350,
+        "fear": 350,
+        "joy": 350,
+        "sadness": 350,
+        "surprise": 350,
+        "neutrality": 350
+      },
+      "validated_3of5": 1731
+    },
+    "dev": {
+      "clips": 1201,
+      "speakers": 69,
+      "per_class": {
+        "anger": 170,
+        "disgust": 191,
+        "fear": 165,
+        "joy": 179,
+        "neutrality": 165,
+        "sadness": 170,
+        "surprise": 161
+      },
+      "validated_3of5": 761
+    },
+    "test": {
+      "clips": 1334,
+      "speakers": 88,
+      "per_class": {
+        "anger": 199,
+        "disgust": 197,
+        "fear": 177,
+        "joy": 192,
+        "neutrality": 203,
+        "sadness": 177,
+        "surprise": 189
+      },
+      "validated_3of5": 937
+    }
+  },
+  "duration_s": {
+    "mean": 3.29,
+    "max": 13.87
+  }
+}
