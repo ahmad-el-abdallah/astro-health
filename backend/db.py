@@ -207,6 +207,21 @@ CREATE TABLE IF NOT EXISTS face_analyses (
     model TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_face_analyses_astro ON face_analyses(astronaut_id, ts);
+
+-- Pose Analysis reports (backend/services/pose.py): one row per finished ~12 s webcam
+-- observation. Only the report (numbers + text) -- never images, video or landmarks.
+CREATE TABLE IF NOT EXISTS pose_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    astronaut_id INTEGER NOT NULL,
+    ts TEXT NOT NULL,
+    duration_s REAL NOT NULL,
+    frames INTEGER NOT NULL,
+    usable_frames INTEGER NOT NULL,
+    quality TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    model TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pose_analyses_astro ON pose_analyses(astronaut_id, ts);
 """
 
 

@@ -22,7 +22,7 @@ from backend import db, seed
 from backend.logic import analysis, astra_memory, sessions
 from backend.jobs import comms, scheduler
 from backend.routes import routes, admin_routes
-from backend.services import emotion, face
+from backend.services import emotion, face, pose
 from backend import config
 from backend.config import DATA_DIR
 from backend.hardware.pico_bridge import PicoBridge
@@ -135,6 +135,7 @@ def create_app(args):
     # unavailable (the API answers 503) without requirements-emotion.txt or the model files.
     emotion.start_loading()
     face.start_checking()  # optional Face Analysis (requirements-face.txt + its model)
+    pose.start_checking()  # optional Pose Analysis (same packages + its own model)
     admin_routes.create_admin_routes(app)
     bridge.start()
 

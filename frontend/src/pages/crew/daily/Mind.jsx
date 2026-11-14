@@ -13,6 +13,7 @@ import { countTones, latestTalk, pct, talkMix, TONE_DISCLAIMER, TONE_LABELS, TON
 import { useAstra } from "../../../components/AstraProvider.jsx";
 import { LatestConversationAnalysis } from "./mind/ConversationAnalysis.jsx";
 import { FaceAnalysis } from "./mind/FaceAnalysis.jsx";
+import { PoseAnalysis } from "./mind/PoseAnalysis.jsx";
 import { Button, Card, CardTitle, StatusChip, TrendLabel, cx } from "../../../components/ui/index.jsx";
 import { Icon } from "../../../components/ui/Icon.jsx";
 import { EASE_ENTER } from "../../../components/ui/motion.js";
@@ -344,6 +345,7 @@ export default function Mind() {
       </div>
       <LatestConversationAnalysis astroId={id} />
       <FaceAnalysis astroId={id} own={!!locked} />
+      <PoseAnalysis astroId={id} own={!!locked} />
       <div className="flex flex-wrap gap-5">
         <Breathing />
         <Journal astroId={id} />

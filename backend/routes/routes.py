@@ -17,7 +17,7 @@ from backend.logic import analysis, astra_memory, exercise, location, sessions, 
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
-from backend.services import analyst, emotion, face, voice
+from backend.services import analyst, emotion, face, pose, voice
 from backend import voice_settings
 from backend.config import (
     content as load_content, missions as load_missions,
@@ -37,6 +37,8 @@ def rows(rs):
 
 FACE_WINDOW_S = 12  # the observation window (10-15 s asked for)
 FACE_FPS = 10
+POSE_WINDOW_S = 12  # Pose Analysis observation window
+POSE_FPS = 10
 _TALK_ID = re.compile(r"[A-Za-z0-9_-]{1,40}")  # groups one "Wanna talk?" conversation's phrases
 
 
@@ -1337,6 +1339,87 @@ def create_routes(app, socketio, bridge):
             if err:
                 return jsonify(err[0]), err[1]
             r = conn.execute("SELECT id, ts, report_json FROM face_analyses WHERE astronaut_id = ? ORDER BY id DESC LIMIT 1",
+                             (astro_id,)).fetchone()
+        if not r:
+            return jsonify({"analysis": None})
+        return jsonify({"analysis": {"id": r["id"], "ts": r["ts"], **json.loads(r["report_json"])}})
+
+    # ---- Pose Analysis (backend/services/pose.py): webcam frames analysed on THIS laptop ----
+    # Same shape as Face Analysis, fully separate from it: frames are measured in memory and
+    # dropped; only the final report is stored (pose_analyses). Self-only capture.
+    @bp.get("/pose/status")
+    def pose_status():
+        return jsonify({**pose.status(), "window_s": POSE_WINDOW_S, "fps": POSE_FPS})
+
+    @bp.post("/astronauts/<int:astro_id>/pose/sessions")
+    def pose_start(astro_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        try:
+            sid = pose.start_session(astro_id)
+        except pose.Unavailable as e:
+            return jsonify({"error": "pose analysis unavailable", "reason": str(e)}), 503
+        except pose.PoseError as e:
+            return jsonify({"error": str(e)}), 409
+        return jsonify({"session_id": sid, "window_s": POSE_WINDOW_S, "fps": POSE_FPS}), 201
+
+    @bp.post("/astronauts/<int:astro_id>/pose/sessions/<session_id>/frames")
+    def pose_frame(astro_id, session_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        if (request.content_length or 0) > pose.MAX_FRAME_BYTES:
+            return jsonify({"error": "frame too large"}), 413
+        try:
+            t_ms = int(float(request.args.get("t", "0")))
+        except ValueError:
+            return jsonify({"error": "bad timestamp"}), 400
+        try:
+            out = pose.add_frame(session_id, astro_id, request.get_data(cache=False), t_ms)
+        except pose.PoseError as e:
+            return jsonify({"error": str(e)}), 400
+        if out is None:
+            return jsonify({"error": "unknown or expired session"}), 404
+        return jsonify(out)
+
+    @bp.post("/astronauts/<int:astro_id>/pose/sessions/<session_id>/finish")
+    def pose_finish(astro_id, session_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        try:
+            report = pose.finish(session_id, astro_id)
+        except pose.PoseError as e:
+            return jsonify({"error": str(e)}), 400
+        if report is None:
+            return jsonify({"error": "unknown or expired session"}), 404
+        now = datetime.now(timezone.utc).isoformat()
+        q = report["quality"]
+        with db.write_conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO pose_analyses (astronaut_id, ts, duration_s, frames, usable_frames, quality, report_json, model) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (astro_id, now, q["duration_s"], q["frames"], q["usable_frames"], q["rating"], json.dumps(report), report["model"]),
+            )
+            row_id = cur.lastrowid
+        emit_fn("pose_analysis", {"astronaut_id": astro_id, "id": row_id})
+        return jsonify({"id": row_id, "ts": now, **report})
+
+    @bp.post("/astronauts/<int:astro_id>/pose/sessions/<session_id>/cancel")
+    def pose_cancel(astro_id, session_id):
+        err = _own(astro_id)
+        if err:
+            return err
+        return jsonify({"cancelled": pose.cancel(session_id, astro_id)})
+
+    @bp.get("/astronauts/<int:astro_id>/pose/latest")
+    def pose_latest(astro_id):
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)  # the astronaut + the flight surgeon
+            if err:
+                return jsonify(err[0]), err[1]
+            r = conn.execute("SELECT id, ts, report_json FROM pose_analyses WHERE astronaut_id = ? ORDER BY id DESC LIMIT 1",
                              (astro_id,)).fetchone()
         if not r:
             return jsonify({"analysis": None})

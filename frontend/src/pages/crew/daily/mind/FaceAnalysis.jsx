@@ -10,6 +10,7 @@
 // on Stop, and when the section unmounts.
 import { useEffect, useRef, useState } from "react";
 import { cameraBlocker, cameraErrorMessage, captureFrame, openCamera, runObservation, stopCamera } from "../../../../lib/faceCamera.js";
+import { claimCamera, releaseCamera } from "../../../../lib/cameraClaim.js";
 import { useFaceStatus, useLatestFace } from "../../../../lib/queries.js";
 import { fmtTime } from "../../../../lib/format.js";
 import { Button, Card, CardTitle, cx } from "../../../../components/ui/index.jsx";
@@ -129,6 +130,7 @@ export function FaceAnalysis({ astroId, own }) {
     abortRef.current?.abort();
     stopCamera(streamRef.current, videoRef.current);
     streamRef.current = null;
+    releaseCamera("face");
   };
   useEffect(() => () => closeCamera(), []); // leaving the page always turns the camera off
 
@@ -137,6 +139,7 @@ export function FaceAnalysis({ astroId, own }) {
     setLive(null);
     setProgress(0);
     setPhase("opening");
+    claimCamera("face", stop); // Pose Analysis lets go of the camera first, if it had it
     try {
       streamRef.current = await openCamera(videoRef.current);
       setPhase("preview");
