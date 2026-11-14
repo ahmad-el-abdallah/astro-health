@@ -20,6 +20,7 @@ import { useAuth } from "../auth/AuthProvider.jsx";
 import { get, post } from "../lib/api.js";
 import { useContent, useMission, useSchedule, useVoiceToneStatus } from "../lib/queries.js";
 import { openTalk } from "../lib/toneTalks.js";
+import { MOOD_CHECK_INTRO, MOOD_CHECK_OUTRO, submitMoodCheck } from "../lib/moodCheck.js";
 import { audioCtx, micMeter } from "../lib/stationAudio.js";
 import { micLevels, wakeIsYou } from "../lib/hearing.js";
 import { useVoice, voiceState } from "../lib/useVoice.js";
@@ -112,6 +113,33 @@ export function AstraProvider({ children }) {
     const talkId = await openTalk(astroId);
     if (talkId) setCall((c) => (c && c.key === key ? { ...c, talkId } : c));
   }, [consultation, astroId]);
+
+  // The daily mood check (Mind page): the same voice screen, but Astra asks today's three
+  // questions in turn. checkSubmit() replaces the chat for this call -- each answer is kept and
+  // the next question spoken; after the last one the screen closes (on the Mind page) and the
+  // answers + the voice-tone conversation go to the AI (lib/moodCheck.js).
+  const checkRef = useRef(null);
+  const check = useCallback(async ({ questions, dayIndex }) => {
+    audioCtx(); // called from a click: unlocks sound and the microphone recording
+    const key = Date.now();
+    checkRef.current = { key, questions, dayIndex, answers: [], talkId: "" };
+    setCall({ question: "", key, talk: true, check: true, talkId: "", opening: { text: `${MOOD_CHECK_INTRO} ${questions[0]}`, speak: true } });
+    if (!toneReadyRef.current || !astroId) return;
+    const talkId = await openTalk(astroId, "mood_check");
+    if (talkId && checkRef.current?.key === key) {
+      checkRef.current.talkId = talkId;
+      setCall((c) => (c && c.key === key ? { ...c, talkId } : c));
+    }
+  }, [astroId]);
+  const checkSubmit = useCallback(async (text) => {
+    const c = checkRef.current;
+    if (!c) return null;
+    c.answers.push(text);
+    if (c.answers.length < c.questions.length) return { text: c.questions[c.answers.length] };
+    checkRef.current = null;
+    submitMoodCheck(astroId, { answers: c.answers, dayIndex: c.dayIndex, talkId: c.talkId }); // finishes in the background
+    return { text: MOOD_CHECK_OUTRO, navigate: "/mind" };
+  }, [astroId]);
 
   // ---- the wake word listener ----
   const secure = typeof window === "undefined" || window.isSecureContext;
@@ -312,8 +340,8 @@ export function AstraProvider({ children }) {
   }, [available, schedule.data, schedule.dataUpdatedAt, push]);
 
   const value = useMemo(() => ({
-    available, astroId, consultation, open, talk, enabled, setEnabled, state, activated, linkBody,
-  }), [available, astroId, consultation, open, talk, enabled, setEnabled, state, activated, linkBody]);
+    available, astroId, consultation, open, talk, check, enabled, setEnabled, state, activated, linkBody,
+  }), [available, astroId, consultation, open, talk, check, enabled, setEnabled, state, activated, linkBody]);
 
   return (
     <AstraContext.Provider value={value}>
@@ -327,6 +355,7 @@ export function AstraProvider({ children }) {
           initialQuestion={call.question}
           opening={call.opening || null}
           talkMode={!!call.talk}
+          checkMode={!!call.check}
           toneAvailable={toneReady}
           toneCapture={!!call.talk && toneReady && !!call.talkId}
           talkId={call.talkId || ""}
@@ -341,7 +370,7 @@ export function AstraProvider({ children }) {
           content={content.data}
           onClose={() => setCall(null)}
           astroId={astroId}
-          submit={consultation.submit}
+          submit={call.check ? checkSubmit : consultation.submit}
           thinking={consultation.thinking}
           pending={consultation.pending}
           onConfirm={consultation.confirm}

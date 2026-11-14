@@ -3592,11 +3592,71 @@ checked".
   77, Breathing/Stress tiles, Today "Morning vitals check · Done 00:03", Up next = the
   exercise block, no errors. Also fixed a stray "0" the startle check rendered.
 
+## Mind & mood: a daily AI mood check replaces picking a face (2026-11-14)
+
+User: "remove putting the feeling manually on the Mind & mood page, only the AI detects. Each
+day I say different sentences and the AI tests my emotions from them." Decided with the user:
+**3 daily questions answered in your own words**, judged from **both** the words (Groq AI) and
+the voice tone (the on-laptop Wav2Vec2 model). Manual mood entry is removed **only on that
+page**; the CYD mood buttons and Astra's "log my mood" stay.
+
+- **Questions:** `config/mood_questions.json` (30, PLACEHOLDER). `mood_check.questions_for(astro,
+  day)` picks 3, seeded per astronaut and **mission day**: the same all day, new the next (every
+  24 real minutes at the demo's ×60).
+- **The flow:**
+  1. Mind page card "Today's mood check" (`pages/crew/daily/mind/DailyMoodCheck.jsx`) →
+     **Start mood check** → `AstraProvider.check()` opens the normal voice screen with
+     `checkMode` (header "Daily mood check · Astra").
+  2. Astra speaks the intro + Q1. `checkSubmit()` replaces the chat for this call: each answer
+     is kept and the next question spoken. After Q3 she says the outro and navigates to /mind,
+     which closes the screen.
+  3. Each answer's voice clip goes through Sameer's pipeline under a talk with **`kind =
+     "mood_check"`** (`openTalk(astroId, "mood_check")`).
+  4. `lib/moodCheck.js` `submitMoodCheck()` awaits `finishTalk` (all clips analysed), then
+     `POST /astronauts/<id>/mood-check {answers, day_index, talk_id}`. The card shows
+     "Analyzing…", then the result (face, mood, AI summary, emotion words, voice tone line,
+     "Judged by AI · model").
+  - No speech recognition / not localhost / "Type my answers instead": the same 3 questions
+    as text boxes; words only, no tone.
+- **Backend:**
+  - `backend/logic/mood_check.py`: `judge()` calls `analyst.mood_check()` (JSON `{mood,
+    summary ≤240, emotions ≤3}`, `parse_mood_check` validates, one retry, uses the fallback
+    models). Fallbacks: the tone alone (`TONE_MOOD` weights: happy 5, calm 4, surprised 3,
+    sad/fearful 2, disgust 1.5, angry 1), or with no tone a small word list. `source` is
+    "rules" then.
+  - `save()` writes an ordinary `mood` reading with `source='voice_check'` (value: mood, score,
+    note = summary, emotions, checked_by, model, tone, talk_id, day, answers) and
+    `astra_memory.note_mood`. So the chart, Wellbeing, Trends, Today and the health AI all
+    follow it.
+  - Routes: `GET /astronauts/<id>/mood-check` (self or surgeon → `{day, day_index, questions,
+    today}`); `POST` (self only; 3 non-empty answers; `day_index` may be today or yesterday,
+    so a check that straddles midnight keeps its questions; a `talk_id` must be theirs). The
+    AI call runs outside the DB lock. It emits `cyd_event` mood + `mood_check` and asks the
+    health analysis once.
+  - `voice_talks.kind` column (migration in `db._migrate_schema`). `latest()` only shows
+    `kind='talk'`, so mood checks never replace "Latest Conversation Analysis".
+  - Scheduler: `OPEN_FROM_DAY_START = {"vitals", "mood"}`, so a morning mood check ticks
+    Today's (evening) mood task.
+  - `config/ai_analyst.json` `mood_check_instructions` (use both words and tone; if they
+    disagree lean on the words and mention the tone; don't diagnose).
+- **Verified:**
+  - 348 backend tests (7 new in `tests/test_mood_check.py`; the scheduler test now checks a
+    02:00 mood counts and a 02:00 workout doesn't). 167 frontend tests (4 card-state tests).
+  - Isolated copy, real Groq key + real voice model, headless with fake speech:
+    - Astra spoke the intro and the 3 questions
+    - 3 clips analysed (calm ×3) under a mood_check talk
+    - the AI judged **Low** from "really tired… stressed", "woke up twice… worn out" (leaning
+      on the words over the calm tone, as instructed)
+    - card shown, Today's mood task done, Latest Conversation Analysis unchanged
+  - Without speech recognition: Do it again → typed form → **Great**, no voice line. The
+    doctor sees the result with no buttons. No phone overflow, no console errors.
+  - **Not yet tried with a real microphone.**
+
 ## Testing
 
-- `.venv/bin/python -m pytest` — 341 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
+- `.venv/bin/python -m pytest` — 348 tests (7 of them skip without the optional voice model) (voice tone + conversations, rules engine, protocol, sessions, REST API, symptoms,
   login/access control, scheduler, SPA serving, CYD logout, bridge auto-detect).
-- `cd frontend && npm test` — 163 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
+- `cd frontend && npm test` — 167 Vitest tests (voice tone segmentation, capture, conversations, Mind section, format, trends stats, alert feed, report text, voice, wake word, barge-in, Astra actions/notices, hearing, text contrast);
   `npm run lint` must stay clean; `npm run build` then commit `frontend/dist`.
 - `.venv/bin/python app.py --simulate` then exercise the feature at `http://localhost:5000`
   (the Simulator drives every CYD event through the same code path a real tap would).

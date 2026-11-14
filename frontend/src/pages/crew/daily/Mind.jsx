@@ -1,5 +1,6 @@
 // Crew · Mind & mood (AstroHealth-Redesign crew-04; port of static/js/tabs/mental_health.js).
-// Daily check-in with drawn mood faces (no emoji), wellbeing ring, 7-day mood chart --
+// Daily mood check: Astra asks 3 questions and the AI judges the mood (mind/DailyMoodCheck.jsx,
+// 2026-11-14 -- it replaced the pick-a-face log), wellbeing ring, 7-day mood chart --
 // plus the 4-7-8 breathing exercise and private journal the mockup didn't show but the
 // app already had (kept, per "don't drop any feature").
 import { useEffect, useRef, useState } from "react";
@@ -12,77 +13,15 @@ import { useHistory, useJournal, useMission, useVoiceTone, useVoiceToneStatus } 
 import { countTones, latestTalk, pct, talkMix, TONE_DISCLAIMER, TONE_LABELS, TONE_ORDER, TONE_PRIVACY } from "../../../lib/toneClip.js";
 import { useAstra } from "../../../components/AstraProvider.jsx";
 import { LatestConversationAnalysis } from "./mind/ConversationAnalysis.jsx";
+import { DailyMoodCheck } from "./mind/DailyMoodCheck.jsx";
 import { Button, Card, CardTitle, StatusChip, TrendLabel, cx } from "../../../components/ui/index.jsx";
 import { Icon } from "../../../components/ui/Icon.jsx";
 import { EASE_ENTER } from "../../../components/ui/motion.js";
 import { RingGauge } from "../../../components/charts/RingGauge.jsx";
 import { LineChart } from "../../../components/charts/LineChart.jsx";
 import { useToast } from "../../../components/overlays/Toasts.jsx";
-import Rough from "../../../assets/icons/mood-rough.svg?react";
-import Low from "../../../assets/icons/mood-low.svg?react";
-import Okay from "../../../assets/icons/mood-okay.svg?react";
-import Good from "../../../assets/icons/mood-good.svg?react";
-import Great from "../../../assets/icons/mood-great.svg?react";
 
-const MOODS = [["rough", "Rough", Rough], ["low", "Low", Low], ["okay", "Okay", Okay], ["good", "Good", Good], ["great", "Great", Great]];
 const RISK_TEXT = { HIGH: "text-alert-fg", MEDIUM: "text-check-fg", LOW: "text-good-fg" };
-
-function CheckIn({ astroId }) {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const [mood, setMood] = useState(null);
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function log() {
-    if (!mood) { toast("Pick a mood first.", "warn"); return; }
-    setBusy(true);
-    try {
-      await post(`/astronauts/${astroId}/mood`, { mood, note: note.trim() });
-      toast("Mood logged.", "success");
-      setMood(null);
-      setNote("");
-      ["history", "summary"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-    } catch {
-      toast("Could not save mood.", "error");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Card className="flex flex-[2_1_520px] flex-col gap-5">
-      <CardTitle title="How are you feeling right now?" className="mb-0" />
-      <div role="radiogroup" aria-label="Mood" className="grid grid-cols-5 gap-2 max-sm:grid-cols-3">
-        {MOODS.map(([id, label, Face]) => {
-          const on = mood === id;
-          return (
-            <motion.button
-              key={id}
-              role="radio"
-              aria-checked={on}
-              onClick={() => setMood(id)}
-              whileHover={{ y: -3 }}
-              whileTap={{ scale: 0.96 }}
-              className={cx(
-                "flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border p-3 transition-colors",
-                on ? "border-accent bg-accent-soft" : "border-line bg-input hover:border-accent-text/50",
-              )}
-            >
-              <motion.span animate={{ scale: on ? 1.15 : 1 }} transition={{ type: "spring", stiffness: 400, damping: 15 }}>
-                <Face width={36} height={36} aria-hidden="true" />
-              </motion.span>
-              <span className={cx("text-xs", on ? "font-semibold text-accent-text" : "text-muted")}>{label}</span>
-            </motion.button>
-          );
-        })}
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className="text-label font-medium">What's on your mind? <span className="text-muted">Optional</span></span>
-        <textarea className="ah-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Write a short note about how you're feeling…" />
-      </label>
-      <Button variant="primary" className="w-fit" onClick={log} busy={busy}>Log mood</Button>
-    </Card>
-  );
-}
 
 function Wellbeing({ rows, mission }) {
   const latest = rows.at(-1);
@@ -333,7 +272,7 @@ export default function Mind() {
     <>
       <p className="m-0 px-1 text-body text-ink-2">Take a moment to check in with yourself.</p>
       <div className="flex flex-wrap gap-5">
-        <CheckIn astroId={id} />
+        <DailyMoodCheck astroId={id} />
         <Wellbeing rows={rows} mission={mission.data} />
       </div>
       <MoodChart rows={rows} astroId={id} />

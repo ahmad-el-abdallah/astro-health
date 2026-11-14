@@ -21,10 +21,10 @@ SECONDS_PER_DAY = 86400
 # Doing a task up to one mission hour before its slot still counts for it.
 EARLY_S = 3600
 # Kinds whose FIRST slot of the day counts from the start of the mission day, not just
-# EARLY_S before it: a vitals check (Assess, or a finished wearable test) done early in the
-# day is still today's vitals check. Not sleep/mood/exercise -- a sleep at 01:00 is last
-# night's, not tonight's bedtime.
-OPEN_FROM_DAY_START = {"vitals"}
+# EARLY_S before it: a vitals check (Assess, or a finished wearable test) or the daily mood
+# check (backend/logic/mood_check.py) done early in the day still counts. Not sleep or
+# exercise -- a sleep at 01:00 is last night's, not tonight's bedtime.
+OPEN_FROM_DAY_START = {"vitals", "mood"}
 # A task still not done this long (mission time) after its slot is "missed".
 MISSED_AFTER_S = 3 * 3600
 

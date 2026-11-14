@@ -607,3 +607,58 @@ def summary(context_text, period, cfg=None):
     if not isinstance(out, str) or not out.strip():
         raise MalformedOutputError("no summary in the answer")
     return " ".join(out.split())[:MAX_REPLY]
+
+
+# ---- the daily mood check (backend/logic/mood_check.py) ----
+MOODS = ("rough", "low", "okay", "good", "great")
+MOOD_CHECK_MAX_TOKENS = 600
+MAX_MOOD_SUMMARY = 240
+
+
+def parse_mood_check(raw):
+    """{"mood", "summary", "emotions"} from the model's answer, validated. Raises
+    MalformedOutputError on anything unusable."""
+    text = (raw or "").strip()
+    start, end = text.find("{"), text.rfind("}")
+    try:
+        data = json.loads(text[start:end + 1]) if start != -1 and end != -1 else None
+    except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
+        raise MalformedOutputError("mood check answer is not a JSON object")
+    mood = data.get("mood")
+    if not isinstance(mood, str) or mood.strip().lower() not in MOODS:
+        raise MalformedOutputError(f"mood must be one of {', '.join(MOODS)}")
+    summary = data.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        raise MalformedOutputError("no summary")
+    emotions = data.get("emotions") if isinstance(data.get("emotions"), list) else []
+    emotions = [" ".join(e.split())[:24].lower() for e in emotions if isinstance(e, str) and e.strip()][:3]
+    return {"mood": mood.strip().lower(), "summary": " ".join(summary.split())[:MAX_MOOD_SUMMARY], "emotions": emotions}
+
+
+def mood_check(answers, tone_line, cfg=None):
+    """Judge today's mood from the astronaut's three spoken answers plus their voice-tone
+    estimate (or a note that there's none). answers: [{"question", "text"}]. One call, one
+    retry on a malformed answer. Raises AnalystError."""
+    if config.ai_api_key() is None:
+        raise AnalystError("AI is not configured")
+    cfg = cfg or config.ai_analyst()
+    rules = "\n".join(cfg.get("mood_check_instructions") or [])
+    qa = "\n".join(f"Q: {a['question']}\nA: {a['text']}" for a in answers)
+    messages = [
+        {"role": "system", "content": rules + (
+            "\n\nAnswer with ONLY one JSON object, no other text: "
+            '{"mood": "rough"|"low"|"okay"|"good"|"great", '
+            '"summary": "<1-2 short sentences to the astronaut, second person>", '
+            '"emotions": ["<up to 3 single words>"]}'
+        )},
+        {"role": "user", "content": f"Today's answers (spoken aloud, transcribed):\n{qa}\n\nVoice tone: {tone_line}"},
+    ]
+    raw = _call_once(messages, max_tokens=MOOD_CHECK_MAX_TOKENS, timeout=TIMEOUT_S)
+    try:
+        return parse_mood_check(raw)
+    except MalformedOutputError as first:
+        messages += [{"role": "assistant", "content": (raw or "")[:1500]},
+                     {"role": "user", "content": f"That answer was invalid ({first}). Reply again with ONLY the JSON object."}]
+        return parse_mood_check(_call_once(messages, max_tokens=MOOD_CHECK_MAX_TOKENS, timeout=TIMEOUT_S))

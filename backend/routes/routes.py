@@ -13,7 +13,7 @@ from flask import Blueprint, jsonify, request, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from backend import db, seed
-from backend.logic import analysis, astra_memory, exercise, location, sensor_feed, sessions, health_rules, symptoms, voice_talks
+from backend.logic import analysis, astra_memory, exercise, location, mood_check, sensor_feed, sessions, health_rules, symptoms, voice_talks
 from backend.jobs import comms, scheduler
 from backend.hardware import protocol
 from backend.auth import auth, admin_auth
@@ -1107,6 +1107,58 @@ def create_routes(app, socketio, bridge):
     # ---- Mental Health tab: mood check-in + journal ----
     MOOD_SCORES = {"rough": 1, "low": 2, "okay": 3, "good": 4, "great": 5}
 
+    # ---- the daily mood check (backend/logic/mood_check.py): 3 questions, judged by the AI ----
+    @bp.get("/astronauts/<int:astro_id>/mood-check")
+    def get_mood_check(astro_id):
+        with db.write_conn() as conn:
+            _, err = auth.authorize_view(conn, astro_id)
+            if err:
+                return jsonify(err[0]), err[1]
+            today = mood_check.today_result(conn, astro_id)
+        day = mood_check.mission_day()
+        return jsonify({"day": day + 1, "day_index": day, "questions": mood_check.questions_for(astro_id, day),
+                        "today": today})
+
+    @bp.post("/astronauts/<int:astro_id>/mood-check")
+    def post_mood_check(astro_id):
+        """{answers: [3 strings or {text}], day_index?, talk_id?}. The astronaut themself only:
+        it's their voice and their words. Judged by the AI (or the fallback), saved as a mood
+        reading."""
+        if auth.current_astronaut_id() is None:
+            return jsonify({"error": "not logged in"}), 401
+        if auth.current_astronaut_id() != astro_id:
+            return jsonify({"error": "only the astronaut can take their own mood check"}), 403
+        body = request.get_json(force=True) or {}
+        today = mood_check.mission_day()
+        day = body.get("day_index", today)
+        if not isinstance(day, int) or isinstance(day, bool) or day not in (today, today - 1):
+            day = today  # a check started just before the mission day rolled over keeps its questions
+        answers, err_msg = mood_check.clean_answers(body.get("answers"), mood_check.questions_for(astro_id, day))
+        if err_msg:
+            return jsonify({"error": err_msg}), 400
+        talk_id = body.get("talk_id") or None
+        tone = None
+        if talk_id:
+            if not isinstance(talk_id, str) or not _TALK_ID.fullmatch(talk_id):
+                return jsonify({"error": "bad talk id"}), 400
+            with db.write_conn() as conn:
+                talk = voice_talks.get(conn, talk_id)
+                if not talk or talk["astronaut_id"] != astro_id:
+                    return jsonify({"error": "not your conversation"}), 403
+                voice_talks.finish(conn, talk_id, reason="mood check")
+                tone = voice_talks.aggregate(conn, talk_id)
+        verdict = mood_check.judge(answers, tone)  # the AI call: outside any DB lock
+        if verdict["source"] != "ai":
+            print(f"[astra] mood check judged by the rules: {verdict.get('error')}", flush=True)
+        with db.write_conn() as conn:
+            if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
+                return jsonify({"error": "not found"}), 404
+            result = mood_check.save(conn, astro_id, verdict, answers, tone, talk_id)
+        analysis.request(astro_id, "mood", delay=0)
+        emit_fn("cyd_event", {"type": "mood", "astronaut_id": astro_id, "mood": result["mood"], "level": result["level"]})
+        emit_fn("mood_check", {"astronaut_id": astro_id, "mood": result["mood"]})
+        return jsonify(result)
+
     @bp.post("/astronauts/<int:astro_id>/mood")
     def log_mood(astro_id):
         body = request.get_json(force=True) or {}
@@ -1246,7 +1298,8 @@ def create_routes(app, socketio, bridge):
         with db.write_conn() as conn:
             if not conn.execute("SELECT 1 FROM astronauts WHERE id = ?", (astro_id,)).fetchone():
                 return jsonify({"error": "not found"}), 404
-            talk = voice_talks.create(conn, astro_id)
+            kind = (request.get_json(silent=True) or {}).get("kind", "talk")
+            talk = voice_talks.create(conn, astro_id, kind)
         return jsonify(voice_talks.public(talk)), 201
 
     def _talk_body_int(body, key):
