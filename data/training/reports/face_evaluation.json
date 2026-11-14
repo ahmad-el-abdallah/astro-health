@@ -1,0 +1,634 @@
+{
+  "model": "MediaPipe Face Landmarker float16 v1 (unchanged), IMAGE mode, blendshapes on (for candidates B-D)",
+  "baseline_rule": "closed if mean EAR < 0.55 x 0.31 = 0.1705 (the app's rule with the user's measured open-eye level)",
+  "no_face_found": {
+    "train": {
+      "closed_eyes": 1
+    }
+  },
+  "usable_with_face": {
+    "train": 959,
+    "val": 320,
+    "test": 320
+  },
+  "ear_by_class_train": {
+    "open_median": 0.358,
+    "closed_median": 0.047
+  },
+  "features": [
+    "ear_mean",
+    "ear_min",
+    "ear_diff",
+    "eyeBlinkLeft",
+    "eyeBlinkRight",
+    "eyeSquintLeft",
+    "eyeSquintRight",
+    "eyeWideLeft",
+    "eyeWideRight",
+    "eyeLookDownLeft",
+    "eyeLookDownRight",
+    "pitch",
+    "yaw"
+  ],
+  "results": {
+    "baseline_app_rule": {
+      "val": {
+        "n": 320,
+        "accuracy": 0.9531,
+        "balanced_accuracy": 0.9546,
+        "macro_precision": 0.9559,
+        "macro_recall": 0.9546,
+        "macro_f1": 0.9531,
+        "per_class": {
+          "open": {
+            "precision": 0.9118,
+            "recall": 1.0,
+            "f1": 0.9538,
+            "support": 155
+          },
+          "closed": {
+            "precision": 1.0,
+            "recall": 0.9091,
+            "f1": 0.9524,
+            "support": 165
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            155,
+            0
+          ],
+          [
+            15,
+            150
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "test": {
+        "n": 320,
+        "accuracy": 0.9531,
+        "balanced_accuracy": 0.9476,
+        "macro_precision": 0.9609,
+        "macro_recall": 0.9476,
+        "macro_f1": 0.952,
+        "per_class": {
+          "open": {
+            "precision": 0.9219,
+            "recall": 1.0,
+            "f1": 0.9593,
+            "support": 177
+          },
+          "closed": {
+            "precision": 1.0,
+            "recall": 0.8951,
+            "f1": 0.9446,
+            "support": 143
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            177,
+            0
+          ],
+          [
+            15,
+            128
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      }
+    },
+    "A_tuned_ear_threshold": {
+      "val": {
+        "n": 320,
+        "accuracy": 0.9812,
+        "balanced_accuracy": 0.9818,
+        "macro_precision": 0.9813,
+        "macro_recall": 0.9818,
+        "macro_f1": 0.9812,
+        "per_class": {
+          "open": {
+            "precision": 0.9627,
+            "recall": 1.0,
+            "f1": 0.981,
+            "support": 155
+          },
+          "closed": {
+            "precision": 1.0,
+            "recall": 0.9636,
+            "f1": 0.9815,
+            "support": 165
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            155,
+            0
+          ],
+          [
+            6,
+            159
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "test": {
+        "n": 320,
+        "accuracy": 0.9625,
+        "balanced_accuracy": 0.9594,
+        "macro_precision": 0.9655,
+        "macro_recall": 0.9594,
+        "macro_f1": 0.9618,
+        "per_class": {
+          "open": {
+            "precision": 0.9459,
+            "recall": 0.9887,
+            "f1": 0.9669,
+            "support": 177
+          },
+          "closed": {
+            "precision": 0.9852,
+            "recall": 0.9301,
+            "f1": 0.9568,
+            "support": 143
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            175,
+            2
+          ],
+          [
+            10,
+            133
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "threshold": 0.216,
+      "bootstrap_macro_f1_diff_vs_baseline_test": {
+        "mean": 0.0101,
+        "ci95": [
+          -0.0061,
+          0.0286
+        ],
+        "resamples": 1000,
+        "unit": "sample"
+      }
+    },
+    "B_blendshape_eyeBlink_threshold": {
+      "val": {
+        "n": 320,
+        "accuracy": 0.9906,
+        "balanced_accuracy": 0.9909,
+        "macro_precision": 0.9905,
+        "macro_recall": 0.9909,
+        "macro_f1": 0.9906,
+        "per_class": {
+          "open": {
+            "precision": 0.981,
+            "recall": 1.0,
+            "f1": 0.9904,
+            "support": 155
+          },
+          "closed": {
+            "precision": 1.0,
+            "recall": 0.9818,
+            "f1": 0.9908,
+            "support": 165
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            155,
+            0
+          ],
+          [
+            3,
+            162
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "test": {
+        "n": 320,
+        "accuracy": 0.9906,
+        "balanced_accuracy": 0.9895,
+        "macro_precision": 0.9916,
+        "macro_recall": 0.9895,
+        "macro_f1": 0.9905,
+        "per_class": {
+          "open": {
+            "precision": 0.9833,
+            "recall": 1.0,
+            "f1": 0.9916,
+            "support": 177
+          },
+          "closed": {
+            "precision": 1.0,
+            "recall": 0.979,
+            "f1": 0.9894,
+            "support": 143
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            177,
+            0
+          ],
+          [
+            3,
+            140
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "threshold": 0.216,
+      "bootstrap_macro_f1_diff_vs_baseline_test": {
+        "mean": 0.0392,
+        "ci95": [
+          0.0194,
+          0.063
+        ],
+        "resamples": 1000,
+        "unit": "sample"
+      }
+    },
+    "C_logistic_landmarker_features": {
+      "val": {
+        "n": 320,
+        "accuracy": 0.9875,
+        "balanced_accuracy": 0.9877,
+        "macro_precision": 0.9874,
+        "macro_recall": 0.9877,
+        "macro_f1": 0.9875,
+        "per_class": {
+          "open": {
+            "precision": 0.9809,
+            "recall": 0.9935,
+            "f1": 0.9872,
+            "support": 155
+          },
+          "closed": {
+            "precision": 0.9939,
+            "recall": 0.9818,
+            "f1": 0.9878,
+            "support": 165
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            154,
+            1
+          ],
+          [
+            3,
+            162
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "test": {
+        "n": 320,
+        "accuracy": 0.9875,
+        "balanced_accuracy": 0.9867,
+        "macro_precision": 0.988,
+        "macro_recall": 0.9867,
+        "macro_f1": 0.9873,
+        "per_class": {
+          "open": {
+            "precision": 0.9832,
+            "recall": 0.9944,
+            "f1": 0.9888,
+            "support": 177
+          },
+          "closed": {
+            "precision": 0.9929,
+            "recall": 0.979,
+            "f1": 0.9859,
+            "support": 143
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            176,
+            1
+          ],
+          [
+            3,
+            140
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "train": {
+        "epochs_run": 49,
+        "best_val_macro_f1": 0.9875,
+        "seconds": 0.8,
+        "params": {
+          "hidden": 0,
+          "lr": 0.01,
+          "weight_decay": 0.001,
+          "batch": 32,
+          "patience": 25,
+          "max_epochs": 200,
+          "threads": 4,
+          "seed": 1234,
+          "class_weights": [
+            1.0245726108551025,
+            0.976578414440155
+          ]
+        }
+      },
+      "bootstrap_macro_f1_diff_vs_baseline_test": {
+        "mean": 0.0359,
+        "ci95": [
+          0.016,
+          0.058
+        ],
+        "resamples": 1000,
+        "unit": "sample"
+      }
+    },
+    "D_mlp16_landmarker_features": {
+      "val": {
+        "n": 320,
+        "accuracy": 0.9906,
+        "balanced_accuracy": 0.9909,
+        "macro_precision": 0.9905,
+        "macro_recall": 0.9909,
+        "macro_f1": 0.9906,
+        "per_class": {
+          "open": {
+            "precision": 0.981,
+            "recall": 1.0,
+            "f1": 0.9904,
+            "support": 155
+          },
+          "closed": {
+            "precision": 1.0,
+            "recall": 0.9818,
+            "f1": 0.9908,
+            "support": 165
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            155,
+            0
+          ],
+          [
+            3,
+            162
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "test": {
+        "n": 320,
+        "accuracy": 0.9781,
+        "balanced_accuracy": 0.9755,
+        "macro_precision": 0.981,
+        "macro_recall": 0.9755,
+        "macro_f1": 0.9778,
+        "per_class": {
+          "open": {
+            "precision": 0.962,
+            "recall": 1.0,
+            "f1": 0.9806,
+            "support": 177
+          },
+          "closed": {
+            "precision": 1.0,
+            "recall": 0.951,
+            "f1": 0.9749,
+            "support": 143
+          }
+        },
+        "labels": [
+          "open",
+          "closed"
+        ],
+        "confusion_matrix": [
+          [
+            177,
+            0
+          ],
+          [
+            7,
+            136
+          ]
+        ],
+        "confusion_matrix_note": "rows = true, columns = predicted"
+      },
+      "train": {
+        "epochs_run": 26,
+        "best_val_macro_f1": 0.9906,
+        "seconds": 0.7,
+        "params": {
+          "hidden": 16,
+          "lr": 0.003,
+          "weight_decay": 0.001,
+          "batch": 32,
+          "patience": 25,
+          "max_epochs": 200,
+          "threads": 4,
+          "seed": 1234,
+          "class_weights": [
+            1.0245726108551025,
+            0.976578414440155
+          ]
+        }
+      },
+      "bootstrap_macro_f1_diff_vs_baseline_test": {
+        "mean": 0.0262,
+        "ci95": [
+          0.0096,
+          0.0454
+        ],
+        "resamples": 1000,
+        "unit": "sample"
+      }
+    }
+  },
+  "training_seconds_C_and_D": 3.8,
+  "selected_on_val": "B_blendshape_eyeBlink_threshold",
+  "failure_cases_test": [
+    {
+      "file": "046767.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.258,
+      "eyeBlink_mean": 0.234,
+      "pitch": -0.7
+    },
+    {
+      "file": "065051.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "open",
+      "ear_mean": 0.273,
+      "eyeBlink_mean": 0.212,
+      "pitch": -18.7
+    },
+    {
+      "file": "065096.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.173,
+      "eyeBlink_mean": 0.413,
+      "pitch": -1.9
+    },
+    {
+      "file": "069292.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.217,
+      "eyeBlink_mean": 0.308,
+      "pitch": 1.9
+    },
+    {
+      "file": "076148.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.194,
+      "eyeBlink_mean": 0.272,
+      "pitch": 2.9
+    },
+    {
+      "file": "076161.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.202,
+      "eyeBlink_mean": 0.421,
+      "pitch": -16.3
+    },
+    {
+      "file": "076171.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.219,
+      "eyeBlink_mean": 0.222,
+      "pitch": 3.4
+    },
+    {
+      "file": "076176.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.175,
+      "eyeBlink_mean": 0.296,
+      "pitch": 1.3
+    },
+    {
+      "file": "082983.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.199,
+      "eyeBlink_mean": 0.328,
+      "pitch": -6.1
+    },
+    {
+      "file": "092693.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.236,
+      "eyeBlink_mean": 0.275,
+      "pitch": -1.8
+    },
+    {
+      "file": "093039.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "open",
+      "ear_mean": 0.322,
+      "eyeBlink_mean": 0.214,
+      "pitch": -7.4
+    },
+    {
+      "file": "093094.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.225,
+      "eyeBlink_mean": 0.365,
+      "pitch": -10.9
+    },
+    {
+      "file": "093095.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.265,
+      "eyeBlink_mean": 0.457,
+      "pitch": -5.3
+    },
+    {
+      "file": "097443.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "closed",
+      "ear_mean": 0.244,
+      "eyeBlink_mean": 0.284,
+      "pitch": -6.2
+    },
+    {
+      "file": "097459.jpg",
+      "true": "closed",
+      "baseline": "open",
+      "B_blendshape_eyeBlink_threshold": "open",
+      "ear_mean": 0.242,
+      "eyeBlink_mean": 0.136,
+      "pitch": -6.5
+    }
+  ],
+  "failure_counts_test": {
+    "baseline_wrong": 15,
+    "B_blendshape_eyeBlink_threshold_wrong": 3
+  }
+}

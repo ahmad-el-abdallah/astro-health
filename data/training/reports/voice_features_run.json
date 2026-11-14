@@ -1,0 +1,8 @@
+{
+  "clips": 4985,
+  "new": 4985,
+  "seconds": 1433.4,
+  "threads": 4,
+  "model_dir": "models/wav2vec2-emotion (unchanged)",
+  "mid_layer": 8
+}

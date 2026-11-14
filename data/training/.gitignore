@@ -1,0 +1,7 @@
+# Downloaded datasets and processed features stay local (large, third-party licensed).
+# Only the manifest and the reports are meant to be kept in git.
+*
+!.gitignore
+!MANIFEST.json
+!reports/
+!reports/**

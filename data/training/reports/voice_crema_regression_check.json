@@ -1,0 +1,205 @@
+{
+  "dataset": "CREMA-D (ODbL 1.0 / DbCL 1.0)",
+  "actors": [
+    "1010",
+    "1013",
+    "1015",
+    "1024",
+    "1030",
+    "1033",
+    "1081",
+    "1082",
+    "1083",
+    "1087"
+  ],
+  "clips": 699,
+  "rejected": [
+    "1013_WSI_SAD_XX.wav: duplicate audio"
+  ],
+  "seconds": 168.4,
+  "warning": "CREMA-D was in the production model's training data: the baseline here may be memorised (optimistic). Use only as a regression check for the head.",
+  "baseline_restricted": {
+    "n": 699,
+    "accuracy": 0.8441,
+    "balanced_accuracy": 0.8441,
+    "macro_precision": 0.8481,
+    "macro_recall": 0.8441,
+    "macro_f1": 0.8437,
+    "per_class": {
+      "angry": {
+        "precision": 0.7929,
+        "recall": 0.9571,
+        "f1": 0.8673,
+        "support": 140
+      },
+      "disgust": {
+        "precision": 0.8992,
+        "recall": 0.8286,
+        "f1": 0.8625,
+        "support": 140
+      },
+      "fearful": {
+        "precision": 0.797,
+        "recall": 0.7571,
+        "f1": 0.7766,
+        "support": 140
+      },
+      "happy": {
+        "precision": 0.9206,
+        "recall": 0.8286,
+        "f1": 0.8722,
+        "support": 140
+      },
+      "sad": {
+        "precision": 0.831,
+        "recall": 0.8489,
+        "f1": 0.8399,
+        "support": 139
+      }
+    },
+    "labels": [
+      "angry",
+      "disgust",
+      "fearful",
+      "happy",
+      "sad"
+    ],
+    "confusion_matrix": [
+      [
+        134,
+        4,
+        1,
+        1,
+        0
+      ],
+      [
+        9,
+        116,
+        7,
+        1,
+        7
+      ],
+      [
+        8,
+        3,
+        106,
+        6,
+        17
+      ],
+      [
+        18,
+        1,
+        5,
+        116,
+        0
+      ],
+      [
+        0,
+        5,
+        14,
+        2,
+        118
+      ]
+    ],
+    "confusion_matrix_note": "rows = true, columns = predicted"
+  },
+  "candidate_mid_lr": {
+    "n": 699,
+    "accuracy": 0.731,
+    "balanced_accuracy": 0.731,
+    "macro_precision": 0.7706,
+    "macro_recall": 0.731,
+    "macro_f1": 0.744,
+    "per_class": {
+      "angry": {
+        "precision": 0.7405,
+        "recall": 0.8357,
+        "f1": 0.7852,
+        "support": 140
+      },
+      "disgust": {
+        "precision": 0.725,
+        "recall": 0.8286,
+        "f1": 0.7733,
+        "support": 140
+      },
+      "fearful": {
+        "precision": 0.725,
+        "recall": 0.6214,
+        "f1": 0.6692,
+        "support": 140
+      },
+      "happy": {
+        "precision": 0.9293,
+        "recall": 0.6571,
+        "f1": 0.7699,
+        "support": 140
+      },
+      "sad": {
+        "precision": 0.7333,
+        "recall": 0.7122,
+        "f1": 0.7226,
+        "support": 139
+      }
+    },
+    "labels": [
+      "angry",
+      "disgust",
+      "fearful",
+      "happy",
+      "sad"
+    ],
+    "confusion_matrix": [
+      [
+        117,
+        10,
+        2,
+        4,
+        3,
+        4
+      ],
+      [
+        5,
+        116,
+        4,
+        0,
+        11,
+        4
+      ],
+      [
+        13,
+        11,
+        87,
+        3,
+        18,
+        8
+      ],
+      [
+        22,
+        5,
+        7,
+        92,
+        4,
+        10
+      ],
+      [
+        1,
+        18,
+        20,
+        0,
+        99,
+        1
+      ]
+    ],
+    "confusion_matrix_note": "rows = true, columns = predicted (+ last column: predicted a label outside this set)"
+  },
+  "bootstrap_by_speaker_macro_f1_diff": {
+    "mean": -0.0998,
+    "ci95": [
+      -0.1376,
+      -0.0635
+    ],
+    "resamples": 500,
+    "unit": "group"
+  }
+}

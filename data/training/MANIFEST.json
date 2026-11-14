@@ -1,0 +1,120 @@
+{
+  "note": "Datasets used by scripts/training/. Raw files are local only (gitignored).",
+  "datasets": {
+    "pose_coco2017_val_keypoints": {
+      "name": "COCO 2017 train+val, person keypoints (license-filtered subset)",
+      "source": "https://cocodataset.org (annotations_trainval2017.zip members person_keypoints_val2017.json + person_keypoints_train2017.json, fetched by HTTP range; images from images.cocodataset.org)",
+      "publication": "Lin et al., 'Microsoft COCO: Common Objects in Context', ECCV 2014",
+      "license": "Annotations: CC BY 4.0 (COCO Consortium). Images: owned by their Flickr authors; only license ids 4 (CC BY), 5 (CC BY-SA), 7 (no known copyright restrictions), 8 (US Government Work) kept. Local evaluation only, not redistributed.",
+      "commercial_or_demo_use": "Annotations: yes with attribution. Images: CC BY / BY-SA allow it with attribution; not redistributed here.",
+      "version": "2017 (train + val)",
+      "downloaded": "2026-11-14T07:54:21+00:00",
+      "samples_downloaded": 800,
+      "samples_usable": 800,
+      "positives_single_person": 600,
+      "negatives_no_person": 200,
+      "rejected": [],
+      "image_licenses": {
+        "No known copyright restrictions": 7,
+        "Attribution License": 504,
+        "Attribution-ShareAlike License": 289
+      },
+      "subject_ids": "none in COCO; split by image",
+      "label_notes": "17 keypoints per person with visibility flag (0 not labelled, 1 labelled but occluded, 2 visible). No posture labels exist in COCO, so none are used."
+    },
+    "voice_emozionalmente": {
+      "name": "Emozionalmente: a crowdsourced Italian speech emotional corpus",
+      "source": "https://zenodo.org/records/12616095 (also OpenSLR 161)",
+      "doi": "10.5281/zenodo.12616095",
+      "publication": "F. Catania, J. W. Wilke, F. Garzotto, 'Emozionalmente: a crowdsourced Italian speech emotional corpus', IEEE/ACM TASLP 2025 (DOI 10.1109/TASLPRO.2025.3540662)",
+      "license": "CC BY 4.0 (Zenodo record metadata)",
+      "commercial_or_demo_use": "allowed with attribution",
+      "version": "1.1 (2024-07-01)",
+      "downloaded": "2026-11-14T07:56:02+00:00",
+      "archive": {
+        "file": "voice/raw/emozionalmente.zip",
+        "bytes": 558910248,
+        "md5": "398c6502dd2b0e1e810f927c12897547",
+        "md5_matches_zenodo": true
+      },
+      "samples_downloaded": 6902,
+      "samples_usable": 6900,
+      "samples_selected": 4985,
+      "rejected": 2,
+      "subject_ids": "hashed actor ids; the official split is speaker-independent (verified: no speaker in two splits)",
+      "why_this_dataset": "The app's model was trained on RAVDESS, TESS, CREMA-D and SAVEE, so those can't evaluate it fairly; this corpus is independent.",
+      "caveats": [
+        "Italian speech; the model is English-trained",
+        "acted emotions, amateur microphones",
+        "'neutral' has no equivalent in the model's labels"
+      ]
+    },
+    "face_open_closed_eyes": {
+      "name": "Open and Closed Eyes Dataset (balanced random subset)",
+      "source": "https://huggingface.co/datasets/MichalMlodawski/closed-open-eyes (rows via datasets-server.huggingface.co)",
+      "publication": "Dataset card only (Michał Młodawski, HF DOI 10.57967/hf/2745); no paper",
+      "license": "ODC-BY (Open Data Commons Attribution License), per the dataset card",
+      "commercial_or_demo_use": "allowed with attribution",
+      "version": "HF main revision 2ce8f332f80203a7b7d6a9b5323cd21d8a510b15 (datasets-server cache)",
+      "downloaded": "2026-11-14T08:07:31+00:00",
+      "samples_downloaded": 1600,
+      "samples_usable": 1600,
+      "rejected": [],
+      "near_duplicate_pairs": 0,
+      "per_split": {
+        "train": {
+          "open_eyes": 468,
+          "closed_eyes": 492
+        },
+        "val": {
+          "open_eyes": 155,
+          "closed_eyes": 165
+        },
+        "test": {
+          "open_eyes": 177,
+          "closed_eyes": 143
+        }
+      },
+      "subject_ids": "none: AI-generated faces; near-duplicates (dHash <= 4 bits) grouped so they never cross splits",
+      "label_notes": "open_eyes / closed_eyes from the generator, with eye bounding boxes; not human-verified",
+      "caveats": [
+        "AI-generated images, not real webcam frames",
+        "labels not human-annotated"
+      ],
+      "not_used": {
+        "FER-2013": "no clear license; expression classification is outside Face Analysis by design"
+      }
+    },
+    "voice_crema_d_subset": {
+      "name": "CREMA-D (10-actor subset, 5 emotions) -- regression check only",
+      "source": "https://github.com/CheyneyComputerScience/CREMA-D (AudioWAV via media.githubusercontent.com)",
+      "publication": "Cao et al., 'CREMA-D: Crowd-sourced Emotional Multimodal Actors Dataset', IEEE Trans. Affective Computing 2014",
+      "license": "Open Database License 1.0; contents: Database Contents License 1.0 (LICENSE.txt in the repository)",
+      "commercial_or_demo_use": "allowed (ODbL share-alike applies to redistributed databases; nothing is redistributed here)",
+      "version": "GitHub master",
+      "downloaded": "2026-11-14T08:26:46+00:00",
+      "samples_downloaded": 700,
+      "samples_usable": 699,
+      "rejected": [
+        "1013_WSI_SAD_XX.wav: duplicate audio"
+      ],
+      "subject_ids": "actor ids in file names; 10 actors",
+      "role": "English regression check for the voice head only; NOT a fair baseline test (the production model was trained on CREMA-D)"
+    }
+  },
+  "considered_not_used": {
+    "FER-2013": "No clear license (web-scraped images; secondary sources disagree on CC BY vs CC BY-NC). Also out of scope: Face Analysis deliberately does not classify expressions.",
+    "RAVDESS": "CC BY-NC-SA 4.0, but it is in the production voice model's training data (model card), so it cannot evaluate it fairly.",
+    "TESS": "CC BY-NC-ND 4.0 (no derivatives) and in the production voice model's training data.",
+    "SAVEE": "In the production voice model's training data; access via registration.",
+    "CREMA-D (as a test set)": "In the production voice model's training data; used only as an English regression check for the new head.",
+    "MPII Human Pose": "~12 GB image archive for 16 keypoints; COCO keypoints cover the same points with a per-image license filter and small downloads.",
+    "AffectNet / RAF-DB / CK+ / BIWI / AFLW2000": "Require registration, a signed agreement, or have non-commercial research-only terms with unclear derivative rights; not downloaded.",
+    "eye-crop datasets (MRL Eye, CEW)": "Eye crops only (Face Landmarker needs whole faces) and/or unclear licenses."
+  },
+  "production_models_unchanged": {
+    "models/face_analysis/face_landmarker.task": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+    "models/pose_analysis/pose_landmarker_lite.task": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+    "models/wav2vec2-emotion/model.safetensors": "19c9ffbfd4a6e75f15fa789e4b0c4c028af0b3ecb8bab4d6105321f77dc6a0d4"
+  }
+}
